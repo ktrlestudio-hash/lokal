@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(printf \"node_modules/\\\\ndist/\\\\n.env\\\\n.env.local\\\\n.netlify/\\\\n\")",
+      "Bash(npm install:*)",
+      "Read(//d/VERGARA/PAGINA/SUPERMERCADO 1.0/public/**)",
+      "Bash(npm run:*)"
+    ]
+  }
+}
