@@ -59,31 +59,36 @@ export const handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'fileName, fileData y contentType son requeridos' }) };
     }
 
-    // Validar que sea imagen
-    if (!contentType.startsWith('image/')) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Solo se permiten imágenes' }) };
+    // Validar tipo: imágenes y videos cortos
+    const isImage = contentType.startsWith('image/');
+    const isVideo = contentType.startsWith('video/');
+    if (!isImage && !isVideo) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Solo se permiten imágenes o videos' }) };
     }
 
-    // Validar tamaño (máx 5MB en base64 ≈ ~6.6MB de string)
-    if (fileData.length > 7 * 1024 * 1024) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Imagen demasiado grande (máx 5MB)' }) };
+    // Límite: imágenes 5MB, videos 20MB (base64 ~33% más pesado)
+    const maxBytes = isVideo ? 27 * 1024 * 1024 : 7 * 1024 * 1024;
+    if (fileData.length > maxBytes) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: isVideo ? 'Video demasiado grande (máx ~20MB)' : 'Imagen demasiado grande (máx 5MB)' }) };
     }
 
     if (!isR2Configured()) {
-      // Sin R2: devolver la imagen como data URL (solo para desarrollo local)
+      // Sin R2: devolver como data URL (solo desarrollo local)
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({
           url: `data:${contentType};base64,${fileData}`,
-          warning: 'R2 no configurado: imagen en memoria (solo desarrollo)',
+          type: isVideo ? 'video' : 'image',
+          warning: 'R2 no configurado: archivo en memoria (solo desarrollo)',
         }),
       };
     }
 
-    // Generar key única para la imagen
-    const ext = fileName.split('.').pop()?.toLowerCase() || 'jpg';
-    const key = `images/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    // Generar key única
+    const ext = fileName.split('.').pop()?.toLowerCase() || (isVideo ? 'mp4' : 'jpg');
+    const folder = isVideo ? 'videos' : 'images';
+    const key = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
     const buffer = Buffer.from(fileData, 'base64');
 

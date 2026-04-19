@@ -221,7 +221,11 @@ function PhoneMockup() {
   );
 }
 
-// ── Pricing ──────────────────────────────────────────────────────────────────
+// ── Pricing — deben coincidir con mp-checkout.js ──────────────────────────────
+const PRECIO_MENSUAL   = 4990;
+const PRECIO_ANUAL     = 47900;
+const PRECIO_ANUAL_MES = Math.round(PRECIO_ANUAL / 12); // ~3.992
+
 const PLANS = [
   {
     id: 'free',
@@ -230,58 +234,75 @@ const PLANS = [
     desc: 'Para compradores que quieren encontrar lo que buscan',
     price: { monthly: 0, annual: 0 },
     cta: 'Empezar gratis',
+    isStore: false,
     highlight: false,
     features: [
-      'Publica hasta 5 demandas activas',
-      'Recibe respuestas de tiendas',
-      'Historial de compras',
+      'Publicá hasta 5 demandas activas',
+      'Recibí respuestas de tiendas',
+      'Historial de demandas',
       'Chat con tiendas',
       'Notificaciones en tiempo real',
     ],
-    missing: ['Demandas ilimitadas', 'Prioridad en el feed'],
+    missing: [],
   },
   {
     id: 'comercio',
     name: 'Comercio',
-    tag: 'Mas popular',
-    desc: 'Para tiendas que quieren acceder a clientes activos',
-    price: { monthly: 9990, annual: 7990 },
-    cta: 'Empezar prueba gratis',
+    tag: 'Más popular',
+    desc: 'Para tiendas que quieren llegar a clientes activos en su ciudad',
+    price: { monthly: PRECIO_MENSUAL, annual: PRECIO_ANUAL_MES },
+    annualTotal: PRECIO_ANUAL,
+    cta: 'Registrá tu tienda',
+    isStore: true,
+    planKey: 'mensual',
     highlight: true,
     features: [
       'Acceso al feed de demandas',
       'Respuestas ilimitadas',
-      'Perfil de tienda verificado',
-      'Estadisticas basicas',
-      'Notificaciones de nuevas demandas',
-      '14 dias de prueba gratis',
+      'Perfil de tienda visible',
+      'Adjuntos: fotos y video del producto',
+      'Estadísticas básicas',
+      '1 mes de regalo al activar',
     ],
-    missing: ['Estadisticas avanzadas', 'Posicion destacada'],
+    missing: [],
   },
   {
-    id: 'pro',
-    name: 'Pro',
-    tag: null,
-    desc: 'Para tiendas que quieren maxima visibilidad y conversion',
-    price: { monthly: 19990, annual: 15990 },
-    cta: 'Empezar prueba gratis',
+    id: 'anual',
+    name: 'Anual',
+    tag: 'Ahorrás 20%',
+    desc: 'El mismo acceso completo, con descuento por pagar el año anticipado',
+    price: { monthly: PRECIO_MENSUAL, annual: PRECIO_ANUAL_MES },
+    annualTotal: PRECIO_ANUAL,
+    cta: 'Activar plan anual',
+    isStore: true,
+    planKey: 'anual',
     highlight: false,
     features: [
       'Todo lo del plan Comercio',
-      'Estadisticas avanzadas',
-      'Posicion destacada en resultados',
-      'Badge "Tienda verificada Pro"',
+      `Ahorrás $${((PRECIO_MENSUAL * 12) - PRECIO_ANUAL).toLocaleString()} al año`,
+      '13 meses al activar',
       'Soporte prioritario',
-      'Reportes mensuales',
     ],
     missing: [],
   },
 ];
 
-function PricingCard({ plan, annual, onLogin, loading }) {
+function PricingCard({ plan, annual, onLogin, onStoreRegister, loading }) {
   const price = annual ? plan.price.annual : plan.price.monthly;
-  const yearlyTotal = plan.price.annual * 12;
-  const saving = (plan.price.monthly - plan.price.annual) * 12;
+
+  const handleCta = () => {
+    if (!plan.isStore) {
+      onLogin();
+    } else {
+      // Guarda intent en sessionStorage, luego inicia login con Google
+      // Root.jsx lo leerá después del auth y abrirá StoreRegisterFlow
+      sessionStorage.setItem('lokal-register-intent', JSON.stringify({
+        intent: 'register-store',
+        plan: annual && plan.id !== 'free' ? 'anual' : (plan.planKey || 'mensual'),
+      }));
+      onLogin();
+    }
+  };
 
   return (
     <div className={`relative flex flex-col rounded-3xl p-7 border transition-all ${
@@ -298,7 +319,7 @@ function PricingCard({ plan, annual, onLogin, loading }) {
       )}
 
       <div className="mb-6">
-        <h3 className={`font-black text-xl mb-1 ${plan.highlight ? 'text-white' : 'text-white'}`}>{plan.name}</h3>
+        <h3 className="font-black text-xl mb-1 text-white">{plan.name}</h3>
         <p className={`text-sm leading-relaxed ${plan.highlight ? 'text-emerald-100' : 'text-slate-400'}`}>{plan.desc}</p>
       </div>
 
@@ -314,9 +335,14 @@ function PricingCard({ plan, annual, onLogin, loading }) {
               <span className="text-5xl font-black text-white">{price.toLocaleString()}</span>
               <span className={`text-sm mb-2 ${plan.highlight ? 'text-emerald-100' : 'text-slate-400'}`}>/mes</span>
             </div>
-            {annual && saving > 0 && (
+            {annual && plan.annualTotal && (
               <p className={`text-xs font-semibold mt-1 ${plan.highlight ? 'text-emerald-100' : 'text-emerald-400'}`}>
-                Ahorras ${saving.toLocaleString()} al año
+                Facturado ${plan.annualTotal.toLocaleString()}/año
+              </p>
+            )}
+            {!annual && plan.isStore && (
+              <p className={`text-xs mt-1 ${plan.highlight ? 'text-emerald-100' : 'text-emerald-400'}`}>
+                + 1 mes de regalo al activar
               </p>
             )}
           </div>
@@ -324,7 +350,7 @@ function PricingCard({ plan, annual, onLogin, loading }) {
       </div>
 
       <button
-        onClick={onLogin}
+        onClick={handleCta}
         disabled={loading}
         className={`w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all mb-6 ${
           plan.highlight
@@ -345,18 +371,6 @@ function PricingCard({ plan, annual, onLogin, loading }) {
               <Check className={`w-2.5 h-2.5 ${plan.highlight ? 'text-white' : 'text-emerald-400'}`} />
             </div>
             <span className={`text-sm ${plan.highlight ? 'text-emerald-50' : 'text-slate-300'}`}>{f}</span>
-          </div>
-        ))}
-        {plan.missing.map(f => (
-          <div key={f} className="flex items-start gap-2.5">
-            <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
-              plan.highlight ? 'bg-white/30' : 'bg-slate-700'
-            }`}>
-              <X className={`w-2.5 h-2.5 ${plan.highlight ? 'text-white/70' : 'text-slate-400'}`} />
-            </div>
-            <span className={`text-sm line-through decoration-1 ${
-              plan.highlight ? 'text-white/50' : 'text-slate-500'
-            }`}>{f}</span>
           </div>
         ))}
       </div>
@@ -693,7 +707,7 @@ export default function AuthScreen() {
           </div>
 
           <p className="text-center text-slate-600 text-sm mt-8">
-            Todos los planes de tienda incluyen 14 dias de prueba gratis. Sin tarjeta de credito.
+            Pagos procesados por MercadoPago · Al activar tu tienda recibís 1 mes de regalo · Sin comisiones por venta
           </p>
         </div>
       </section>
@@ -725,25 +739,80 @@ export default function AuthScreen() {
         </div>
       </section>
 
+      {/* ── Aviso de intermediación ────────────────────────────────────────── */}
+      <section className="py-10 px-6 border-t border-white/5 bg-white/[0.01]">
+        <div className="max-w-3xl mx-auto text-center">
+          <p className="text-slate-600 text-sm leading-relaxed">
+            <strong className="text-slate-400">Lokal es una plataforma de intermediación digital.</strong>{' '}
+            No somos vendedores, no intervenimos en las transacciones entre usuarios y comercios, y no garantizamos resultados comerciales.
+            Cada acuerdo que se alcanza a través de la plataforma es un contrato privado entre las partes.
+          </p>
+        </div>
+      </section>
+
       {/* ── Footer ─────────────────────────────────────────────────────────── */}
-      <footer className="border-t border-white/5 px-6 lg:px-10 py-8">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-emerald-500 rounded-lg flex items-center justify-center">
-              <Store className="w-4 h-4 text-white" />
+      <footer className="border-t border-white/5 px-6 lg:px-10 py-10">
+        <div className="max-w-5xl mx-auto">
+
+          {/* Fila principal */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 mb-8">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-7 h-7 bg-emerald-500 rounded-lg flex items-center justify-center">
+                  <Store className="w-4 h-4 text-white" />
+                </div>
+                <span className="font-black">Lokal</span>
+              </div>
+              {/* ── Sobre la plataforma — versión moderna/startup (default) ── */}
+              <p className="text-slate-500 text-xs max-w-xs leading-relaxed">
+                Publicás lo que buscás. Las tiendas de tu ciudad responden. Nosotros ponemos el puente; vos y el comercio hacen el resto.
+              </p>
+              {/*
+              Versión institucional:
+              "Lokal es una plataforma de intermediación digital que conecta personas con comercios locales,
+              facilitando el encuentro entre oferta y demanda de manera transparente y eficiente.
+              No intervenimos en las transacciones ni garantizamos resultados comerciales."
+
+              Versión emocional:
+              "Detrás de cada búsqueda hay una necesidad real.
+              Detrás de cada tienda, hay personas que trabajan para cubrirla.
+              Lokal existe para que se encuentren."
+              */}
             </div>
-            <span className="font-black">Lokal</span>
+
+            {/* Links legales */}
+            <div className="flex flex-col sm:items-end gap-1">
+              <p className="text-slate-600 text-[10px] uppercase tracking-wider font-bold mb-1">Legal</p>
+              {[
+                { label: 'Términos y condiciones', path: '/terminos-y-condiciones' },
+                { label: 'Política de privacidad', path: '/politica-de-privacidad' },
+                { label: 'Condiciones para comercios', path: '/condiciones-para-comercios' },
+              ].map(({ label, path }) => (
+                <button
+                  key={path}
+                  onClick={() => { window.history.pushState({}, '', path); window.dispatchEvent(new PopStateEvent('popstate')); }}
+                  className="text-slate-500 hover:text-slate-300 text-xs transition-colors text-left sm:text-right"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-          <p className="text-slate-600 text-xs">© 2026 Lokal. Todos los derechos reservados.</p>
-          <a
-            href="https://www.instagram.com/katriel.martinez"
-            target="_blank"
-            rel="noopener"
-            className="flex items-center gap-1.5 text-white/20 hover:text-white/50 transition-colors group"
-          >
-            <span className="text-[11px]">Creado por</span>
-            <KtrlLogo className="h-3 opacity-40 group-hover:opacity-80 transition-opacity" />
-          </a>
+
+          {/* Divider */}
+          <div className="border-t border-white/5 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <p className="text-slate-600 text-xs">© 2026 Lokal. Intermediador digital — no somos vendedor ni parte de las transacciones.</p>
+            <a
+              href="https://www.instagram.com/katriel.martinez"
+              target="_blank"
+              rel="noopener"
+              className="flex items-center gap-1.5 text-white/20 hover:text-white/50 transition-colors group"
+            >
+              <span className="text-[11px]">Creado por</span>
+              <KtrlLogo className="h-3 opacity-40 group-hover:opacity-80 transition-opacity" />
+            </a>
+          </div>
+
         </div>
       </footer>
 

@@ -100,8 +100,10 @@ export const handler = async (event) => {
         id: Date.now(),
         titulo: body.titulo.trim(),
         descripcion: body.descripcion?.trim() || '',
-        foto: body.foto || '📦',
-        categorias: body.categorias || [],
+        fotos: body.fotos || [],
+        foto: body.foto || null,
+        categoryId: body.categoryId || null,
+        attributes: body.attributes || null,
         presupuesto: body.presupuesto || null,
         respuestas: 0,
         estado: 'activa',
@@ -130,7 +132,7 @@ export const handler = async (event) => {
       }
 
       // Solo se permiten actualizar estos campos
-      const allowed = ['estado', 'titulo', 'descripcion', 'foto', 'categorias', 'presupuesto', 'respuestas'];
+      const allowed = ['estado', 'titulo', 'descripcion', 'fotos', 'foto', 'categoryId', 'attributes', 'presupuesto', 'respuestas'];
       const update = {};
       for (const key of allowed) {
         if (key in changes) update[key] = changes[key];
