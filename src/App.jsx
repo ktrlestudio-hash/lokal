@@ -3,8 +3,12 @@ import {
   Camera, MapPin, Search, Store, Package, MessageSquare, Bell, User,
   ChevronRight, Clock, Navigation, X, AlertCircle, ArrowLeft, Send,
   Tag, Loader2, CheckCircle, Pause, Edit3, Trash2, RotateCcw,
-  Star, ChevronDown, Filter, History, TrendingUp, Sun, Moon, LogOut
+  Star, ChevronDown, Filter, History, TrendingUp, Sun, Moon, LogOut, Play
 } from 'lucide-react';
+import CategoryPicker from './CategoryPicker';
+import AttributesEditor from './AttributesEditor';
+import CategoryIcon from './CategoryIcon';
+import { CATEGORIES, getCategoryPath, getAllDescendants } from './categories';
 
 const API_BASE = '/.netlify/functions';
 
@@ -27,7 +31,6 @@ const TIENDA_REPLIES = [
   'Tenemos varios modelos, cual preferis?',
 ];
 
-const RUBROS = ['Electronica', 'Computacion', 'Fotografia', 'Ferreteria', 'Construccion', 'Hogar', 'Ropa', 'Deportes'];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function tiempoRelativo(iso) {
@@ -39,6 +42,158 @@ function tiempoRelativo(iso) {
   if (h < 24) return `Hace ${h}h`;
   return `Hace ${Math.floor(h / 24)}d`;
 }
+
+// ─── Category Filter Bar ──────────────────────────────────────────────────────
+const CategoryFilterBar = ({ filterCategory, setFilterCategory, categories = CATEGORIES, presentIds }) => {
+  const scrollRef = useRef(null);
+  const [canScrollRight, setCanScrollRight] = React.useState(false);
+  const isDragging = useRef(false);
+  const dragStartX = useRef(0);
+  const dragScrollLeft = useRef(0);
+
+  const checkScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  };
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    checkScroll();
+    el.addEventListener('scroll', checkScroll);
+    const ro = new ResizeObserver(checkScroll);
+    ro.observe(el);
+    // Wheel no-pasivo para poder hacer preventDefault y scroll horizontal
+    const onWheel = (e) => {
+      e.preventDefault();
+      el.scrollLeft += e.deltaY + e.deltaX;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('scroll', checkScroll);
+      el.removeEventListener('wheel', onWheel);
+      ro.disconnect();
+    };
+  }, []);
+
+  // Mouse drag
+  const onMouseDown = (e) => {
+    isDragging.current = true;
+    dragStartX.current = e.pageX - scrollRef.current.offsetLeft;
+    dragScrollLeft.current = scrollRef.current.scrollLeft;
+    scrollRef.current.style.cursor = 'grabbing';
+  };
+  const onMouseMove = (e) => {
+    if (!isDragging.current) return;
+    e.preventDefault();
+    const x = e.pageX - scrollRef.current.offsetLeft;
+    scrollRef.current.scrollLeft = dragScrollLeft.current - (x - dragStartX.current);
+  };
+  const onMouseUp = () => {
+    isDragging.current = false;
+    if (scrollRef.current) scrollRef.current.style.cursor = '';
+  };
+
+  const scrollRight = () => {
+    if (!scrollRef.current) return;
+    scrollRef.current.scrollBy({ left: 160, behavior: 'smooth' });
+  };
+
+  // Si se pasan presentIds, solo mostrar categorías raíz con contenido real
+  const cats = categories.filter(c => c.parentId === null && (!presentIds || presentIds.has(c.id)));
+  const btnClass = (active) => `shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors ${
+    active ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-white/8 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/12'
+  }`;
+
+  return (
+    <div className="relative w-full min-w-0 overflow-hidden flex items-center">
+      <div
+        ref={scrollRef}
+        className="flex gap-2 overflow-x-auto scrollbar-none px-5 lg:px-8 py-3 select-none w-full min-w-0"
+        style={{ cursor: 'grab' }}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+      >
+        <button onClick={() => setFilterCategory(null)} className={btnClass(!filterCategory)}>
+          Todas
+        </button>
+        {cats.map(cat => (
+          <button
+            key={cat.id}
+            onClick={() => setFilterCategory(filterCategory === cat.id ? null : cat.id)}
+            className={btnClass(filterCategory === cat.id)}
+          >
+            <CategoryIcon name={cat.icon} className="w-3.5 h-3.5" />
+            <span>{cat.name.split(' ')[0]}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Flecha derecha */}
+      {canScrollRight && (
+        <button
+          onClick={scrollRight}
+          className="absolute right-0 flex items-center justify-center w-10 h-full bg-gradient-to-l from-slate-50 dark:from-slate-950 to-transparent pr-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
+      )}
+    </div>
+  );
+};
+
+// ─── Photo Carousel ───────────────────────────────────────────────────────────
+const PhotoCarousel = ({ photos = [], className = '' }) => {
+  const [idx, setIdx] = React.useState(0);
+  if (!photos.length) return null;
+  const prev = () => setIdx(i => (i - 1 + photos.length) % photos.length);
+  const next = () => setIdx(i => (i + 1) % photos.length);
+  return (
+    <div className={`relative bg-slate-100 dark:bg-black/30 ${className}`}>
+      <img
+        src={photos[idx]}
+        alt=""
+        className="w-full object-contain max-h-72"
+        style={{ aspectRatio: '16/9' }}
+      />
+      {photos.length > 1 && (
+        <>
+          <button onClick={prev} className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors">
+            <ChevronDown className="w-4 h-4 rotate-90" />
+          </button>
+          <button onClick={next} className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors">
+            <ChevronDown className="w-4 h-4 -rotate-90" />
+          </button>
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+            {photos.map((_, i) => (
+              <button key={i} onClick={() => setIdx(i)} className={`w-1.5 h-1.5 rounded-full transition-all ${i === idx ? 'bg-white w-4' : 'bg-white/50'}`} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+// ─── Photo Slot (miniatura editable) ─────────────────────────────────────────
+const PhotoSlot = ({ foto, idx, onRemove, isFirst }) => (
+  <div className="relative aspect-square rounded-2xl overflow-hidden bg-slate-100 dark:bg-white/10 group shrink-0 h-full">
+    <img src={foto.preview} alt="" className="w-full h-full object-cover" />
+    <button
+      type="button"
+      onClick={() => onRemove(idx)}
+      className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity"
+    >
+      <X className="w-3.5 h-3.5" />
+    </button>
+    {isFirst && (
+      <span className="absolute bottom-1 left-1 text-[10px] bg-black/50 text-white px-1.5 py-0.5 rounded-md font-medium leading-none">Principal</span>
+    )}
+  </div>
+);
 
 // ─── Custom Select ────────────────────────────────────────────────────────────
 const CustomSelect = ({ value, onChange, options, size = 'md' }) => {
@@ -117,7 +272,7 @@ const CustomSelect = ({ value, onChange, options, size = 'md' }) => {
 };
 
 // ─── App principal ────────────────────────────────────────────────────────────
-const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
+const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore }) => {
   // Navegacion
   const [currentScreen, setCurrentScreen] = useState('home');
   const [selectedDemanda, setSelectedDemanda] = useState(null);
@@ -134,12 +289,11 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
 
   // Crear/Editar demanda
   const [editingDemanda, setEditingDemanda] = useState(null);
-  const [selectedRubros, setSelectedRubros] = useState([]);
-  const [filterWarning, setFilterWarning] = useState(false);
 
   // Home
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('recientes');
+  const [filterCategory, setFilterCategory] = useState(null); // id de categoría raíz para filtrar
 
   // Chat
   const [chatHistories, setChatHistories] = useState({});
@@ -152,6 +306,33 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
     { id: 2, tipo: 'oferta', mensaje: 'Nueva oferta cerca: Mouse Gaming en TecnoStore', tiempo: new Date(Date.now() - 60 * 60000).toISOString(), leido: false, demandaId: null },
     { id: 3, tipo: 'sistema', mensaje: 'Tu demanda fue vista por 8 tiendas', tiempo: new Date(Date.now() - 2 * 3600000).toISOString(), leido: true, demandaId: null },
   ]);
+
+  // Categorías (base + custom del servidor)
+  const [allCategories, setAllCategories] = useState(CATEGORIES);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/categories`)
+      .then(r => r.ok ? r.json() : [])
+      .then(custom => {
+        if (custom.length > 0) {
+          setAllCategories([...CATEGORIES, ...custom]);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const createCategory = async (name, parentId = null) => {
+    const res = await fetch(`${API_BASE}/categories`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, parentId }),
+    });
+    const cat = await res.json();
+    setAllCategories(prev =>
+      prev.find(c => c.id === cat.id) ? prev : [...prev, cat]
+    );
+    return cat;
+  };
 
   // Demandas
   const [allDemandas, setAllDemandas] = useState([]);
@@ -241,10 +422,10 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
 
   // ─── Datos mock ───────────────────────────────────────────────────────────
   const tiendas = [
-    { id: 1, nombre: 'TecnoStore', rubro: 'Electronica y Computacion', distancia: '0.8 km', rating: 4.7, foto: '📱', horario: 'Abierto hasta 20:00', abierto: true, telefono: '3456001234' },
-    { id: 2, nombre: 'Electro Total', rubro: 'Electronica', distancia: '1.2 km', rating: 4.5, foto: '⚡', horario: 'Cierra a las 19:00', abierto: true, telefono: '3456005678' },
-    { id: 3, nombre: 'Ferreteria Central', rubro: 'Ferreteria y Construccion', distancia: '0.5 km', rating: 4.8, foto: '🔧', horario: 'Abierto ahora', abierto: true, telefono: '3456009012' },
-    { id: 4, nombre: 'CompuMundo', rubro: 'Computacion', distancia: '2.5 km', rating: 4.6, foto: '💻', horario: 'Abierto hasta 21:00', abierto: true, telefono: '3456003456' },
+    { id: 1, nombre: 'TecnoStore', rubro: 'Electronica y Computacion', categoryIds: ['electronica', 'computacion'], distancia: '0.8 km', rating: 4.7, foto: '📱', horario: 'Abierto hasta 20:00', abierto: true, telefono: '3456001234' },
+    { id: 2, nombre: 'Electro Total', rubro: 'Electronica', categoryIds: ['electronica'], distancia: '1.2 km', rating: 4.5, foto: '⚡', horario: 'Cierra a las 19:00', abierto: true, telefono: '3456005678' },
+    { id: 3, nombre: 'Ferreteria Central', rubro: 'Ferreteria y Construccion', categoryIds: ['construccion'], distancia: '0.5 km', rating: 4.8, foto: '🔧', horario: 'Abierto ahora', abierto: true, telefono: '3456009012' },
+    { id: 4, nombre: 'CompuMundo', rubro: 'Computacion', categoryIds: ['computacion'], distancia: '2.5 km', rating: 4.6, foto: '💻', horario: 'Abierto hasta 21:00', abierto: true, telefono: '3456003456' },
   ];
 
   const ofertas = [
@@ -263,17 +444,51 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
   const demandasActivas = allDemandas.filter(d => d.estado === 'activa');
   const demandasHistorial = allDemandas.filter(d => d.estado !== 'activa');
 
+  // Dado un categoryId, devuelve el id de la categoría raíz (o null)
+  const getRootCategoryId = (categoryId) => {
+    if (!categoryId) return null;
+    let cat = allCategories.find(c => c.id === categoryId);
+    while (cat && cat.parentId !== null) {
+      cat = allCategories.find(c => c.id === cat.parentId);
+    }
+    return cat?.id ?? null;
+  };
+
+  // Set de ids raíz presentes en demandas activas
+  const demandaRootIds = new Set(
+    demandasActivas.map(d => getRootCategoryId(d.categoryId)).filter(Boolean)
+  );
+
+  // Set de ids raíz presentes en ofertas
+  const ofertaRootIds = new Set(
+    ofertas.map(o => getRootCategoryId(o.categoryId)).filter(Boolean)
+  );
+
   const sortedDemandas = [...demandasActivas]
-    .filter(d =>
-      d.titulo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (d.descripcion || '').toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    .filter(d => {
+      const q = searchQuery.toLowerCase();
+      const matchesSearch = !q ||
+        d.titulo.toLowerCase().includes(q) ||
+        (d.descripcion || '').toLowerCase().includes(q);
+      const matchesCategory = !filterCategory || (() => {
+        if (!d.categoryId) return false;
+        const descendants = getAllDescendants(filterCategory, allCategories);
+        return d.categoryId === filterCategory || descendants.includes(d.categoryId);
+      })();
+      return matchesSearch && matchesCategory;
+    })
     .sort((a, b) => sortBy === 'respuestas' ? (b.respuestas - a.respuestas) : (new Date(b.createdAt) - new Date(a.createdAt)));
 
-  const filteredOfertas = ofertas.filter(o =>
-    o.titulo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    o.descripcion.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredOfertas = ofertas.filter(o => {
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = o.titulo.toLowerCase().includes(q) || o.descripcion.toLowerCase().includes(q);
+    const matchesCategory = !filterCategory || (() => {
+      if (!o.categoryId) return false;
+      const descendants = getAllDescendants(filterCategory, allCategories);
+      return o.categoryId === filterCategory || descendants.includes(o.categoryId);
+    })();
+    return matchesSearch && matchesCategory;
+  });
 
   const unreadCount = notifList.filter(n => !n.leido).length;
 
@@ -292,66 +507,167 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
   );
 
   // ─── Sidebar Desktop ──────────────────────────────────────────────────────
-  const DesktopSidebar = () => (
-    <div className="hidden lg:flex lg:flex-col w-72 bg-white dark:bg-slate-900 border-r-2 border-slate-200 dark:border-white/10 h-screen sticky top-0 shrink-0">
-      <div className="p-6 border-b-2 border-slate-200 dark:border-white/10">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="relative">
-            <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-md">
-              <Store className="w-7 h-7 text-white" />
+  const DesktopSidebar = () => {
+    const [expanded, setExpanded] = React.useState(false);
+
+    const navItems = [
+      { label: 'Mis Demandas', icon: Package, screen: 'home', tab: 'demandas' },
+      { label: 'Ofertas',      icon: Tag,     screen: 'home', tab: 'ofertas'  },
+      { label: 'Tiendas',      icon: Store,   screen: 'tiendas'               },
+      { label: 'Historial',    icon: History, screen: 'historial'              },
+    ];
+
+    // Ancho colapsado = 64px (4rem), expandido = 224px (14rem)
+    const W_COLLAPSED = 64;
+    const W_EXPANDED  = 224;
+
+    return (
+      <div
+        className="hidden lg:flex lg:flex-col bg-white dark:bg-[#111827] border-r border-slate-100 dark:border-white/8 h-screen sticky top-0 shrink-0 overflow-hidden"
+        style={{
+          width: expanded ? W_EXPANDED : W_COLLAPSED,
+          transition: 'width 260ms cubic-bezier(0.4,0,0.2,1)',
+        }}
+        onMouseEnter={() => setExpanded(true)}
+        onMouseLeave={() => setExpanded(false)}
+      >
+        {/* ── Logo + botón ── */}
+        <div className="border-b border-slate-100 dark:border-white/8 py-4 px-3 shrink-0">
+          {/* Logo */}
+          <div className="flex items-center h-10 mb-4 overflow-hidden">
+            <div className="w-10 h-10 shrink-0 flex items-center justify-center">
+              <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center">
+                <Store className="w-4 h-4 text-white" />
+              </div>
             </div>
-            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-amber-400 rounded-full border-2 border-white" />
+            <div
+              className="overflow-hidden whitespace-nowrap ml-2"
+              style={{
+                opacity: expanded ? 1 : 0,
+                transition: 'opacity 180ms ease',
+                transitionDelay: expanded ? '80ms' : '0ms',
+              }}
+            >
+              <p className="text-base font-black tracking-tight text-slate-900 dark:text-white leading-none">Lokal</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Marketplace local</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Lokal</h1>
-            <a href="https://www.instagram.com/katriel.martinez" target="_blank" rel="noopener"
-              className="flex items-center gap-1 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
-              <span className="text-[9px]">by</span>
-              <KtrlLogo className="h-2 opacity-60 hover:opacity-90 transition-opacity" />
-            </a>
-          </div>
+
+          {/* Botón nueva demanda */}
+          <button
+            onClick={() => { setEditingDemanda(null); setCurrentScreen('crear'); }}
+            className="w-full flex items-center bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white rounded-xl transition-colors overflow-hidden"
+            style={{ height: 38 }}
+          >
+            <div className="w-10 h-10 shrink-0 flex items-center justify-center">
+              <Camera className="w-4 h-4" />
+            </div>
+            <span
+              className="text-sm font-semibold whitespace-nowrap overflow-hidden"
+              style={{
+                opacity: expanded ? 1 : 0,
+                transition: 'opacity 160ms ease',
+                transitionDelay: expanded ? '90ms' : '0ms',
+              }}
+            >
+              Nueva Demanda
+            </span>
+          </button>
         </div>
-        <button
-          onClick={() => { setEditingDemanda(null); setSelectedRubros([]); setCurrentScreen('crear'); }}
-          className="w-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-2xl p-4 shadow-md hover:shadow-lg transition-all"
-        >
-          <div className="flex items-center justify-center gap-3">
-            <Camera className="w-5 h-5" />
-            <span className="font-bold">Nueva Demanda</span>
+
+        {/* ── Nav items ── */}
+        <nav className="flex-1 py-3 px-3 space-y-0.5 overflow-y-auto overflow-x-hidden">
+          {navItems.map(({ label, icon: Icon, screen, tab }) => {
+            const active = currentScreen === screen && (!tab || activeTab === tab);
+            const badge = label === 'Historial' && demandasHistorial.length > 0 ? demandasHistorial.length : null;
+            return (
+              <button
+                key={label}
+                onClick={() => { setCurrentScreen(screen); if (tab) setActiveTab(tab); }}
+                className={`w-full flex items-center rounded-xl transition-colors overflow-hidden ${
+                  active
+                    ? 'bg-slate-100 dark:bg-white/8 text-slate-900 dark:text-white font-bold'
+                    : 'text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+                style={{ height: 42 }}
+              >
+                {/* Icono — siempre centrado en los primeros 40px */}
+                <div className="w-10 h-10 shrink-0 flex items-center justify-center">
+                  <Icon className="w-4.5 h-4.5" />
+                </div>
+                {/* Label */}
+                <span
+                  className="text-sm font-semibold whitespace-nowrap flex-1 text-left overflow-hidden"
+                  style={{
+                    opacity: expanded ? 1 : 0,
+                    transition: 'opacity 160ms ease',
+                    transitionDelay: expanded ? '80ms' : '0ms',
+                  }}
+                >
+                  {label}
+                </span>
+                {/* Badge */}
+                {badge && (
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full mr-2 shrink-0 ${active ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-slate-400'}`}
+                    style={{
+                      opacity: expanded ? 1 : 0,
+                      transition: 'opacity 160ms ease',
+                      transitionDelay: expanded ? '80ms' : '0ms',
+                    }}
+                  >
+                    {badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* ── Footer: legal links (solo cuando sidebar está expandido) ── */}
+        {expanded && (
+          <div className="px-3 pb-1 flex items-center gap-2 overflow-hidden">
+            {[
+              { label: 'Términos', path: '/terminos-y-condiciones' },
+              { label: 'Privacidad', path: '/politica-de-privacidad' },
+            ].map(({ label, path }) => (
+              <a
+                key={path}
+                href={path}
+                className="text-[10px] text-slate-400 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-400 transition-colors whitespace-nowrap"
+                onClick={e => { e.preventDefault(); window.history.pushState({}, '', path); window.dispatchEvent(new PopStateEvent('popstate')); }}
+              >
+                {label}
+              </a>
+            ))}
           </div>
-        </button>
-      </div>
+        )}
 
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {[
-          { label: 'Mis Demandas', icon: Package, screen: 'home', tab: 'demandas' },
-          { label: 'Ofertas', icon: Tag, screen: 'home', tab: 'ofertas' },
-          { label: 'Tiendas', icon: Store, screen: 'tiendas' },
-          { label: 'Historial', icon: History, screen: 'historial' },
-        ].map(({ label, icon: Icon, screen, tab }) => {
-          const active = currentScreen === screen && (!tab || activeTab === tab);
-          return (
-            <button key={label} onClick={() => { setCurrentScreen(screen); if (tab) setActiveTab(tab); }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${active ? 'bg-slate-900 dark:bg-emerald-500/15 text-white dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10'}`}>
-              <Icon className="w-5 h-5" />
-              <span className="font-semibold">{label}</span>
-              {label === 'Historial' && demandasHistorial.length > 0 && (
-                <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${active ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-300'}`}>{demandasHistorial.length}</span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
-
-      <div className="p-4 border-t-2 border-slate-200 dark:border-white/10">
-        <button onClick={toggleTheme}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10 transition-all">
-          {isDark ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5 text-slate-500" />}
-          <span className="font-semibold">{isDark ? 'Modo claro' : 'Modo oscuro'}</span>
-        </button>
+        {/* ── Footer: theme toggle ── */}
+        <div className="py-3 px-3 border-t border-slate-100 dark:border-white/8 shrink-0">
+          <button
+            onClick={toggleTheme}
+            className="w-full flex items-center rounded-xl text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300 transition-colors overflow-hidden"
+            style={{ height: 42 }}
+          >
+            <div className="w-10 h-10 shrink-0 flex items-center justify-center">
+              {isDark ? <Sun className="w-4.5 h-4.5 text-amber-400" /> : <Moon className="w-4.5 h-4.5" />}
+            </div>
+            <span
+              className="text-sm font-semibold whitespace-nowrap"
+              style={{
+                opacity: expanded ? 1 : 0,
+                transition: 'opacity 160ms ease',
+                transitionDelay: expanded ? '80ms' : '0ms',
+              }}
+            >
+              {isDark ? 'Modo claro' : 'Modo oscuro'}
+            </span>
+          </button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // ─── Notifications Modal ──────────────────────────────────────────────────
   const NotificationsModal = () => (
@@ -414,54 +730,75 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
       return () => document.removeEventListener('mousedown', handler);
     }, []);
 
-    const navItems = [
-      { label: 'Mis Demandas', action: () => { setCurrentScreen('home'); setActiveTab('demandas'); setShowProfileDropdown(false); } },
-      { label: 'Historial', action: () => { setCurrentScreen('historial'); setShowProfileDropdown(false); } },
+    const totalResp = allDemandas.reduce((a, d) => a + (d.respuestas || 0), 0);
+    const firstName = firebaseUser?.displayName?.split(' ')[0] || 'Usuario';
+
+    const menuItems = [
+      { label: 'Mis Demandas', icon: Package, action: () => { setCurrentScreen('home'); setActiveTab('demandas'); setShowProfileDropdown(false); } },
+      { label: 'Historial', icon: History, action: () => { setCurrentScreen('historial'); setShowProfileDropdown(false); } },
+      ...(onRegisterStore ? [{ label: 'Registrá tu tienda', icon: Store, action: () => { setShowProfileDropdown(false); onRegisterStore(); }, highlight: true }] : []),
     ];
 
     return (
-      <div className="absolute right-0 top-full mt-2 w-72 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 z-50 animate-dropdown-in overflow-hidden">
-        {/* User info */}
-        <div className="p-4 border-b border-slate-200 dark:border-white/10 flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl overflow-hidden shrink-0 bg-emerald-100 flex items-center justify-center">
-            {firebaseUser?.photoURL
-              ? <img src={firebaseUser.photoURL} alt="" className="w-full h-full object-cover" />
-              : <span className="font-bold text-emerald-600">{(firebaseUser?.displayName || 'U')[0].toUpperCase()}</span>
-            }
-          </div>
-          <div className="min-w-0">
-            <p className="font-bold truncate">{firebaseUser?.displayName || 'Usuario'}</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{firebaseUser?.email || ''}</p>
-          </div>
-        </div>
-        {/* Stats row */}
-        <div className="grid grid-cols-3 divide-x divide-slate-200 dark:divide-white/10 border-b border-slate-200 dark:border-white/10">
-          {[
-            { label: 'Activas', value: demandasActivas.length, cls: 'text-emerald-500' },
-            { label: 'Historial', value: demandasHistorial.length, cls: '' },
-            { label: 'Respuestas', value: allDemandas.reduce((a, d) => a + (d.respuestas || 0), 0), cls: 'text-violet-500' },
-          ].map(({ label, value, cls }) => (
-            <div key={label} className="py-3 text-center">
-              <p className={`text-xl font-bold ${cls}`}>{value}</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{label}</p>
+      <div
+        className="absolute right-0 top-full mt-2.5 w-72 bg-white dark:bg-[#181f2e] rounded-2xl z-50 animate-dropdown-in overflow-hidden border border-slate-100 dark:border-white/8"
+        style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06)' }}
+      >
+        {/* ── User header ── */}
+        <div className="p-4 pb-3">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-11 h-11 rounded-full overflow-hidden shrink-0 bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center ring-2 ring-slate-100 dark:ring-white/10">
+              {firebaseUser?.photoURL
+                ? <img src={firebaseUser.photoURL} alt="" className="w-full h-full object-cover" />
+                : <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">{firstName[0].toUpperCase()}</span>
+              }
             </div>
-          ))}
-        </div>
-        {/* Nav links */}
-        <div className="p-2">
-          {navItems.map(({ label, action }) => (
-            <button key={label} onClick={action}
-              className="w-full text-left px-3 py-2.5 rounded-xl font-semibold text-sm hover:bg-slate-100 dark:hover:bg-white/10 flex items-center justify-between transition-colors">
-              {label}
-              <ChevronRight className="w-4 h-4 text-slate-400" />
-            </button>
-          ))}
-          <div className="border-t border-slate-200 dark:border-white/10 mt-2 pt-2">
-            <button onClick={onLogout}
-              className="w-full text-left px-3 py-2.5 rounded-xl font-semibold text-sm text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 transition-colors">
-              <LogOut className="w-4 h-4" /> Cerrar sesion
-            </button>
+            <div className="min-w-0 flex-1">
+              <p className="font-bold text-sm text-slate-900 dark:text-white truncate">{firebaseUser?.displayName || 'Usuario'}</p>
+              <p className="text-xs text-slate-400 truncate">{firebaseUser?.email || ''}</p>
+            </div>
           </div>
+
+          {/* Stats — estilo Pexels: número grande + label pequeño */}
+          <div className="grid grid-cols-3 gap-1">
+            {[
+              { label: 'Activas', value: demandasActivas.length, color: 'text-emerald-500' },
+              { label: 'Historial', value: demandasHistorial.length, color: 'text-slate-900 dark:text-white' },
+              { label: 'Respuestas', value: totalResp, color: 'text-violet-500' },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="bg-slate-50 dark:bg-white/5 rounded-xl py-2.5 text-center">
+                <p className={`text-lg font-black leading-none ${color}`}>{value}</p>
+                <p className="text-[10px] text-slate-400 mt-1 leading-none">{label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Separador ── */}
+        <div className="h-px bg-slate-100 dark:bg-white/8 mx-1" />
+
+        {/* ── Menu items ── */}
+        <div className="p-1.5">
+          {menuItems.map(({ label, icon: Icon, action, highlight }) => (
+            <button key={label} onClick={action}
+              className={`w-full text-left px-3 py-2.5 rounded-xl text-sm flex items-center gap-2.5 transition-colors ${
+                highlight
+                  ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/8 font-semibold'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/6 font-medium'
+              }`}>
+              <Icon className={`w-4 h-4 shrink-0 ${highlight ? 'text-emerald-500' : 'text-slate-400'}`} />
+              <span>{label}</span>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-300 ml-auto" />
+            </button>
+          ))}
+
+          {/* ── Cerrar sesión — separado abajo ── */}
+          <div className="h-px bg-slate-100 dark:bg-white/8 my-1" />
+          <button onClick={onLogout}
+            className="w-full text-left px-3 py-2.5 rounded-xl text-sm text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/8 flex items-center gap-2.5 transition-colors">
+            <LogOut className="w-4 h-4 shrink-0" />
+            <span className="font-medium">Cerrar sesión</span>
+          </button>
         </div>
       </div>
     );
@@ -528,99 +865,103 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
   // ChatModal is intentionally NOT a nested component — inlined at render site to avoid remount on every keystroke
 
   // ─── Home Screen ──────────────────────────────────────────────────────────
-  const HomeScreen = () => (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-28 lg:pb-8">
-      {/* Header Mobile */}
-      <div className="lg:hidden bg-white dark:bg-slate-900 sticky top-0 z-10 shadow-sm dark:shadow-none dark:border-b dark:border-white/10 p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <div className="w-11 h-11 bg-emerald-500 rounded-2xl flex items-center justify-center">
-                <Store className="w-6 h-6 text-white" />
-              </div>
-              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-amber-400 rounded-full border-2 border-white" />
-            </div>
+  const HomeScreen = () => {
+    const firstName = firebaseUser?.displayName?.split(' ')[0] || null;
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches';
+
+    return (
+    <div className="min-h-screen bg-[#f7f8fa] dark:bg-[#0a0d16] pb-28 lg:pb-8">
+
+      {/* ── Header Mobile ────────────────────────────────────────────────── */}
+      <div className="lg:hidden bg-white dark:bg-[#111827] sticky top-0 z-10 border-b border-slate-100 dark:border-white/8">
+        <div className="px-5 pt-5 pb-4">
+          {/* Top row */}
+          <div className="flex items-center justify-between mb-5">
             <div>
-              <h1 className="text-xl font-bold">Lokal</h1>
-              <a href="https://www.instagram.com/katriel.martinez" target="_blank" rel="noopener"
-                className="flex items-center gap-1 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
-                <span className="text-[9px]">by</span>
-                <KtrlLogo className="h-2 opacity-60" />
-              </a>
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 tracking-wide uppercase mb-0.5">
+                {greeting}{firstName ? `, ${firstName}` : ''}
+              </p>
+              <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">Lokal</h1>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button onClick={toggleTheme}
+                className="w-9 h-9 flex items-center justify-center rounded-2xl hover:bg-slate-100 dark:hover:bg-white/8 transition-colors">
+                {isDark ? <Sun className="w-4.5 h-4.5 text-amber-400" /> : <Moon className="w-4.5 h-4.5 text-slate-500" />}
+              </button>
+              <button onClick={() => setShowNotifications(true)}
+                className="w-9 h-9 flex items-center justify-center rounded-2xl hover:bg-slate-100 dark:hover:bg-white/8 transition-colors relative">
+                <Bell className="w-4.5 h-4.5 text-slate-600 dark:text-slate-300" />
+                {unreadCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white dark:ring-[#111827]" />}
+              </button>
+              <button onClick={() => setShowProfile(true)}
+                className="w-9 h-9 rounded-2xl overflow-hidden ring-2 ring-transparent hover:ring-emerald-400 transition-all shrink-0">
+                {firebaseUser?.photoURL
+                  ? <img src={firebaseUser.photoURL} alt="" className="w-full h-full object-cover" />
+                  : <div className="w-full h-full bg-emerald-500 flex items-center justify-center font-bold text-white text-sm">{(firebaseUser?.displayName || 'U')[0].toUpperCase()}</div>
+                }
+              </button>
             </div>
           </div>
-          <div className="flex gap-2">
-            <button onClick={toggleTheme} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl">
-              {isDark ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5 text-slate-500" />}
-            </button>
-            <button onClick={() => setShowNotifications(true)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl relative">
-              <Bell className="w-5 h-5" />
-              {unreadCount > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full" />}
-            </button>
-            <button onClick={() => setShowProfile(true)} className="w-9 h-9 rounded-xl overflow-hidden hover:ring-2 hover:ring-emerald-400 transition-all shrink-0">
-              {firebaseUser?.photoURL
-                ? <img src={firebaseUser.photoURL} alt="" className="w-full h-full object-cover" />
-                : <div className="w-full h-full bg-emerald-100 flex items-center justify-center font-bold text-emerald-600 text-sm">{(firebaseUser?.displayName || 'U')[0].toUpperCase()}</div>
-              }
-            </button>
+
+          {/* Search */}
+          <div className="relative mb-4">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+            <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Buscar demandas, productos..."
+              className="w-full pl-10 pr-4 py-3 bg-slate-100 dark:bg-white/6 rounded-2xl text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all" />
           </div>
-        </div>
-        <div className="relative mb-4">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-          <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Buscar..." className="w-full pl-12 pr-4 py-3 bg-slate-100 dark:bg-white/5 dark:text-slate-200 dark:placeholder:text-slate-500 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm" />
-        </div>
-        <div className="flex gap-2 bg-slate-100 dark:bg-white/5 p-1.5 rounded-2xl">
-          {['demandas', 'ofertas'].map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-2.5 rounded-xl font-semibold text-sm transition-all ${activeTab === tab ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>
-              {tab === 'demandas' ? 'Mis Demandas' : 'Ofertas'}
-            </button>
-          ))}
+
+          {/* Tabs */}
+          <div className="flex gap-1 bg-slate-100 dark:bg-white/6 p-1 rounded-2xl">
+            {[{ id: 'demandas', label: 'Mis Demandas' }, { id: 'ofertas', label: 'Ofertas' }].map(t => (
+              <button key={t.id} onClick={() => { setActiveTab(t.id); setFilterCategory(null); }}
+                className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${
+                  activeTab === t.id
+                    ? 'bg-white dark:bg-white/12 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400'
+                }`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Header Desktop */}
-      <div className="hidden lg:block bg-white dark:bg-slate-900 border-b-2 border-slate-200 dark:border-white/10 sticky top-0 z-10">
-        <div className="px-8 py-4 flex items-center gap-6">
+      {/* ── Header Desktop ───────────────────────────────────────────────── */}
+      <div className="hidden lg:block bg-white dark:bg-[#111827] border-b border-slate-100 dark:border-white/8 sticky top-0 z-10">
+        <div className="px-8 h-14 flex items-center gap-6">
           <div className="shrink-0">
-            <h2 className="text-2xl font-bold">{activeTab === 'demandas' ? 'Mis Demandas' : 'Ofertas'}</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">{activeTab === 'demandas' ? `${demandasActivas.length} activas` : `${ofertas.length} disponibles`}</p>
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">{activeTab === 'demandas' ? 'Mis Demandas' : 'Ofertas'}</h2>
           </div>
-          <div className="flex items-center gap-3 flex-1 max-w-xl">
+
+          {/* Búsqueda centrada — estilo Pexels */}
+          <div className="flex items-center gap-2.5 flex-1 max-w-lg">
             <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
               <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Buscar..." className="w-full pl-12 pr-4 py-3 bg-slate-100 dark:bg-white/5 dark:text-slate-200 dark:placeholder:text-slate-500 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm" />
+                placeholder="Buscar demandas, productos..."
+                className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-white/6 rounded-xl text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 border border-transparent focus:outline-none focus:border-emerald-400 dark:focus:border-emerald-500 transition-colors" />
             </div>
             {activeTab === 'demandas' && (
-              <CustomSelect
-                value={sortBy}
-                onChange={setSortBy}
-                options={[{ value: 'recientes', label: 'Recientes' }, { value: 'respuestas', label: 'Mas respuestas' }]}
-              />
+              <CustomSelect value={sortBy} onChange={setSortBy}
+                options={[{ value: 'recientes', label: 'Recientes' }, { value: 'respuestas', label: 'Más respuestas' }]} />
             )}
           </div>
-          {/* Avatar perfil desktop */}
+
           <div className="flex items-center gap-2 ml-auto shrink-0">
-            <button onClick={() => setShowNotifications(true)} className="p-2.5 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl relative">
-              <Bell className="w-5 h-5" />
-              {unreadCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full" />}
+            <button onClick={() => setShowNotifications(true)}
+              className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8 relative transition-colors">
+              <Bell className="w-4.5 h-4.5" />
+              {unreadCount > 0 && <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-rose-500 rounded-full" />}
             </button>
-            {/* Dropdown trigger */}
             <div ref={profileDropdownRef} className="relative">
-              <button
-                onClick={() => setShowProfileDropdown(o => !o)}
-                className={`flex items-center gap-2.5 pl-1 pr-3 py-1 hover:bg-slate-100 dark:hover:bg-white/10 rounded-2xl transition-all ${showProfileDropdown ? 'bg-slate-100 dark:bg-white/10' : ''}`}
-              >
-                <div className="w-8 h-8 rounded-xl overflow-hidden shrink-0">
-                  {firebaseUser?.photoURL
-                    ? <img src={firebaseUser.photoURL} alt="" className="w-full h-full object-cover" />
-                    : <div className="w-full h-full bg-emerald-100 flex items-center justify-center font-bold text-emerald-600 text-sm">{(firebaseUser?.displayName || 'U')[0].toUpperCase()}</div>
-                  }
-                </div>
-                <span className="text-sm font-semibold max-w-[120px] truncate">{firebaseUser?.displayName?.split(' ')[0] || 'Perfil'}</span>
-                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${showProfileDropdown ? 'rotate-180' : ''}`} />
+              <button onClick={() => setShowProfileDropdown(o => !o)}
+                className={`w-9 h-9 rounded-full overflow-hidden transition-all ring-2 ${showProfileDropdown ? 'ring-emerald-500' : 'ring-transparent hover:ring-emerald-400'}`}>
+                {firebaseUser?.photoURL
+                  ? <img src={firebaseUser.photoURL} alt="" className="w-full h-full object-cover" />
+                  : <div className="w-full h-full bg-emerald-500 flex items-center justify-center font-bold text-white text-sm">{(firebaseUser?.displayName || 'U')[0].toUpperCase()}</div>
+                }
               </button>
               {showProfileDropdown && <ProfileDropdown />}
             </div>
@@ -628,151 +969,233 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
         </div>
       </div>
 
-      {/* CTA Mobile */}
-      {activeTab === 'demandas' && (
-        <div className="lg:hidden px-5 pt-5 pb-4">
-          <button onClick={() => { setEditingDemanda(null); setSelectedRubros([]); setCurrentScreen('crear'); }}
-            className="w-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-3xl p-5 shadow-lg active:scale-[0.98] transition-transform">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center">
-                  <Camera className="w-7 h-7" />
-                </div>
-                <div className="text-left">
-                  <p className="font-bold text-lg">Que estas buscando?</p>
-                  <p className="text-emerald-100 text-sm">Publica tu demanda</p>
-                </div>
+      {/* ── CTA banner (mobile, cuando ya hay demandas) ──────────────────── */}
+      {activeTab === 'demandas' && demandasActivas.length > 0 && (
+        <div className="lg:hidden px-5 pt-5 pb-1">
+          <button onClick={() => { setEditingDemanda(null); setCurrentScreen('crear'); }}
+            className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-2xl p-4 shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-transform flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                <Camera className="w-5 h-5" />
               </div>
-              <ChevronRight className="w-6 h-6" />
+              <div className="text-left">
+                <p className="font-bold text-sm">¿Qué estás buscando?</p>
+                <p className="text-emerald-100 text-xs">Publicá tu demanda ahora</p>
+              </div>
             </div>
+            <ChevronRight className="w-5 h-5 opacity-70" />
           </button>
         </div>
       )}
 
-      {/* Grid */}
-      <div className="max-w-7xl mx-auto px-5 lg:px-8 py-5">
-        {activeTab === 'demandas' && (
+      {/* ── Filtro categorías ────────────────────────────────────────────── */}
+      {(activeTab === 'demandas' ? demandasActivas.length > 0 : ofertas.length > 0) && (
+        <CategoryFilterBar
+          filterCategory={filterCategory}
+          setFilterCategory={setFilterCategory}
+          categories={allCategories}
+          presentIds={activeTab === 'demandas' ? demandaRootIds : ofertaRootIds}
+        />
+      )}
+
+      {/* ── Contenido ───────────────────────────────────────────────────── */}
+      <div className="px-4 lg:px-6 py-4 max-w-3xl">
+
+        {/* Encabezado sección */}
+        {activeTab === 'demandas' && sortedDemandas.length > 0 && (
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-lg">Activas</h3>
+            <h3 className="font-bold text-base text-slate-800 dark:text-slate-100">
+              {filterCategory ? allCategories.find(c => c.id === filterCategory)?.name : 'Activas'}
+            </h3>
             <div className="flex items-center gap-2">
-              {/* Sort mobile */}
               <div className="lg:hidden">
-                <CustomSelect
-                  value={sortBy}
-                  onChange={setSortBy}
-                  size="sm"
-                  options={[{ value: 'recientes', label: 'Recientes' }, { value: 'respuestas', label: 'Mas respuestas' }]}
-                />
+                <CustomSelect value={sortBy} onChange={setSortBy} size="sm"
+                  options={[{ value: 'recientes', label: 'Recientes' }, { value: 'respuestas', label: 'Más resp.' }]} />
               </div>
               {loadingDemandas
                 ? <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
-                : <span className="text-sm text-slate-400">{sortedDemandas.length} items</span>
+                : <span className="text-xs text-slate-400 font-medium">{sortedDemandas.length}</span>
               }
             </div>
           </div>
         )}
 
         {errorDemandas && activeTab === 'demandas' && (
-          <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 mb-4 flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
-            <p className="text-sm text-rose-700 flex-1">{errorDemandas}</p>
-            <button onClick={fetchDemandas} className="text-xs font-bold text-rose-700 underline">Reintentar</button>
+          <div className="bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-2xl p-4 mb-4 flex items-center gap-3">
+            <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+            <p className="text-sm text-rose-700 dark:text-rose-400 flex-1">{errorDemandas}</p>
+            <button onClick={fetchDemandas} className="text-xs font-bold text-rose-600 dark:text-rose-400 underline">Reintentar</button>
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-          {activeTab === 'demandas' ? (
-            loadingDemandas ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-white/10 p-5 animate-pulse">
-                  <div className="flex gap-4">
-                    <div className="w-16 h-16 bg-slate-200 dark:bg-white/10 rounded-2xl shrink-0" />
-                    <div className="flex-1 space-y-2 pt-1">
-                      <div className="h-4 bg-slate-200 dark:bg-white/10 rounded w-3/4" />
-                      <div className="h-3 bg-slate-200 dark:bg-white/10 rounded" />
-                      <div className="h-3 bg-slate-200 dark:bg-white/10 rounded w-1/2" />
+        {/* ── Grid demandas ── */}
+        {activeTab === 'demandas' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {loadingDemandas
+              ? Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="bg-white dark:bg-[#111827] rounded-2xl overflow-hidden animate-pulse">
+                    <div className="h-40 bg-slate-200 dark:bg-white/8" />
+                    <div className="p-4 space-y-2.5">
+                      <div className="h-4 bg-slate-200 dark:bg-white/8 rounded-lg w-3/4" />
+                      <div className="h-3 bg-slate-100 dark:bg-white/5 rounded-lg" />
+                      <div className="h-3 bg-slate-100 dark:bg-white/5 rounded-lg w-2/3" />
                     </div>
                   </div>
+                ))
+              : sortedDemandas.map((d, i) => {
+                  const foto = d.fotos?.[0] || d.foto;
+                  const catPath = getCategoryPath(d.categoryId, allCategories);
+                  const catLabel = catPath.length > 0 ? catPath[catPath.length - 1].name
+                    : (typeof d.categoryId === 'string' && d.categoryId ? d.categoryId : null);
+                  return (
+                    <div key={d.id}
+                      onClick={() => { setSelectedDemanda(d); setCurrentScreen('detalle'); }}
+                      className="bg-white dark:bg-[#111827] rounded-2xl p-4 flex gap-4 cursor-pointer hover:shadow-md hover:shadow-black/5 dark:hover:shadow-black/30 transition-all duration-200 active:scale-[0.99] animate-fade-up"
+                      style={{ animationDelay: `${i * 40}ms` }}
+                    >
+                      {/* Foto cuadrada */}
+                      <div className="w-[72px] h-[72px] rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-white/6 dark:to-white/10 shrink-0 overflow-hidden relative flex items-center justify-center self-start">
+                        {foto
+                          ? <img src={foto} alt={d.titulo} className="w-full h-full object-cover" />
+                          : <Package className="w-7 h-7 text-slate-300 dark:text-white/20" />
+                        }
+                        {d.estado !== 'activa' && (
+                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-xl">
+                            <span className="text-[9px] font-bold text-white uppercase tracking-wider">{d.estado}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        {/* Categoria + tiempo */}
+                        <div className="flex items-center gap-2 mb-1">
+                          {catLabel && (
+                            <span className="text-[10px] font-bold tracking-widest uppercase text-emerald-500 dark:text-emerald-400 truncate">
+                              {catLabel.split(/\s+(?:y|e|&)\s+/i)[0]}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-slate-300 dark:text-white/20">·</span>
+                          <span className="text-[10px] text-slate-400 shrink-0">{d.tiempoCreado}</span>
+                        </div>
+
+                        {/* Título */}
+                        <h3 className="font-bold text-slate-900 dark:text-white text-sm leading-snug line-clamp-1 mb-1">{d.titulo}</h3>
+
+                        {/* Descripción */}
+                        {d.descripcion && (
+                          <p className="text-xs text-slate-400 dark:text-slate-500 line-clamp-1 mb-2.5">{d.descripcion}</p>
+                        )}
+
+                        {/* Footer: atributos destacados + respuestas + presupuesto */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {/* Atributos como pills pequeñas */}
+                          {d.attributes && Object.entries(d.attributes).slice(0, 2).map(([k, v]) => (
+                            <span key={k} className="text-[10px] bg-slate-100 dark:bg-white/8 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full font-medium">
+                              {k}: {v}
+                            </span>
+                          ))}
+                          {/* Respuestas — siempre visible */}
+                          {(
+                            <span className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ml-auto ${
+                              d.respuestas > 0
+                                ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10'
+                                : 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-white/6'
+                            }`}>
+                              <MessageSquare className="w-2.5 h-2.5" />{d.respuestas} {d.respuestas === 1 ? 'resp.' : 'resp.'}
+                            </span>
+                          )}
+                          {/* Presupuesto */}
+                          {d.presupuesto?.max && (
+                            <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-white/8 px-2 py-0.5 rounded-full ml-auto">
+                              hasta ${Number(d.presupuesto.max).toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+            }
+          </div>
+        )}
+
+        {/* ── Grid ofertas ── */}
+        {activeTab === 'ofertas' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {filteredOfertas.map((o, i) => (
+              <div key={o.id}
+                className="bg-white dark:bg-[#111827] rounded-2xl overflow-hidden hover:shadow-md hover:shadow-black/6 dark:hover:shadow-black/30 transition-all duration-200 animate-fade-up"
+                style={{ animationDelay: `${i * 40}ms` }}
+              >
+                <div className="h-44 bg-gradient-to-br from-violet-50 to-purple-100 dark:from-violet-900/20 dark:to-purple-900/20 flex items-center justify-center text-5xl">
+                  {o.foto}
                 </div>
-              ))
-            ) : sortedDemandas.map(d => (
-              <div key={d.id} onClick={() => { setSelectedDemanda(d); setCurrentScreen('detalle'); }}
-                className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-white/10 p-5 hover:shadow-lg cursor-pointer transition-all active:scale-[0.98] group">
-                <div className="flex gap-4">
-                  <div className="w-16 h-16 bg-gradient-to-br from-amber-100 to-orange-100 rounded-2xl flex items-center justify-center text-3xl shrink-0 overflow-hidden">
-                    {d.foto?.startsWith('http') ? <img src={d.foto} alt="" className="w-full h-full object-cover" /> : (d.foto || '📦')}
+                <div className="p-4">
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <h3 className="font-bold text-slate-900 dark:text-white text-sm leading-snug line-clamp-2">{o.titulo}</h3>
+                    {o.precio && (
+                      <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 shrink-0">${o.precio.toLocaleString()}</span>
+                    )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-bold mb-1 truncate">{d.titulo}</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-2 line-clamp-2">{d.descripcion}</p>
-                    <div className="flex items-center gap-3 text-xs">
-                      <span className="text-slate-400">{d.tiempoCreado}</span>
-                      {d.respuestas > 0 && (
-                        <span className="flex items-center gap-1 text-emerald-600 font-bold">
-                          <MessageSquare className="w-3 h-3" />{d.respuestas}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))
-          ) : (
-            filteredOfertas.map(o => (
-              <div key={o.id} className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-white/10 p-5 hover:shadow-lg transition-all">
-                <div className="flex gap-4 mb-4">
-                  <div className="w-16 h-16 bg-gradient-to-br from-violet-100 to-purple-100 rounded-2xl flex items-center justify-center text-3xl shrink-0">{o.foto}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start gap-2 mb-1">
-                      <h3 className="font-bold truncate">{o.titulo}</h3>
-                      {o.precio && <p className="font-bold text-emerald-600 shrink-0">${o.precio.toLocaleString()}</p>}
-                    </div>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-2 line-clamp-2">{o.descripcion}</p>
-                    <div className="flex gap-1.5 text-xs text-slate-400">
-                      <span className="font-semibold text-slate-600">{o.tienda}</span>
+                  <p className="text-xs text-slate-400 mb-3 line-clamp-2">{o.descripcion}</p>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                      <div className="w-5 h-5 bg-slate-100 dark:bg-white/8 rounded-full flex items-center justify-center">
+                        <Store className="w-3 h-3" />
+                      </div>
+                      <span className="font-semibold text-slate-600 dark:text-slate-300">{o.tienda}</span>
                       <span>·</span>
                       <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{o.distancia}</span>
                     </div>
                   </div>
+                  <button
+                    onClick={() => openChat({ id: o.id, tienda: o.tienda, foto: tiendas.find(t => t.id === o.tiendaId)?.foto || '🏪', mensaje: `Te consultan por: ${o.titulo}. Tenemos stock disponible!` })}
+                    className="w-full py-2.5 bg-slate-900 dark:bg-emerald-500 text-white rounded-xl font-semibold text-xs hover:bg-slate-700 dark:hover:bg-emerald-400 transition-colors"
+                  >
+                    Consultar
+                  </button>
                 </div>
-                <button
-                  onClick={() => openChat({ id: o.id, tienda: o.tienda, foto: tiendas.find(t => t.id === o.tiendaId)?.foto || '🏪', mensaje: `Te consultan por: ${o.titulo}. Tenemos stock disponible!` })}
-                  className="w-full py-2.5 bg-slate-900 dark:bg-emerald-500 text-white rounded-xl font-semibold text-sm hover:bg-slate-800 dark:hover:bg-emerald-400 transition-colors"
-                >
-                  Consultar
-                </button>
               </div>
-            ))
+            ))}
+          </div>
+        )}
+
+      </div>
+
+      {/* ── Empty states — fuera del max-w-3xl para centrar en todo el ancho ── */}
+      {!loadingDemandas && activeTab === 'demandas' && sortedDemandas.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-24 text-center px-8">
+          <div className="w-24 h-24 bg-emerald-50 dark:bg-emerald-500/10 rounded-3xl flex items-center justify-center mb-5">
+            <Package className="w-12 h-12 text-emerald-400" />
+          </div>
+          <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2">
+            {searchQuery ? 'Sin resultados' : 'Sin demandas aún'}
+          </h3>
+          <p className="text-sm text-slate-400 max-w-xs mb-8">
+            {searchQuery ? 'Probá con otras palabras clave' : 'Publicá lo que necesitás y las tiendas locales te van a responder'}
+          </p>
+          {!searchQuery && (
+            <button onClick={() => { setEditingDemanda(null); setCurrentScreen('crear'); }}
+              className="px-8 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-white rounded-2xl font-bold text-sm transition-colors shadow-lg shadow-emerald-500/25">
+              Crear mi primera demanda
+            </button>
           )}
         </div>
+      )}
 
-        {!loadingDemandas && activeTab === 'demandas' && sortedDemandas.length === 0 && (
-          <div className="text-center py-16">
-            <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Package className="w-10 h-10 text-emerald-400" />
-            </div>
-            <p className="font-bold text-lg mb-1">{searchQuery ? 'Sin resultados' : 'Aun no tenes demandas'}</p>
-            <p className="text-sm text-slate-400 mb-6">
-              {searchQuery ? 'Proba con otras palabras' : 'Publica lo que necesitas y las tiendas te responden'}
-            </p>
-            {!searchQuery && (
-              <button onClick={() => { setEditingDemanda(null); setCurrentScreen('crear'); }}
-                className="px-6 py-3 bg-slate-900 dark:bg-emerald-500 text-white rounded-2xl font-bold">
-                Crear demanda
-              </button>
-            )}
+      {activeTab === 'ofertas' && filteredOfertas.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-24 text-center px-8">
+          <div className="w-24 h-24 bg-slate-100 dark:bg-white/5 rounded-3xl flex items-center justify-center mb-5">
+            <Tag className="w-12 h-12 text-slate-300 dark:text-white/20" />
           </div>
-        )}
-
-        {activeTab === 'ofertas' && filteredOfertas.length === 0 && (
-          <div className="text-center py-16">
-            <Tag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <p className="font-semibold text-slate-500">Sin ofertas disponibles</p>
-          </div>
-        )}
-      </div>
+          <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2">Sin ofertas</h3>
+          <p className="text-sm text-slate-400 max-w-xs">Todavía no hay ofertas disponibles en tu zona</p>
+        </div>
+      )}
     </div>
-  );
+    );
+  };
 
   // ─── Crear / Editar Demanda ───────────────────────────────────────────────
   const CrearDemandaScreen = () => {
@@ -781,49 +1204,69 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
     const [descripcion, setDescripcion] = useState(editingDemanda?.descripcion || '');
     const [presupuestoMin, setPresupuestoMin] = useState(editingDemanda?.presupuesto?.min || '');
     const [presupuestoMax, setPresupuestoMax] = useState(editingDemanda?.presupuesto?.max || '');
-    const [imageFile, setImageFile] = useState(null);
-    const [imagePreview, setImagePreview] = useState(editingDemanda?.foto?.startsWith('http') ? editingDemanda.foto : null);
+    const [categoryId, setCategoryId] = useState(editingDemanda?.categoryId || null);
+    const [attributes, setAttributes] = useState(editingDemanda?.attributes || {});
+    // fotos: array de { file?: File, preview: string (dataURL o URL remota) }
+    const initFotos = () => {
+      const existing = editingDemanda?.fotos || (editingDemanda?.foto?.startsWith('http') ? [editingDemanda.foto] : []);
+      return existing.map(url => ({ preview: url }));
+    };
+    const [fotos, setFotos] = useState(initFotos);
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState(null);
     const [success, setSuccess] = useState(false);
     const fileInputRef = useRef(null);
 
+    const MAX_FOTOS = 5;
+
     const handleImageChange = (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      setImageFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => setImagePreview(reader.result);
-      reader.readAsDataURL(file);
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
+      const remaining = MAX_FOTOS - fotos.length;
+      const toAdd = files.slice(0, remaining);
+      toAdd.forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setFotos(prev => prev.length < MAX_FOTOS ? [...prev, { file, preview: reader.result }] : prev);
+        };
+        reader.readAsDataURL(file);
+      });
+      e.target.value = '';
+    };
+
+    const removePhoto = (idx) => setFotos(prev => prev.filter((_, i) => i !== idx));
+
+    const uploadFoto = async (foto) => {
+      if (!foto.file) return foto.preview; // ya es URL remota
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(foto.file);
+      });
+      const up = await fetch(`${API_BASE}/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: foto.file.name, fileData: base64, contentType: foto.file.type }),
+      });
+      if (up.ok) return (await up.json()).url;
+      return null;
     };
 
     const handleSubmit = async () => {
-      if (!titulo.trim()) return;
+      if (!titulo.trim() || !categoryId) return;
       setSubmitting(true);
       setSubmitError(null);
       try {
-        let fotoUrl = editingDemanda?.foto || '📦';
-
-        if (imageFile) {
-          const base64 = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result.split(',')[1]);
-            reader.onerror = reject;
-            reader.readAsDataURL(imageFile);
-          });
-          const up = await fetch(`${API_BASE}/upload`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fileName: imageFile.name, fileData: base64, contentType: imageFile.type }),
-          });
-          if (up.ok) fotoUrl = (await up.json()).url;
-        }
+        const fotosUrls = (await Promise.all(fotos.map(uploadFoto))).filter(Boolean);
 
         const payload = {
           titulo: titulo.trim(),
           descripcion: descripcion.trim(),
-          foto: fotoUrl,
-          categorias: selectedRubros,
+          fotos: fotosUrls,
+          foto: fotosUrls[0] || null,  // backwards compat
+          categoryId: categoryId || null,
+          attributes: Object.keys(attributes).length > 0 ? attributes : null,
           presupuesto: (presupuestoMin || presupuestoMax)
             ? { min: presupuestoMin ? Number(presupuestoMin) : null, max: presupuestoMax ? Number(presupuestoMax) : null }
             : null,
@@ -853,7 +1296,6 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
         setSuccess(true);
         setTimeout(() => {
           setEditingDemanda(null);
-          setSelectedRubros([]);
           setCurrentScreen('home');
           setSuccess(false);
         }, 1800);
@@ -891,19 +1333,45 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
         </div>
 
         <div className="max-w-2xl mx-auto px-5 py-6 space-y-6">
-          {/* Foto */}
+          {/* Fotos */}
           <div>
-            <label className="block font-bold mb-3 text-sm">Foto del producto *</label>
-            <div onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-slate-200 dark:border-white/20 rounded-3xl p-8 text-center bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors hover:border-emerald-400">
-              {imagePreview
-                ? <img src={imagePreview} alt="Preview" className="w-28 h-28 object-cover rounded-2xl mx-auto mb-3" />
-                : <Camera className="w-14 h-14 text-emerald-500 mx-auto mb-3" />
-              }
-              <p className="font-semibold text-sm mb-2">{imagePreview ? 'Cambiar foto' : 'Subir una foto'}</p>
-              <span className="px-5 py-2 bg-slate-900 dark:bg-emerald-500 text-white rounded-xl text-sm font-semibold">Seleccionar</span>
+            <label className="block font-bold mb-3 text-sm">
+              Fotos del producto
+              <span className="font-normal text-slate-400 ml-1">({fotos.length}/{MAX_FOTOS})</span>
+            </label>
+
+            {/* Altura fija en el wrapper → todos los hijos h-full → altura siempre idéntica */}
+            <div className="grid grid-cols-3 gap-2 h-28">
+              {fotos.map((f, idx) => (
+                <div key={idx} className="relative rounded-2xl overflow-hidden bg-slate-100 dark:bg-white/10 group h-full">
+                  <img src={f.preview} alt="" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removePhoto(idx)}
+                    className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                  {idx === 0 && (
+                    <span className="absolute bottom-1 left-1 text-[10px] bg-black/50 text-white px-1.5 py-0.5 rounded-md font-medium leading-none">Principal</span>
+                  )}
+                </div>
+              ))}
+              {fotos.length < MAX_FOTOS && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`h-full rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/20 flex flex-col items-center justify-center gap-1.5 hover:border-emerald-400 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-slate-400 hover:text-emerald-500
+                    ${fotos.length === 0 ? 'col-span-3' : fotos.length === 1 ? 'col-span-2' : 'col-span-1'}`}
+                >
+                  <Camera className="w-6 h-6" />
+                  <span className="text-[11px] font-medium">{fotos.length === 0 ? 'Subir fotos' : 'Agregar'}</span>
+                  {fotos.length === 0 && <span className="text-xs text-slate-400 text-center px-2">Hasta {MAX_FOTOS} fotos · La primera será la principal</span>}
+                </button>
+              )}
             </div>
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+
+            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageChange} />
           </div>
 
           {/* Titulo */}
@@ -939,33 +1407,30 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
             </div>
           </div>
 
-          {/* Categorias */}
+          {/* Categoría */}
           <div>
-            <label className="block font-bold mb-2 text-sm">Categorias <span className="font-normal text-slate-400">(opcional)</span></label>
-            <div className="flex flex-wrap gap-2">
-              {RUBROS.map(r => (
-                <button key={r} type="button"
-                  onClick={() => {
-                    const isSelected = selectedRubros.includes(r);
-                    const next = isSelected ? selectedRubros.filter(x => x !== r) : [...selectedRubros, r];
-                    setSelectedRubros(next);
-                    setFilterWarning(next.length >= 2);
-                  }}
-                  className={`px-4 py-2 rounded-xl font-semibold text-sm border-2 transition-all ${selectedRubros.includes(r) ? 'bg-slate-900 dark:bg-emerald-500 text-white border-slate-900 dark:border-emerald-500' : 'bg-white dark:bg-white/5 border-slate-200 dark:border-white/20 hover:border-slate-300 dark:hover:border-white/40 dark:text-slate-300'}`}>
-                  {r}
-                </button>
-              ))}
-            </div>
-            {filterWarning && (
-              <div className="mt-3 bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 flex gap-3">
-                <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-bold text-amber-800 text-sm">Cuidado con filtrar demasiado</p>
-                  <p className="text-amber-700 text-xs mt-0.5">Muchas categorias pueden ocultar tiendas que tienen lo que buscas.</p>
-                </div>
-              </div>
-            )}
+            <label className="block font-bold mb-2 text-sm">Categoría <span className="text-rose-500">*</span></label>
+            <CategoryPicker
+              value={categoryId}
+              onChange={id => { setCategoryId(id); setAttributes({}); }}
+              onCreateCategory={createCategory}
+              categories={allCategories}
+              placeholder="¿En qué categoría entra lo que buscás?"
+            />
           </div>
+
+          {/* Atributos */}
+          {(categoryId || Object.keys(attributes).length > 0) && (
+            <div>
+              <label className="block font-bold mb-2 text-sm">Detalles <span className="font-normal text-slate-400">(opcional)</span></label>
+              <AttributesEditor
+                categoryId={categoryId}
+                value={attributes}
+                onChange={setAttributes}
+                categories={allCategories}
+              />
+            </div>
+          )}
 
           {submitError && (
             <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex gap-3">
@@ -974,7 +1439,7 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
             </div>
           )}
 
-          <button onClick={handleSubmit} disabled={!titulo.trim() || submitting}
+          <button onClick={handleSubmit} disabled={!titulo.trim() || !categoryId || submitting}
             className="w-full bg-slate-900 dark:bg-emerald-500 text-white py-4 rounded-2xl font-bold disabled:opacity-40 hover:bg-slate-800 dark:hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2">
             {submitting ? <><Loader2 className="w-5 h-5 animate-spin" /> Publicando...</> : (editing ? 'Guardar cambios' : 'Publicar Demanda')}
           </button>
@@ -995,8 +1460,8 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
       setLoadingResp(true);
       fetch(`${API_BASE}/respuestas?demandaId=${demanda.id}`)
         .then(r => r.ok ? r.json() : [])
-        .then(data => setRespuestas(data.length > 0 ? data : getMockRespuestas(demanda)))
-        .catch(() => setRespuestas(getMockRespuestas(demanda)))
+        .then(data => setRespuestas(data))
+        .catch(() => setRespuestas([]))
         .finally(() => setLoadingResp(false));
     }, [demanda?.id]);
 
@@ -1026,7 +1491,6 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
 
     const handleEditar = () => {
       setEditingDemanda(demanda);
-      setSelectedRubros(demanda.categorias || []);
       setCurrentScreen('crear');
     };
 
@@ -1039,7 +1503,9 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
             </button>
             <div className="flex-1">
               <h1 className="text-lg font-bold">Detalle de Demanda</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{respuestas.length} respuestas</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {loadingResp ? 'Cargando...' : `${respuestas.length} ${respuestas.length === 1 ? 'respuesta' : 'respuestas'}`}
+              </p>
             </div>
             {demanda?.estado === 'pausada' && (
               <span className="px-3 py-1.5 bg-amber-100 text-amber-700 text-xs font-bold rounded-xl">PAUSADA</span>
@@ -1050,29 +1516,25 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
         <div className="max-w-4xl mx-auto">
           {/* Header demanda */}
           <div className="bg-white border-b px-5 py-6">
-            <div className="flex gap-4 mb-5">
-              <div className="w-20 h-20 bg-gradient-to-br from-amber-100 to-orange-100 rounded-2xl flex items-center justify-center text-4xl shrink-0 overflow-hidden">
-                {demanda?.foto?.startsWith('http')
-                  ? <img src={demanda.foto} alt="" className="w-full h-full object-cover" />
-                  : (demanda?.foto || '📦')}
-              </div>
-              <div className="flex-1 min-w-0">
-                <h2 className="font-bold text-lg mb-1">{demanda?.titulo}</h2>
-                {demanda?.descripcion && <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">{demanda.descripcion}</p>}
-                {demanda?.presupuesto && (
-                  <p className="text-sm font-semibold text-emerald-700 mb-2">
-                    Presupuesto: ${demanda.presupuesto.min?.toLocaleString() || '0'} - ${demanda.presupuesto.max?.toLocaleString() || '?'}
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <span className={`px-3 py-1 rounded-xl text-xs font-bold border ${demanda?.estado === 'activa' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                    {(demanda?.estado || 'activa').toUpperCase()}
-                  </span>
-                  <span className="text-xs text-slate-400 flex items-center">{demanda?.tiempoCreado}</span>
-                  {demanda?.categorias?.map(c => (
-                    <span key={c} className="px-2 py-1 bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 rounded-lg text-xs">{c}</span>
-                  ))}
-                </div>
+            {/* Carrusel de fotos */}
+            {(() => {
+              const imgs = demanda?.fotos?.length ? demanda.fotos : demanda?.foto ? [demanda.foto] : [];
+              if (!imgs.length) return null;
+              return <PhotoCarousel photos={imgs} className="mb-5 rounded-3xl overflow-hidden" />;
+            })()}
+            <div className="mb-5">
+              <h2 className="font-bold text-lg mb-1">{demanda?.titulo}</h2>
+              {demanda?.descripcion && <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">{demanda.descripcion}</p>}
+              {demanda?.presupuesto && (
+                <p className="text-sm font-semibold text-emerald-700 mb-2">
+                  Presupuesto: ${demanda.presupuesto.min?.toLocaleString() || '0'} - ${demanda.presupuesto.max?.toLocaleString() || '?'}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <span className={`px-3 py-1 rounded-xl text-xs font-bold border ${demanda?.estado === 'activa' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                  {(demanda?.estado || 'activa').toUpperCase()}
+                </span>
+                <span className="text-xs text-slate-400 flex items-center">{demanda?.tiempoCreado}</span>
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
@@ -1091,59 +1553,197 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
           {/* Respuestas */}
           <div className="px-5 py-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-lg">Respuestas</h3>
-              <span className="px-3 py-1.5 bg-slate-900 dark:bg-white/15 text-white rounded-xl text-xs font-bold">{respuestas.length} tiendas</span>
+              <h3 className="font-bold text-lg">Respuestas de tiendas</h3>
+              {respuestas.length > 0 && (
+                <span className="px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl text-xs font-bold">
+                  {respuestas.length} {respuestas.length === 1 ? 'tienda' : 'tiendas'}
+                </span>
+              )}
             </div>
 
-            {respuestas.map(r => (
-              <div key={r.id} className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-slate-100 dark:border-white/10 p-5 hover:border-slate-200 dark:hover:border-white/20 transition-colors">
+            {[...respuestas].sort((a, b) => {
+              const order = { 'exacto-nuevo': 1, 'exacto-usado': 2, 'reacondicionado': 3, 'compatible': 4, 'similar': 5, 'imitacion': 6 };
+              return (order[a.matchType] || 99) - (order[b.matchType] || 99);
+            }).map(r => {
+              // Campos normalizados — soporta tanto datos viejos (mock) como nuevos (reales)
+              const nombreTienda = r.tiendaNombre || r.tienda || 'Tienda';
+              const fotoTienda   = r.tiendaFoto   || r.foto   || null;
+              const rating       = r.tiendaRating  || r.rating || null;
+              const horario      = r.tiendaHorario || r.horario || null;
+              const direccion    = r.tiendaDireccion ? `${r.tiendaDireccion}${r.tiendaCiudad ? ', ' + r.tiendaCiudad : ''}` : null;
+              const distancia    = r.distancia || null;
+
+              return (
+              <div key={r.id} className="bg-white dark:bg-[#111827] rounded-2xl p-5 hover:shadow-md hover:shadow-black/5 dark:hover:shadow-black/30 transition-all">
+                {/* Header tienda */}
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex gap-3">
-                    <div className="w-14 h-14 bg-violet-100 rounded-2xl flex items-center justify-center text-2xl shrink-0">{r.foto}</div>
+                    <div className="w-12 h-12 bg-gradient-to-br from-violet-100 to-purple-100 dark:from-violet-900/30 dark:to-purple-900/20 rounded-xl flex items-center justify-center shrink-0 overflow-hidden">
+                      {fotoTienda
+                        ? <img src={fotoTienda} alt="" className="w-full h-full object-cover" />
+                        : <Store className="w-5 h-5 text-violet-500" />
+                      }
+                    </div>
                     <div>
-                      <h4 className="font-bold">{r.tienda}</h4>
-                      <div className="flex gap-3 text-xs text-slate-400 mt-1">
-                        <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{r.distancia}</span>
-                        <span className="flex items-center gap-0.5"><Star className="w-3 h-3 text-amber-400 fill-amber-400" />{r.rating}</span>
+                      <h4 className="font-bold text-slate-900 dark:text-white">{nombreTienda}</h4>
+                      <div className="flex flex-wrap gap-2 text-xs text-slate-400 mt-0.5">
+                        {distancia && <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{distancia}</span>}
+                        {rating && <span className="flex items-center gap-0.5"><Star className="w-3 h-3 text-amber-400 fill-amber-400" />{rating}</span>}
+                        {horario && <span className="flex items-center gap-0.5 text-emerald-500 font-medium"><Clock className="w-3 h-3" />{horario}</span>}
                       </div>
                     </div>
                   </div>
-                  <span className="text-xs text-slate-400 shrink-0">{r.tiempoRespuesta}</span>
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    {r.matchType && (() => {
+                      const matchLabels = {
+                        'exacto-nuevo':   { label: 'Exacto Nuevo',   color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
+                        'exacto-usado':   { label: 'Exacto Usado',   color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
+                        'reacondicionado':{ label: 'Reacondicionado',color: 'bg-teal-500/10 text-teal-600 dark:text-teal-400' },
+                        'compatible':     { label: 'Compatible',     color: 'bg-violet-500/10 text-violet-600 dark:text-violet-400' },
+                        'similar':        { label: 'Similar',        color: 'bg-violet-500/10 text-violet-600 dark:text-violet-400' },
+                        'imitacion':      { label: 'Imitación',      color: 'bg-slate-200/80 text-slate-500 dark:bg-white/8 dark:text-slate-400' },
+                      };
+                      const m = matchLabels[r.matchType];
+                      return m ? (
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${m.color}`}>{m.label}</span>
+                      ) : null;
+                    })()}
+                    <span className="text-xs text-slate-400">{r.tiempoRespuesta || 'Reciente'}</span>
+                  </div>
                 </div>
 
-                <p className="text-sm bg-slate-50 rounded-2xl p-4 mb-4 leading-relaxed">{r.mensaje}</p>
+                {/* Mensaje */}
+                <p className="text-sm bg-slate-50 dark:bg-white/5 rounded-xl p-3.5 mb-3 leading-relaxed text-slate-700 dark:text-slate-300">{r.mensaje}</p>
 
-                <div className="flex justify-between items-end mb-4 pb-4 border-b border-slate-100 dark:border-white/5">
-                  <div>
-                    <p className="text-xs text-slate-400 mb-1">Precio ofrecido</p>
-                    <p className="text-2xl font-bold">${r.precio.toLocaleString()}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-slate-400 mb-1">Horario</p>
-                    <p className="text-sm font-bold text-emerald-600 flex items-center gap-1.5">
-                      <Clock className="w-4 h-4" />{r.horario}
-                    </p>
-                  </div>
-                </div>
+                {/* Adjuntos — fotos y videos del producto */}
+                {r.adjuntos?.length > 0 && (() => {
+                  const [lightbox, setLightbox] = React.useState(null);
+                  return (
+                    <>
+                      <div className={`grid gap-1.5 mb-4 ${r.adjuntos.length === 1 ? 'grid-cols-1' : r.adjuntos.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                        {r.adjuntos.map((a, ai) => (
+                          <button
+                            key={ai}
+                            type="button"
+                            onClick={() => setLightbox(ai)}
+                            className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 dark:bg-white/8 group"
+                          >
+                            {a.type === 'video'
+                              ? (
+                                <>
+                                  <video src={a.url} className="w-full h-full object-cover" muted playsInline />
+                                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
+                                    <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+                                      <Play className="w-5 h-5 text-slate-800 ml-0.5" />
+                                    </div>
+                                  </div>
+                                </>
+                              ) : (
+                                <img src={a.url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
+                              )
+                            }
+                          </button>
+                        ))}
+                      </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <button onClick={() => openChat(r)}
-                    className="py-3 bg-slate-900 dark:bg-emerald-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-800 dark:hover:bg-emerald-400 transition-colors">
+                      {/* Lightbox */}
+                      {lightbox !== null && (
+                        <div
+                          className="fixed inset-0 bg-black/90 z-[70] flex items-center justify-center p-4"
+                          onClick={() => setLightbox(null)}
+                        >
+                          <button
+                            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+                            onClick={() => setLightbox(null)}
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                          {r.adjuntos[lightbox]?.type === 'video'
+                            ? <video src={r.adjuntos[lightbox].url} controls autoPlay className="max-w-full max-h-[85vh] rounded-xl" onClick={e => e.stopPropagation()} />
+                            : <img src={r.adjuntos[lightbox].url} alt="" className="max-w-full max-h-[85vh] rounded-xl object-contain" onClick={e => e.stopPropagation()} />
+                          }
+                          {r.adjuntos.length > 1 && (
+                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+                              {r.adjuntos.map((_, ai) => (
+                                <button key={ai} onClick={e => { e.stopPropagation(); setLightbox(ai); }}
+                                  className={`w-2 h-2 rounded-full transition-all ${ai === lightbox ? 'bg-white w-5' : 'bg-white/40'}`} />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+
+                {/* Precio */}
+                {r.precio && (
+                  <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-100 dark:border-white/8">
+                    <div>
+                      <p className="text-xs text-slate-400 mb-0.5">Precio ofrecido</p>
+                      <p className="text-2xl font-black text-slate-900 dark:text-white">${r.precio.toLocaleString()}</p>
+                    </div>
+                    {direccion && (
+                      <div className="text-right">
+                        <p className="text-xs text-slate-400 mb-0.5">Dirección</p>
+                        <p className="text-xs font-medium text-slate-600 dark:text-slate-300 max-w-[160px] text-right leading-snug">{direccion}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Acciones */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    onClick={() => openChat({
+                      id: r.id,
+                      tienda: nombreTienda,
+                      foto: fotoTienda || '🏪',
+                      mensaje: `Hola! Vi tu demanda "${demanda?.titulo}". ${r.mensaje}`,
+                      tiempoRespuesta: r.tiempoRespuesta,
+                      chatKey: `${r.tiendaId || r.id}-${r.demandaId}`,
+                    })}
+                    className="py-2.5 bg-slate-900 dark:bg-emerald-500 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-1.5 hover:bg-slate-700 dark:hover:bg-emerald-400 transition-colors">
                     <MessageSquare className="w-4 h-4" /> Chatear
                   </button>
-                  <button onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(r.tienda)}`, '_blank')}
-                    className="py-3 bg-slate-100 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors">
+                  <button
+                    onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(direccion || nombreTienda)}`, '_blank')}
+                    className="py-2.5 bg-slate-100 dark:bg-white/8 text-slate-700 dark:text-slate-200 rounded-xl font-semibold text-sm flex items-center justify-center gap-1.5 hover:bg-slate-200 dark:hover:bg-white/12 transition-colors">
                     <Navigation className="w-4 h-4" /> Navegar
                   </button>
                 </div>
               </div>
-            ))}
+              );
+            })}
 
-            {respuestas.length === 0 && (
-              <div className="text-center py-10">
-                <MessageSquare className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-                <p className="font-semibold text-slate-400">Aun sin respuestas</p>
-                <p className="text-sm text-slate-300 mt-1">Las tiendas estan viendo tu demanda</p>
+            {loadingResp && (
+              <div className="space-y-3">
+                {[1, 2].map(i => (
+                  <div key={i} className="bg-white dark:bg-[#111827] rounded-2xl p-5 animate-pulse">
+                    <div className="flex gap-3 mb-4">
+                      <div className="w-12 h-12 bg-slate-200 dark:bg-white/8 rounded-xl shrink-0" />
+                      <div className="flex-1 space-y-2 pt-1">
+                        <div className="h-4 bg-slate-200 dark:bg-white/8 rounded w-1/3" />
+                        <div className="h-3 bg-slate-100 dark:bg-white/5 rounded w-1/4" />
+                      </div>
+                    </div>
+                    <div className="h-16 bg-slate-100 dark:bg-white/5 rounded-xl mb-4" />
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="h-10 bg-slate-200 dark:bg-white/8 rounded-xl" />
+                      <div className="h-10 bg-slate-100 dark:bg-white/5 rounded-xl" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!loadingResp && respuestas.length === 0 && (
+              <div className="text-center py-12 bg-white dark:bg-[#111827] rounded-2xl">
+                <div className="w-16 h-16 bg-slate-100 dark:bg-white/5 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <MessageSquare className="w-8 h-8 text-slate-300 dark:text-white/20" />
+                </div>
+                <p className="font-bold text-slate-700 dark:text-slate-300 mb-1">Sin respuestas aún</p>
+                <p className="text-sm text-slate-400 max-w-xs mx-auto">Las tiendas locales están viendo tu demanda. Te avisaremos cuando alguien responda.</p>
               </div>
             )}
           </div>
@@ -1213,35 +1813,51 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
   // ─── Tiendas Screen ───────────────────────────────────────────────────────
   const TiendasScreen = () => {
     const [query, setQuery] = useState('');
-    const filtered = tiendas.filter(t =>
-      t.nombre.toLowerCase().includes(query.toLowerCase()) ||
-      t.rubro.toLowerCase().includes(query.toLowerCase())
+
+    // Set de ids raíz presentes en tiendas
+    const tiendaRootIds = new Set(
+      tiendas.flatMap(t => t.categoryIds || [])
     );
+    const filtered = tiendas.filter(t => {
+      const q = query.toLowerCase();
+      const matchesSearch = !q ||
+        t.nombre.toLowerCase().includes(q) ||
+        t.rubro.toLowerCase().includes(q);
+      const matchesCategory = !filterCategory || (() => {
+        if (!t.categoryIds?.length) return false;
+        const descendants = getAllDescendants(filterCategory, allCategories);
+        return t.categoryIds.some(id => id === filterCategory || descendants.includes(id));
+      })();
+      return matchesSearch && matchesCategory;
+    });
 
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24">
-        <div className="bg-white border-b px-5 py-4 sticky top-0 z-10">
-          <div className="flex items-center gap-3 mb-4">
-            <button onClick={() => setCurrentScreen('home')} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl lg:hidden">
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div>
-              <h1 className="text-lg font-bold">Tiendas</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{tiendas.length} locales cercanos</p>
+        <div className="bg-white dark:bg-slate-900 border-b dark:border-white/10 sticky top-0 z-10">
+          <div className="px-5 py-4">
+            <div className="flex items-center gap-3 mb-4">
+              <button onClick={() => setCurrentScreen('home')} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl lg:hidden">
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <h1 className="text-lg font-bold">Tiendas</h1>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{filtered.length} locales cercanos</p>
+              </div>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input type="text" value={query} onChange={e => setQuery(e.target.value)}
+                placeholder="Buscar tiendas o rubros..."
+                className="w-full pl-12 pr-4 py-3 bg-slate-100 dark:bg-white/5 dark:text-slate-200 dark:placeholder:text-slate-500 rounded-2xl border border-transparent focus:outline-none focus:border-emerald-400 dark:focus:border-emerald-500 text-sm transition-colors" />
             </div>
           </div>
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <input type="text" value={query} onChange={e => setQuery(e.target.value)}
-              placeholder="Buscar tiendas o rubros..."
-              className="w-full pl-12 pr-4 py-3 bg-slate-100 dark:bg-white/5 dark:text-slate-200 dark:placeholder:text-slate-500 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm" />
-          </div>
+          <CategoryFilterBar filterCategory={filterCategory} setFilterCategory={setFilterCategory} categories={allCategories} presentIds={tiendaRootIds} />
         </div>
 
         <div className="max-w-4xl mx-auto px-5 py-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
           {filtered.map(t => (
             <div key={t.id} onClick={() => { setSelectedTienda(t); setCurrentScreen('tienda-detail'); }}
-              className="bg-white rounded-3xl border-2 border-slate-100 p-5 hover:shadow-lg cursor-pointer transition-all hover:border-slate-200">
+              className="bg-white dark:bg-[#111827] rounded-2xl p-5 hover:shadow-md hover:shadow-black/5 dark:hover:shadow-black/30 cursor-pointer transition-all">
               <div className="flex gap-3 mb-4">
                 <div className="w-16 h-16 bg-violet-100 rounded-2xl flex items-center justify-center text-2xl shrink-0">{t.foto}</div>
                 <div className="flex-1 min-w-0">
@@ -1377,41 +1993,81 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme }) => {
   };
 
   // ─── Bottom Nav Mobile ────────────────────────────────────────────────────
-  const BottomNav = () => (
-    <div className="lg:hidden fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white dark:bg-slate-900 border-t-2 border-slate-100 dark:border-white/10 px-4 py-3 shadow-lg z-20">
-      <div className="flex items-center justify-around">
-        <button onClick={() => { setCurrentScreen('home'); setActiveTab('demandas'); }} className="flex flex-col items-center gap-1">
-          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-colors ${currentScreen === 'home' && activeTab === 'demandas' ? 'bg-slate-900 dark:bg-emerald-500/15' : 'bg-slate-100 dark:bg-white/5'}`}>
-            <Package className={`w-5 h-5 ${currentScreen === 'home' && activeTab === 'demandas' ? 'text-white dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`} />
-          </div>
-          <span className="text-xs font-semibold text-slate-500">Demandas</span>
-        </button>
+  const BottomNav = () => {
+    const navItems = [
+      { icon: Package, label: 'Demandas', action: () => { setCurrentScreen('home'); setActiveTab('demandas'); }, active: currentScreen === 'home' && activeTab === 'demandas' },
+      { icon: Tag,     label: 'Ofertas',  action: () => { setCurrentScreen('home'); setActiveTab('ofertas');  }, active: currentScreen === 'home' && activeTab === 'ofertas'  },
+      { icon: Store,   label: 'Tiendas',  action: () => setCurrentScreen('tiendas'), active: currentScreen === 'tiendas' || currentScreen === 'tienda-detail' },
+    ];
+    return (
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 max-w-md mx-auto z-20">
+        {/* Blur backdrop */}
+        <div className="bg-white/80 dark:bg-[#111827]/90 backdrop-blur-xl border-t border-slate-200/60 dark:border-white/8 px-2 pt-2 pb-safe">
+          <div className="flex items-center">
+            {/* Left items */}
+            {navItems.slice(0, 2).map(item => (
+              <button key={item.label} onClick={item.action}
+                className="flex-1 flex flex-col items-center gap-1 py-1.5 transition-all">
+                <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all ${
+                  item.active ? 'bg-emerald-500 shadow-lg shadow-emerald-500/30' : ''
+                }`}>
+                  <item.icon className={`w-4.5 h-4.5 transition-colors ${item.active ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
+                </div>
+                <span className={`text-[10px] font-semibold transition-colors ${item.active ? 'text-emerald-500' : 'text-slate-400 dark:text-slate-500'}`}>
+                  {item.label}
+                </span>
+              </button>
+            ))}
 
-        <button onClick={() => { setEditingDemanda(null); setSelectedRubros([]); setCurrentScreen('crear'); }} className="flex flex-col items-center -mt-8">
-          <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-xl border-4 border-white">
-            <Camera className="w-7 h-7 text-white" />
-          </div>
-          <span className="text-xs font-bold text-slate-700 mt-1">Crear</span>
-        </button>
+            {/* Centro — FAB crear */}
+            <div className="flex flex-col items-center px-4">
+              <button onClick={() => { setEditingDemanda(null); setCurrentScreen('crear'); }}
+                className="-mt-7 w-14 h-14 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-2xl flex items-center justify-center shadow-xl shadow-emerald-500/40 active:scale-95 transition-transform border-[3px] border-white dark:border-[#111827]">
+                <Camera className="w-6 h-6 text-white" />
+              </button>
+              <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 mt-1">Crear</span>
+            </div>
 
-        <button onClick={() => setCurrentScreen('tiendas')} className="flex flex-col items-center gap-1">
-          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-colors ${currentScreen === 'tiendas' || currentScreen === 'tienda-detail' ? 'bg-slate-900 dark:bg-emerald-500/15' : 'bg-slate-100 dark:bg-white/5'}`}>
-            <Store className={`w-5 h-5 ${currentScreen === 'tiendas' || currentScreen === 'tienda-detail' ? 'text-white dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`} />
+            {/* Right item */}
+            {navItems.slice(2).map(item => (
+              <button key={item.label} onClick={item.action}
+                className="flex-1 flex flex-col items-center gap-1 py-1.5 transition-all">
+                <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all ${
+                  item.active ? 'bg-emerald-500 shadow-lg shadow-emerald-500/30' : ''
+                }`}>
+                  <item.icon className={`w-4.5 h-4.5 transition-colors ${item.active ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
+                </div>
+                <span className={`text-[10px] font-semibold transition-colors ${item.active ? 'text-emerald-500' : 'text-slate-400 dark:text-slate-500'}`}>
+                  {item.label}
+                </span>
+              </button>
+            ))}
+            {/* Historial */}
+            <button onClick={() => setCurrentScreen('historial')}
+              className="flex-1 flex flex-col items-center gap-1 py-1.5">
+              <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all ${
+                currentScreen === 'historial' ? 'bg-emerald-500 shadow-lg shadow-emerald-500/30' : ''
+              }`}>
+                <History className={`w-4.5 h-4.5 transition-colors ${currentScreen === 'historial' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
+              </div>
+              <span className={`text-[10px] font-semibold transition-colors ${currentScreen === 'historial' ? 'text-emerald-500' : 'text-slate-400 dark:text-slate-500'}`}>
+                Historial
+              </span>
+            </button>
           </div>
-          <span className="text-xs font-semibold text-slate-500">Tiendas</span>
-        </button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // ─── Render ───────────────────────────────────────────────────────────────
   const showBottomNav = !['crear'].includes(currentScreen);
 
   return (
-    <div className="flex bg-slate-100 dark:bg-slate-950 min-h-screen">
+    <div className="flex bg-[#f7f8fa] dark:bg-[#0a0d16] h-screen overflow-hidden">
       <DesktopSidebar />
 
-      <div className="flex-1 lg:max-w-none max-w-md mx-auto bg-white lg:bg-slate-50 shadow-2xl lg:shadow-none min-h-screen relative">
+      <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-[#f7f8fa] dark:bg-[#0a0d16] relative">
         {currentScreen === 'home' && <HomeScreen />}
         {currentScreen === 'crear' && <CrearDemandaScreen />}
         {currentScreen === 'detalle' && selectedDemanda && <DetalleDemandaScreen />}

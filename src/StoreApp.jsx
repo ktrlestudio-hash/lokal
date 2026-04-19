@@ -3,10 +3,57 @@ import {
   Store, Package, MessageSquare, Bell, User, Search, ArrowLeft,
   Send, MapPin, Clock, Star, CheckCircle, X, Loader2, AlertCircle,
   TrendingUp, Eye, Edit3, ChevronRight, Navigation, Phone, Filter,
-  RotateCcw, LogOut, Sun, Moon
+  RotateCcw, LogOut, Sun, Moon, AlertTriangle, ChevronDown, Camera, Play,
+  Lock, CreditCard, Zap, CalendarDays, ShieldCheck, RefreshCw
 } from 'lucide-react';
 
+// ─── Precios suscripción (deben coincidir con mp-checkout.js) ─────────────────
+const PRECIO_MENSUAL    = 4990;
+const PRECIO_ANUAL      = 47900;
+const PRECIO_ANUAL_MES  = Math.round(PRECIO_ANUAL / 12);
+
+// ─── Helpers suscripción ──────────────────────────────────────────────────────
+function suscripcionActiva(tiendaData) {
+  // Tiendas sin suscripcion (creadas por invite) → tratar como activas
+  if (!tiendaData?.suscripcion?.vence) return true;
+  return new Date(tiendaData.suscripcion.vence) > new Date();
+}
+function diasRestantes(tiendaData) {
+  if (!tiendaData?.suscripcion?.vence) return null;
+  const diff = new Date(tiendaData.suscripcion.vence) - new Date();
+  return Math.max(0, Math.ceil(diff / 86400000));
+}
+import { CATEGORIES as BASE_CATEGORIES, getCategoryPath, getAllDescendants } from './categories';
+import CategoryIcon from './CategoryIcon';
+
 const API_BASE = '/.netlify/functions';
+
+const StorePhotoCarousel = ({ photos = [] }) => {
+  const [idx, setIdx] = React.useState(0);
+  if (!photos.length) return null;
+  const prev = () => setIdx(i => (i - 1 + photos.length) % photos.length);
+  const next = () => setIdx(i => (i + 1) % photos.length);
+  return (
+    <div className="relative bg-slate-100 dark:bg-black/30">
+      <img src={photos[idx]} alt="" className="w-full object-contain max-h-64" style={{ aspectRatio: '16/9' }} />
+      {photos.length > 1 && (
+        <>
+          <button onClick={prev} className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors">
+            <ChevronDown className="w-4 h-4 rotate-90" />
+          </button>
+          <button onClick={next} className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors">
+            <ChevronDown className="w-4 h-4 -rotate-90" />
+          </button>
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+            {photos.map((_, i) => (
+              <button key={i} onClick={() => setIdx(i)} className={`h-1.5 rounded-full transition-all ${i === idx ? 'bg-white w-4' : 'bg-white/50 w-1.5'}`} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 
 const KtrlLogo = ({ className = '' }) => (
   <svg className={className} viewBox="0 0 1629.2 404.35" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
@@ -28,6 +75,9 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
   const [tienda, setTienda] = useState(null);
   const [misRespuestas, setMisRespuestas] = useState([]);
 
+  // Categorías unificadas (base + custom)
+  const [allCategories, setAllCategories] = useState(BASE_CATEGORIES);
+
   // Filtros feed
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRubro, setFilterRubro] = useState('todas');
@@ -36,8 +86,18 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
   const [respondiendo, setRespondiendo] = useState(false);
   const [msgRespuesta, setMsgRespuesta] = useState('');
   const [precioRespuesta, setPrecioRespuesta] = useState('');
+  const [adjuntosRespuesta, setAdjuntosRespuesta] = useState([]); // [{ file, preview, type }]
+  const [matchType, setMatchType] = useState(null);
   const [submitError, setSubmitError] = useState(null);
   const [submitOk, setSubmitOk] = useState(false);
+  const adjuntosInputRef = useRef(null);
+
+  // Suscripción / paywall
+  const [showPaywall, setShowPaywall]   = useState(false);
+  const [renovando, setRenovando]       = useState(false);
+  const [renovError, setRenovError]     = useState(null);
+  const isActiva = suscripcionActiva(tiendaData);
+  const dias     = diasRestantes(tiendaData);
 
   // Notificaciones
   const [showProfile, setShowProfile] = useState(false);
@@ -47,7 +107,23 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
     fetchTienda();
     fetchDemandas();
     fetchMisRespuestas();
+    // Cargar categorías custom
+    fetch(`${API_BASE}/categories`)
+      .then(r => r.ok ? r.json() : [])
+      .then(custom => { if (custom.length > 0) setAllCategories([...BASE_CATEGORIES, ...custom]); })
+      .catch(() => {});
   }, []);
+
+  const createCategory = async (name, parentId = null) => {
+    const res = await fetch(`${API_BASE}/categories`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, parentId }),
+    });
+    const cat = await res.json();
+    setAllCategories(prev => prev.find(c => c.id === cat.id) ? prev : [...prev, cat]);
+    return cat;
+  };
 
   const fetchTienda = async () => {
     try {
@@ -80,20 +156,98 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
 
   const yaRespondio = (demandaId) => misRespuestas.some(r => String(r.demandaId) === String(demandaId));
 
+  const handleRenovar = async (plan) => {
+    setRenovando(true);
+    setRenovError(null);
+    try {
+      const res = await fetch(`${API_BASE}/mp-checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan,
+          tiendaId:    tiendaData.id,
+          googleUid:   firebaseUser.uid,
+          ownerNombre: firebaseUser.displayName || '',
+          ownerEmail:  firebaseUser.email || '',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al crear preferencia de pago');
+      window.location.href = data.initPoint || data.sandboxInitPoint;
+    } catch (err) {
+      setRenovError(err.message);
+      setRenovando(false);
+    }
+  };
+
+  // Sube un adjunto (imagen o video) a R2 y devuelve { url, type }
+  const uploadAdjunto = async (item) => {
+    if (!item.file) return null;
+    const type = item.type; // 'image' | 'video'
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(item.file);
+    });
+    const res = await fetch(`${API_BASE}/upload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName: item.file.name, fileData: base64, contentType: item.file.type }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return { url: data.url, type };
+  };
+
+  const handleAdjuntosChange = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const MAX = 4;
+    const remaining = MAX - adjuntosRespuesta.length;
+    files.slice(0, remaining).forEach(file => {
+      const type = file.type.startsWith('video/') ? 'video' : 'image';
+      const preview = URL.createObjectURL(file);
+      setAdjuntosRespuesta(prev => prev.length < MAX ? [...prev, { file, preview, type }] : prev);
+    });
+    e.target.value = '';
+  };
+
+  const removeAdjunto = (idx) => {
+    setAdjuntosRespuesta(prev => {
+      URL.revokeObjectURL(prev[idx]?.preview);
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
+
   const handleResponder = async () => {
     if (!msgRespuesta.trim()) return;
     setRespondiendo(true);
     setSubmitError(null);
     try {
+      // Subir adjuntos primero
+      const adjuntosSubidos = (
+        await Promise.all(adjuntosRespuesta.map(uploadAdjunto))
+      ).filter(Boolean);
+
       const res = await fetch(`${API_BASE}/respuestas`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           demandaId: selectedDemanda.id,
+          demandaTitulo: selectedDemanda.titulo,
           tiendaId: tiendaData.id,
-          tiendaNombre: tiendaData.nombre,
+          tiendaNombre: tiendaData.nombre || tiendaInfo.nombre,
+          tiendaFoto: tiendaData.foto || tiendaInfo.foto || null,
+          tiendaRating: tiendaData.rating || tiendaInfo.rating || null,
+          tiendaHorario: tiendaData.horario || tiendaInfo.horario || null,
+          tiendaDireccion: tiendaData.direccion || tiendaInfo.direccion || null,
+          tiendaCiudad: tiendaData.ciudad || tiendaInfo.ciudad || null,
+          tiendaTelefono: tiendaData.telefono || tiendaInfo.telefono || null,
           mensaje: msgRespuesta.trim(),
           precio: precioRespuesta ? Number(precioRespuesta) : null,
+          adjuntos: adjuntosSubidos,
+          matchType: matchType || null,
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error || 'Error al enviar');
@@ -101,6 +255,8 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
       setMisRespuestas(prev => [nueva, ...prev]);
       setMsgRespuesta('');
       setPrecioRespuesta('');
+      setAdjuntosRespuesta([]);
+      setMatchType(null);
       setSubmitOk(true);
       setTimeout(() => setSubmitOk(false), 3000);
     } catch (err) {
@@ -110,14 +266,25 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
     }
   };
 
-  // Rubros unicos de las demandas actuales
-  const rubrosDisponibles = ['todas', ...new Set(demandas.flatMap(d => d.categorias || []))].filter(Boolean);
+  // Categorías raíz presentes en las demandas actuales
+  const categoriasFeed = allCategories.filter(c =>
+    c.parentId === null &&
+    demandas.some(d => {
+      if (!d.categoryId) return false;
+      const descendants = getAllDescendants(c.id, allCategories);
+      return d.categoryId === c.id || descendants.includes(d.categoryId);
+    })
+  );
 
   const demandasFiltradas = demandas
     .filter(d => {
       const matchSearch = d.titulo.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (d.descripcion || '').toLowerCase().includes(searchQuery.toLowerCase());
-      const matchRubro = filterRubro === 'todas' || (d.categorias || []).includes(filterRubro);
+      const matchRubro = filterRubro === 'todas' || (() => {
+        if (!d.categoryId) return false;
+        const descendants = getAllDescendants(filterRubro, allCategories);
+        return d.categoryId === filterRubro || descendants.includes(d.categoryId);
+      })();
       return matchSearch && matchRubro;
     });
 
@@ -129,6 +296,176 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
     ciudad: tiendaData?.ciudad || '',
     telefono: tiendaData?.telefono || '',
   };
+
+  // ── Match Types — jerarquía de relevancia de la oferta ────────────────────
+  // priority: menor = más relevante (se usa para ordenar respuestas en App.jsx)
+
+  // ── MatchTypeSelector — selector condicional 2 pasos ──────────────────────
+  const MatchTypeSelector = ({ value, onChange }) => {
+    // Paso 1: ¿Es el mismo producto?
+    // Paso 2a (exacto): ¿estado?
+    // Paso 2b (no exacto): ¿qué tan similar?
+    const [step, setStep] = React.useState(() => {
+      if (!value) return 'root';
+      if (['exacto-nuevo', 'exacto-usado', 'reacondicionado'].includes(value)) return 'exacto';
+      return 'similar';
+    });
+
+    const select = (v) => { onChange(v); };
+    const back = () => { onChange(null); setStep('root'); };
+
+    const btnBase = 'w-full flex items-start gap-3 p-3.5 rounded-xl border-2 text-left transition-all active:scale-[0.98]';
+    const btnActive = (id) => value === id
+      ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-500/10'
+      : 'border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20 bg-white dark:bg-white/4';
+
+    if (step === 'root') return (
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">¿Cómo coincide tu oferta?</p>
+        <button className={`${btnBase} ${btnActive('_exacto')}`} onClick={() => setStep('exacto')}>
+          <span className="text-xl leading-none mt-0.5">✓</span>
+          <div>
+            <p className="font-bold text-sm text-slate-900 dark:text-white">Tengo exactamente lo que pide</p>
+            <p className="text-xs text-slate-400 mt-0.5">El mismo producto, misma marca o especificación</p>
+          </div>
+        </button>
+        <button className={`${btnBase} ${btnActive('_similar')}`} onClick={() => setStep('similar')}>
+          <span className="text-xl leading-none mt-0.5">≈</span>
+          <div>
+            <p className="font-bold text-sm text-slate-900 dark:text-white">No es exactamente, pero puede servir</p>
+            <p className="text-xs text-slate-400 mt-0.5">Compatible, similar, alternativa o genérico</p>
+          </div>
+        </button>
+      </div>
+    );
+
+    if (step === 'exacto') return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 mb-3">
+          <button onClick={back} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/8 transition-colors">
+            <ArrowLeft className="w-4 h-4 text-slate-500" />
+          </button>
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Es el mismo producto — ¿en qué estado?</p>
+        </div>
+        {[
+          { id: 'exacto-nuevo',  emoji: '📦', label: 'Nuevo · sin uso',       desc: 'Original, sellado o sin estrenar' },
+          { id: 'exacto-usado',  emoji: '🔄', label: 'Usado · buen estado',   desc: 'Segunda mano, en condiciones correctas' },
+          { id: 'reacondicionado', emoji: '🔧', label: 'Reacondicionado',    desc: 'Revisado, reparado o restaurado' },
+        ].map(({ id, emoji, label, desc }) => (
+          <button key={id} onClick={() => select(id)}
+            className={`${btnBase} ${value === id ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-500/10' : 'border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20 bg-white dark:bg-white/4'}`}>
+            <span className="text-xl leading-none mt-0.5">{emoji}</span>
+            <div>
+              <p className={`font-bold text-sm ${value === id ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}`}>{label}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{desc}</p>
+            </div>
+            {value === id && <CheckCircle className="w-4 h-4 text-emerald-500 ml-auto shrink-0 mt-0.5" />}
+          </button>
+        ))}
+      </div>
+    );
+
+    // similar
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 mb-3">
+          <button onClick={back} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/8 transition-colors">
+            <ArrowLeft className="w-4 h-4 text-slate-500" />
+          </button>
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">¿Qué tipo de alternativa es?</p>
+        </div>
+        {[
+          { id: 'compatible', emoji: '🔌', label: 'Compatible',          desc: 'Mismo uso / función, otra marca o modelo' },
+          { id: 'similar',    emoji: '〜', label: 'Similar',             desc: 'Parecido, no garantizo que sea exactamente' },
+          { id: 'imitacion',  emoji: '🏷️', label: 'Imitación / Genérico', desc: 'Copia, réplica o versión no original' },
+        ].map(({ id, emoji, label, desc }) => (
+          <button key={id} onClick={() => select(id)}
+            className={`${btnBase} ${value === id ? 'border-violet-400 bg-violet-50 dark:bg-violet-500/10' : 'border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20 bg-white dark:bg-white/4'}`}>
+            <span className="text-xl leading-none mt-0.5">{emoji}</span>
+            <div>
+              <p className={`font-bold text-sm ${value === id ? 'text-violet-700 dark:text-violet-400' : 'text-slate-900 dark:text-white'}`}>{label}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{desc}</p>
+            </div>
+            {value === id && <CheckCircle className="w-4 h-4 text-violet-500 ml-auto shrink-0 mt-0.5" />}
+          </button>
+        ))}
+      </div>
+    );
+  };
+
+  // ── PaywallModal ──────────────────────────────────────────────────────────
+  const PaywallModal = () => (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-[#111827] rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
+        {/* Header */}
+        <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 text-white relative">
+          <button onClick={() => setShowPaywall(false)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+          <div className="w-12 h-12 bg-rose-500/20 rounded-2xl flex items-center justify-center mb-3">
+            <Lock className="w-6 h-6 text-rose-400" />
+          </div>
+          <h2 className="font-black text-xl mb-1">Suscripción vencida</h2>
+          <p className="text-slate-300 text-sm">
+            {tiendaData?.suscripcion?.vence
+              ? `Tu plan venció el ${new Date(tiendaData.suscripcion.vence).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}.`
+              : 'Tu plan ha vencido.'}
+            {' '}Renovalo para seguir respondiendo demandas.
+          </p>
+        </div>
+
+        <div className="p-5 space-y-3">
+          {/* Plan mensual */}
+          <button
+            onClick={() => handleRenovar('mensual')}
+            disabled={renovando}
+            className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-slate-200 dark:border-white/10 hover:border-emerald-400 dark:hover:border-emerald-500 transition-all group"
+          >
+            <div className="text-left">
+              <p className="font-bold text-slate-900 dark:text-white">Plan Mensual</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">1 mes de acceso + 1 de regalo al renovar</p>
+            </div>
+            <div className="text-right shrink-0 ml-4">
+              <p className="font-black text-lg text-slate-900 dark:text-white">${PRECIO_MENSUAL.toLocaleString()}</p>
+              <p className="text-xs text-slate-400">ARS / mes</p>
+            </div>
+          </button>
+
+          {/* Plan anual */}
+          <button
+            onClick={() => handleRenovar('anual')}
+            disabled={renovando}
+            className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-emerald-400 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-500/8 hover:bg-emerald-100 dark:hover:bg-emerald-500/15 transition-all relative"
+          >
+            <div className="absolute -top-2.5 left-4 bg-emerald-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full">
+              AHORRÁS 20%
+            </div>
+            <div className="text-left">
+              <p className="font-bold text-slate-900 dark:text-white">Plan Anual</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Facturado ${PRECIO_ANUAL.toLocaleString()} — 12 meses + 1 de regalo</p>
+            </div>
+            <div className="text-right shrink-0 ml-4">
+              <p className="font-black text-lg text-emerald-600 dark:text-emerald-400">${PRECIO_ANUAL_MES.toLocaleString()}</p>
+              <p className="text-xs text-slate-400">ARS / mes</p>
+            </div>
+          </button>
+
+          {renovando && (
+            <div className="flex items-center justify-center gap-2 text-slate-500 text-sm py-2">
+              <Loader2 className="w-4 h-4 animate-spin" /> Redirigiendo a MercadoPago...
+            </div>
+          )}
+          {renovError && (
+            <p className="text-rose-500 text-sm text-center">{renovError}</p>
+          )}
+
+          <p className="text-center text-slate-400 text-xs pt-1">
+            Pago seguro con MercadoPago · Podés cancelar cuando quieras
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 
   // ── Sidebar ────────────────────────────────────────────────────────────────
   const Sidebar = () => (
@@ -254,13 +591,18 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
       </div>
 
       <div className="max-w-4xl mx-auto px-5 lg:px-8 py-5">
-        {/* Filtros por rubro */}
-        {rubrosDisponibles.length > 1 && (
+        {/* Filtros por categoría */}
+        {categoriasFeed.length > 0 && (
           <div className="flex gap-2 mb-5 overflow-x-auto pb-2 scrollbar-hide">
-            {rubrosDisponibles.map(r => (
-              <button key={r} onClick={() => setFilterRubro(r)}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all shrink-0 ${filterRubro === r ? 'bg-slate-900 dark:bg-emerald-500 text-white border-2 border-slate-900 dark:border-emerald-500' : 'bg-white dark:bg-white/5 border-2 border-slate-200 dark:border-white/20 text-slate-600 dark:text-slate-300 hover:border-slate-300'}`}>
-                {r === 'todas' ? 'Todas' : r}
+            <button onClick={() => setFilterRubro('todas')}
+              className={`px-3 py-1.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all shrink-0 ${filterRubro === 'todas' ? 'bg-emerald-500 text-white' : 'bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:border-slate-300'}`}>
+              Todas
+            </button>
+            {categoriasFeed.map(cat => (
+              <button key={cat.id} onClick={() => setFilterRubro(filterRubro === cat.id ? 'todas' : cat.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all shrink-0 ${filterRubro === cat.id ? 'bg-emerald-500 text-white' : 'bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:border-slate-300'}`}>
+                <CategoryIcon name={cat.icon} className="w-3.5 h-3.5" />
+                <span>{cat.name.split(' ')[0]}</span>
               </button>
             ))}
           </div>
@@ -300,8 +642,10 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
                   onClick={() => { setSelectedDemanda(d); setScreen('demanda-detail'); }}
                   className={`bg-white dark:bg-slate-900 rounded-3xl border-2 p-5 cursor-pointer hover:shadow-md transition-all active:scale-[0.99] ${respondida ? 'border-emerald-100 dark:border-emerald-500/20' : 'border-slate-100 dark:border-white/10'}`}>
                   <div className="flex gap-4">
-                    <div className="w-16 h-16 bg-gradient-to-br from-amber-100 to-orange-100 rounded-2xl flex items-center justify-center text-3xl shrink-0 overflow-hidden">
-                      {d.foto?.startsWith('http') ? <img src={d.foto} alt="" className="w-full h-full object-cover" /> : (d.foto || '📦')}
+                    <div className="w-16 h-16 bg-gradient-to-br from-amber-100 to-orange-100 rounded-2xl flex items-center justify-center shrink-0 overflow-hidden">
+                      {(d.fotos?.[0] || d.foto)
+                        ? <img src={d.fotos?.[0] || d.foto} alt="" className="w-full h-full object-cover" />
+                        : <Package className="w-7 h-7 text-amber-400" />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2 mb-1">
@@ -355,32 +699,22 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
 
         <div className="max-w-2xl mx-auto p-5 space-y-5">
           {/* Info demanda */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-slate-100 dark:border-white/10 p-6">
-            <div className="flex gap-4 mb-4">
-              <div className="w-20 h-20 bg-gradient-to-br from-amber-100 to-orange-100 rounded-2xl flex items-center justify-center text-4xl shrink-0 overflow-hidden">
-                {selectedDemanda?.foto?.startsWith('http')
-                  ? <img src={selectedDemanda.foto} alt="" className="w-full h-full object-cover" />
-                  : (selectedDemanda?.foto || '📦')}
-              </div>
-              <div className="flex-1 min-w-0">
-                <h2 className="font-bold text-xl mb-1">{selectedDemanda?.titulo}</h2>
-                {selectedDemanda?.descripcion && (
-                  <p className="text-sm text-slate-500 mb-3 leading-relaxed">{selectedDemanda.descripcion}</p>
-                )}
-                {selectedDemanda?.presupuesto && (
-                  <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-xl text-sm font-semibold">
-                    Presupuesto: ${selectedDemanda.presupuesto.min?.toLocaleString() || '?'} - ${selectedDemanda.presupuesto.max?.toLocaleString() || '?'}
-                  </div>
-                )}
-              </div>
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-slate-100 dark:border-white/10 overflow-hidden">
+            {(() => {
+              const imgs = selectedDemanda?.fotos?.length ? selectedDemanda.fotos : selectedDemanda?.foto ? [selectedDemanda.foto] : [];
+              return imgs.length ? <StorePhotoCarousel photos={imgs} /> : null;
+            })()}
+            <div className="p-6">
+              <h2 className="font-bold text-xl mb-1">{selectedDemanda?.titulo}</h2>
+              {selectedDemanda?.descripcion && (
+                <p className="text-sm text-slate-500 mb-3 leading-relaxed">{selectedDemanda.descripcion}</p>
+              )}
+              {selectedDemanda?.presupuesto && (
+                <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-xl text-sm font-semibold">
+                  Presupuesto: ${selectedDemanda.presupuesto.min?.toLocaleString() || '?'} - ${selectedDemanda.presupuesto.max?.toLocaleString() || '?'}
+                </div>
+              )}
             </div>
-            {(selectedDemanda?.categorias?.length > 0) && (
-              <div className="flex flex-wrap gap-2 pt-4 border-t border-slate-100 dark:border-white/10">
-                {selectedDemanda.categorias.map(c => (
-                  <span key={c} className="px-3 py-1.5 bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 rounded-xl text-sm font-semibold">{c}</span>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Mi respuesta previa */}
@@ -390,6 +724,22 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
                 <CheckCircle className="w-5 h-5 text-emerald-600" />
                 <h3 className="font-bold text-emerald-800">Tu respuesta enviada</h3>
               </div>
+              {miRespuesta.matchType && (() => {
+                const matchLabels = {
+                  'exacto-nuevo':   '📦 Exacto Nuevo',
+                  'exacto-usado':   '🔄 Exacto Usado',
+                  'reacondicionado':'🔧 Reacondicionado',
+                  'compatible':     '🔌 Compatible',
+                  'similar':        '〜 Similar',
+                  'imitacion':      '🏷️ Imitación',
+                };
+                const isExacto = miRespuesta.matchType.startsWith('exacto') || miRespuesta.matchType === 'reacondicionado';
+                return (
+                  <span className={`inline-flex text-xs font-bold px-2.5 py-1 rounded-full mb-3 ${isExacto ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700'}`}>
+                    {matchLabels[miRespuesta.matchType] || miRespuesta.matchType}
+                  </span>
+                );
+              })()}
               <p className="text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 rounded-2xl p-4 mb-3 leading-relaxed">{miRespuesta.mensaje}</p>
               {miRespuesta.precio && (
                 <p className="text-lg font-bold text-emerald-700">Precio ofrecido: ${miRespuesta.precio.toLocaleString()}</p>
@@ -399,7 +749,27 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
           )}
 
           {/* Formulario de respuesta */}
-          {!respondida && (
+          {!respondida && !isActiva && (
+            <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-rose-200 dark:border-rose-500/30 p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center shrink-0">
+                  <Lock className="w-5 h-5 text-rose-500" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 dark:text-white">Suscripción requerida</h3>
+                  <p className="text-xs text-slate-500">Tu plan venció. Renovalo para responder.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPaywall(true)}
+                className="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-white rounded-2xl font-bold flex items-center justify-center gap-2 transition-colors"
+              >
+                <Zap className="w-4 h-4" /> Renovar suscripción
+              </button>
+            </div>
+          )}
+
+          {!respondida && isActiva && (
             <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-slate-100 dark:border-white/10 p-5">
               <h3 className="font-bold text-lg mb-4">Responder a esta demanda</h3>
 
@@ -411,17 +781,84 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
               )}
 
               <div className="space-y-4">
+                {/* Tipo de match */}
+                <MatchTypeSelector value={matchType} onChange={setMatchType} />
+
+                {/* Mensaje */}
                 <div>
                   <label className="block font-semibold text-sm mb-2">Tu mensaje *</label>
                   <textarea
-                    rows={4}
+                    rows={3}
                     value={msgRespuesta}
                     onChange={e => setMsgRespuesta(e.target.value)}
-                    placeholder="Contale al cliente que tenes stock, el estado del producto, disponibilidad, etc."
+                    placeholder="Contale al cliente qué tenés, el estado del producto, disponibilidad, etc."
                     className="w-full px-4 py-3 border-2 border-slate-200 dark:border-white/10 dark:bg-slate-800 dark:text-white rounded-2xl focus:outline-none focus:border-emerald-400 resize-none text-sm transition-colors"
                   />
                 </div>
 
+                {/* Fotos / Videos del producto */}
+                <div>
+                  <label className="block font-semibold text-sm mb-2">
+                    Fotos o video del producto
+                    <span className="font-normal text-slate-400 ml-1">(opcional · hasta 4)</span>
+                  </label>
+
+                  <div className="grid grid-cols-4 gap-2">
+                    {adjuntosRespuesta.map((a, idx) => (
+                      <div key={idx} className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 dark:bg-white/8 group">
+                        {a.type === 'video'
+                          ? (
+                            <video src={a.preview} className="w-full h-full object-cover" muted playsInline />
+                          ) : (
+                            <img src={a.preview} alt="" className="w-full h-full object-cover" />
+                          )
+                        }
+                        {/* Badge tipo */}
+                        {a.type === 'video' && (
+                          <div className="absolute bottom-1 left-1 bg-black/60 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md">
+                            VIDEO
+                          </div>
+                        )}
+                        {/* Remove */}
+                        <button
+                          type="button"
+                          onClick={() => removeAdjunto(idx)}
+                          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+
+                    {adjuntosRespuesta.length < 4 && (
+                      <button
+                        type="button"
+                        onClick={() => adjuntosInputRef.current?.click()}
+                        className="aspect-square rounded-xl border-2 border-dashed border-slate-200 dark:border-white/15 flex flex-col items-center justify-center gap-1 text-slate-400 hover:border-emerald-400 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors"
+                      >
+                        <Camera className="w-5 h-5" />
+                        <span className="text-[10px] font-medium leading-none">Foto/Video</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Input oculto — acepta foto y video, con captura de cámara en móvil */}
+                  <input
+                    ref={adjuntosInputRef}
+                    type="file"
+                    accept="image/*,video/*"
+                    capture="environment"
+                    multiple
+                    className="hidden"
+                    onChange={handleAdjuntosChange}
+                  />
+
+                  <p className="text-xs text-slate-400 mt-1.5">
+                    En móvil: podés tomar foto o grabar video en el momento con la cámara
+                  </p>
+                </div>
+
+                {/* Precio */}
                 <div>
                   <label className="block font-semibold text-sm mb-2">Precio <span className="font-normal text-slate-400">(opcional)</span></label>
                   <div className="relative">
@@ -437,16 +874,18 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
                 </div>
 
                 {submitError && (
-                  <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex gap-3">
+                  <div className="bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-2xl p-4 flex gap-3">
                     <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
-                    <p className="text-sm text-rose-700">{submitError}</p>
+                    <p className="text-sm text-rose-700 dark:text-rose-400">{submitError}</p>
                   </div>
                 )}
 
                 <button onClick={handleResponder} disabled={!msgRespuesta.trim() || respondiendo}
                   className="w-full py-4 bg-slate-900 dark:bg-emerald-500 text-white rounded-2xl font-bold disabled:opacity-40 flex items-center justify-center gap-2 hover:bg-slate-800 dark:hover:bg-emerald-400 transition-colors">
-                  {respondiendo ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-                  {respondiendo ? 'Enviando...' : 'Enviar respuesta'}
+                  {respondiendo
+                    ? <><Loader2 className="w-5 h-5 animate-spin" /> {adjuntosRespuesta.length > 0 ? 'Subiendo archivos...' : 'Enviando...'}</>
+                    : <><Send className="w-5 h-5" /> Enviar respuesta</>
+                  }
                 </button>
               </div>
             </div>
@@ -549,6 +988,92 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
     );
   };
 
+  // ── Rubros editor — selector de categorías raíz de la tienda ─────────────
+  const RubrosEditor = ({ tiendaInfo }) => {
+    const rootCats = allCategories.filter(c => c.parentId === null);
+    const [selected, setSelected] = useState(() => tiendaInfo.rubros || []);
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
+
+    const toggle = (id) => {
+      setSelected(prev =>
+        prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+      );
+      setSaved(false);
+    };
+
+    const handleSave = async () => {
+      setSaving(true);
+      try {
+        await fetch(`${API_BASE}/tiendas-crud`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: tiendaData.id, rubros: selected }),
+        });
+        onTiendaUpdate({ ...tiendaData, rubros: selected });
+        setSaved(true);
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    const tooMany = selected.length >= 3;
+
+    return (
+      <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/10">
+        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">Rubros de la tienda</p>
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {rootCats.map(cat => {
+            const isSelected = selected.includes(cat.id);
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => toggle(cat.id)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+                  isSelected
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-slate-100 dark:bg-white/8 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/12'
+                }`}
+              >
+                <CategoryIcon name={cat.icon} className="w-3.5 h-3.5" />
+                {cat.name.split(' ')[0]}
+              </button>
+            );
+          })}
+        </div>
+
+        {selected.length === 0 && (
+          <div className="flex items-center gap-2 text-xs text-slate-400 mb-3">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            <span>Sin rubros — los clientes no podrán encontrar tu tienda fácilmente.</span>
+          </div>
+        )}
+
+        {tooMany && (
+          <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-2xl text-xs text-amber-700 dark:text-amber-400 mb-3">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <div>
+              <strong>Demasiados rubros.</strong> Recibirás más demandas pero menos relevantes para tu tienda.
+              Si vendés de todo, considerá elegir solo <strong>"Multirubro"</strong>.
+            </div>
+          </div>
+        )}
+
+        {JSON.stringify(selected.sort()) !== JSON.stringify((tiendaInfo.rubros || []).slice().sort()) && (
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white rounded-2xl text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <CheckCircle className="w-4 h-4" /> : null}
+            {saving ? 'Guardando...' : 'Guardar rubros'}
+          </button>
+        )}
+      </div>
+    );
+  };
+
   // ── Perfil tienda ──────────────────────────────────────────────────────────
   const PerfilScreen = () => (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24 lg:pb-8">
@@ -568,15 +1093,22 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
               <h2 className="font-bold text-xl mb-1">{tiendaInfo.nombre}</h2>
               {tiendaInfo.rubros?.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mb-2">
-                  {tiendaInfo.rubros.map(r => (
-                    <span key={r} className="text-xs bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg font-semibold">{r}</span>
-                  ))}
+                  {tiendaInfo.rubros.map(r => {
+                    const cat = allCategories.find(c => c.id === r);
+                    return (
+                      <span key={r} className="flex items-center gap-1 text-xs bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2.5 py-1 rounded-lg font-semibold">
+                        {cat?.icon && <CategoryIcon name={cat.icon} className="w-3 h-3" />}
+                        {cat?.name || r}
+                      </span>
+                    );
+                  })}
                 </div>
               )}
               {tiendaInfo.descripcion && <p className="text-sm text-slate-500 dark:text-slate-400">{tiendaInfo.descripcion}</p>}
             </div>
           </div>
-          <button className="w-full py-3 bg-slate-100 dark:bg-white/10 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-slate-200 dark:hover:bg-white/20 transition-colors">
+          <RubrosEditor tiendaInfo={tiendaInfo} />
+          <button className="w-full mt-3 py-3 bg-slate-100 dark:bg-white/10 rounded-2xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-slate-200 dark:hover:bg-white/20 transition-colors">
             <Edit3 className="w-4 h-4" /> Editar perfil
           </button>
         </div>
@@ -599,6 +1131,52 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Suscripción */}
+        <div className={`rounded-3xl border-2 p-5 ${isActiva ? 'bg-white dark:bg-slate-900 border-slate-100 dark:border-white/10' : 'bg-rose-50 dark:bg-rose-500/8 border-rose-200 dark:border-rose-500/30'}`}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold flex items-center gap-2">
+              <ShieldCheck className={`w-4 h-4 ${isActiva ? 'text-emerald-500' : 'text-rose-500'}`} />
+              Suscripción
+            </h3>
+            {isActiva
+              ? <span className="text-xs font-bold bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 px-2.5 py-1 rounded-full">Activa</span>
+              : <span className="text-xs font-bold bg-rose-100 dark:bg-rose-500/15 text-rose-700 dark:text-rose-400 px-2.5 py-1 rounded-full">Vencida</span>
+            }
+          </div>
+
+          {tiendaData?.suscripcion ? (
+            <div className="space-y-2 mb-4">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">Plan</span>
+                <span className="font-semibold capitalize">{tiendaData.suscripcion.plan || 'Mensual'}</span>
+              </div>
+              {tiendaData.suscripcion.vence && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">{isActiva ? 'Vence' : 'Venció'}</span>
+                  <span className={`font-semibold ${isActiva && dias !== null && dias <= 7 ? 'text-amber-500' : ''} ${!isActiva ? 'text-rose-500' : ''}`}>
+                    {new Date(tiendaData.suscripcion.vence).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    {isActiva && dias !== null && ` (${dias}d)`}
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500 mb-4">Sin datos de suscripción</p>
+          )}
+
+          <button
+            onClick={() => setShowPaywall(true)}
+            className={`w-full py-3 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-colors ${
+              isActiva
+                ? 'bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-700 dark:text-slate-200'
+                : 'bg-emerald-500 hover:bg-emerald-400 text-white'
+            }`}
+          >
+            <RefreshCw className="w-4 h-4" />
+            {isActiva ? 'Renovar anticipado' : 'Renovar suscripción'}
+          </button>
         </div>
 
         {/* Cuenta */}
@@ -670,6 +1248,38 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
     <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
       <Sidebar />
       <div className="flex-1 min-w-0">
+        {/* Banner suscripción — vencida o por vencer */}
+        {!isActiva && (
+          <div className="bg-rose-500 text-white px-4 py-2.5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm">
+              <Lock className="w-4 h-4 shrink-0" />
+              <span className="font-semibold">Tu suscripción venció. Podés ver las demandas pero no responderlas.</span>
+            </div>
+            <button
+              onClick={() => setShowPaywall(true)}
+              className="shrink-0 bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+            >
+              Renovar ahora
+            </button>
+          </div>
+        )}
+        {isActiva && dias !== null && dias <= 7 && (
+          <div className="bg-amber-500 text-white px-4 py-2.5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm">
+              <CalendarDays className="w-4 h-4 shrink-0" />
+              <span className="font-semibold">
+                {dias === 0 ? 'Tu suscripción vence hoy.' : `Tu suscripción vence en ${dias} día${dias === 1 ? '' : 's'}.`}
+              </span>
+            </div>
+            <button
+              onClick={() => setShowPaywall(true)}
+              className="shrink-0 bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+            >
+              Renovar
+            </button>
+          </div>
+        )}
+
         {screen === 'feed' && <FeedScreen />}
         {screen === 'demanda-detail' && selectedDemanda && <DemandaDetailScreen />}
         {screen === 'respuestas' && <MisRespuestasScreen />}
@@ -677,6 +1287,7 @@ export default function StoreApp({ firebaseUser, tiendaData, onLogout, onTiendaU
         {screen === 'perfil' && <PerfilScreen />}
         <BottomNav />
         {showProfile && <ProfileModal />}
+        {showPaywall && <PaywallModal />}
       </div>
     </div>
   );

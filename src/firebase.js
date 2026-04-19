@@ -26,15 +26,20 @@ export const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-// En mobile usa redirect, en desktop popup (mejor UX en ambos casos)
+// Popup-first en todos los dispositivos — más confiable que redirect en
+// browsers modernos que bloquean cookies de terceros (Safari iOS, Chrome).
+// Si el popup es bloqueado, cae a redirect como fallback.
 export async function signInWithGoogle() {
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  if (isMobile) {
-    await signInWithRedirect(auth, googleProvider);
-    return null; // el resultado llega en getRedirectResult al recargar
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    return result.user;
+  } catch (err) {
+    if (err.code === 'auth/popup-blocked') {
+      await signInWithRedirect(auth, googleProvider);
+      return null;
+    }
+    throw err;
   }
-  const result = await signInWithPopup(auth, googleProvider);
-  return result.user;
 }
 
 export { getRedirectResult, signOut, onAuthStateChanged };

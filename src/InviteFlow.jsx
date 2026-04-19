@@ -301,7 +301,11 @@ export default function InviteFlow({ token, firebaseUser, onComplete, onCancel }
           </button>
 
           <p className="text-center text-xs text-slate-400 mt-4">
-            Al continuar aceptas los terminos del servicio de Lokal.
+            Al continuar aceptás los{' '}
+            <a href="/terminos-y-condiciones" className="underline hover:text-white transition-colors">Términos y Condiciones</a>
+            {' '}y las{' '}
+            <a href="/condiciones-para-comercios" className="underline hover:text-white transition-colors">Condiciones para Comercios</a>
+            {' '}de Lokal.
           </p>
         </div>
       </div>
