@@ -1,8 +1,18 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { requireAuth, ensureAdmin } from './_lib/auth.js';
+import { handleError, handleOptions, HttpError, jsonResponse, parseJsonBody } from './_lib/http.js';
+import { requireText, sanitizeText } from './_lib/validation.js';
 
 const LOCAL_FILE = join('/tmp', 'lokal-categories.json');
+const DATA_KEY = 'data/categories-custom.json';
+const BUCKET = process.env.R2_BUCKET_NAME;
+
+const HTTP_OPTIONS = {
+  allowHeaders: 'Content-Type, Authorization',
+  allowMethods: 'GET, POST, OPTIONS',
+};
 
 function isR2Configured() {
   return !!(
@@ -24,9 +34,6 @@ function getR2Client() {
   });
 }
 
-const BUCKET = process.env.R2_BUCKET_NAME;
-const DATA_KEY = 'data/categories-custom.json';
-
 async function readCustom() {
   if (isR2Configured()) {
     try {
@@ -37,6 +44,7 @@ async function readCustom() {
       throw err;
     }
   }
+
   if (!existsSync(LOCAL_FILE)) return [];
   return JSON.parse(readFileSync(LOCAL_FILE, 'utf8'));
 }
@@ -49,67 +57,111 @@ async function writeCustom(data) {
       Body: JSON.stringify(data, null, 2),
       ContentType: 'application/json',
     }));
-  } else {
-    writeFileSync(LOCAL_FILE, JSON.stringify(data, null, 2));
+    return;
   }
+
+  writeFileSync(LOCAL_FILE, JSON.stringify(data, null, 2));
 }
 
-const headers = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Content-Type': 'application/json',
-};
-
 export const handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
+  if (event.httpMethod === 'OPTIONS') return handleOptions(event, HTTP_OPTIONS);
 
   try {
-    // ── GET: devuelve todas las categorías custom ────────────────────────────
     if (event.httpMethod === 'GET') {
+      const user = await requireAuth(event).catch(() => null);
       const custom = await readCustom();
-      return { statusCode: 200, headers, body: JSON.stringify(custom) };
-    }
 
-    // ── POST: crea una categoría nueva ──────────────────────────────────────
-    if (event.httpMethod === 'POST') {
-      const body = JSON.parse(event.body || '{}');
-      const name = body.name?.trim();
-      const parentId = body.parentId ?? null;
-
-      if (!name) {
-        return { statusCode: 400, headers, body: JSON.stringify({ error: 'name es requerido' }) };
+      // Si es admin, devolver todas (incluyendo pendientes)
+      if (user?.isAdmin) {
+        return jsonResponse(event, 200, custom, HTTP_OPTIONS);
       }
 
+      // Si no es admin, solo devolver las aprobadas
+      const aprobadas = custom.filter(c => c.aprobada !== false);
+      return jsonResponse(event, 200, aprobadas, HTTP_OPTIONS);
+    }
+
+    if (event.httpMethod === 'POST') {
+      const user = await requireAuth(event);
+
+      const body = parseJsonBody(event);
+      const name = requireText(body.name, { field: 'name', min: 2, max: 60, multiline: false });
+      const parentId = sanitizeText(body.parentId, { max: 80, multiline: false }) || null;
+      const icon = sanitizeText(body.icon, { max: 40, multiline: false }) || null;
       const custom = await readCustom();
 
-      // Evitar duplicados por nombre (case-insensitive) dentro del mismo nivel
-      const exists = custom.some(
-        c => c.name.toLowerCase() === name.toLowerCase() && c.parentId === parentId
+      const exists = custom.find(
+        (item) => item.name.toLowerCase() === name.toLowerCase() && item.parentId === parentId
       );
       if (exists) {
-        const dup = custom.find(c => c.name.toLowerCase() === name.toLowerCase() && c.parentId === parentId);
-        return { statusCode: 200, headers, body: JSON.stringify(dup) };
+        return jsonResponse(event, 200, exists, HTTP_OPTIONS);
       }
 
       const nueva = {
         id: `custom_${Date.now()}`,
         name,
         parentId,
-        icon: body.icon || null,
+        icon,
         custom: true,
+        aprobada: false,        // ← Necesita aprobación del admin
+        creadaPor: user.uid,    // ← Quién la creó
+        creadaPorEmail: user.email,
         createdAt: new Date().toISOString(),
       };
 
       custom.push(nueva);
       await writeCustom(custom);
-      return { statusCode: 201, headers, body: JSON.stringify(nueva) };
+      return jsonResponse(event, 201, nueva, HTTP_OPTIONS);
     }
 
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Metodo no permitido' }) };
+    if (event.httpMethod === 'PATCH') {
+      const user = await requireAuth(event);
+      ensureAdmin(user);
 
-  } catch (err) {
-    console.error('[categories]', err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+      const body = parseJsonBody(event);
+      const { id, aprobada, name: nuevoNombre } = body;
+
+      if (!id) {
+        return jsonResponse(event, 400, { error: 'Falta id' }, HTTP_OPTIONS);
+      }
+
+      const custom = await readCustom();
+      const idx = custom.findIndex(c => c.id === id);
+      if (idx === -1) {
+        return jsonResponse(event, 404, { error: 'Categoria no encontrada' }, HTTP_OPTIONS);
+      }
+
+      if (aprobada !== undefined) {
+        custom[idx].aprobada = !!aprobada;
+        custom[idx].aprobadaPor = user.email;
+        custom[idx].aprobadaEn = new Date().toISOString();
+      }
+
+      if (nuevoNombre) {
+        custom[idx].name = requireText(nuevoNombre, { field: 'name', min: 2, max: 60, multiline: false });
+      }
+
+      await writeCustom(custom);
+      return jsonResponse(event, 200, custom[idx], HTTP_OPTIONS);
+    }
+
+    if (event.httpMethod === 'DELETE') {
+      const user = await requireAuth(event);
+      ensureAdmin(user);
+
+      const { id } = event.queryStringParameters || {};
+      if (!id) {
+        return jsonResponse(event, 400, { error: 'Falta id' }, HTTP_OPTIONS);
+      }
+
+      const custom = await readCustom();
+      const filtradas = custom.filter(c => c.id !== id);
+      await writeCustom(filtradas);
+      return jsonResponse(event, 200, { ok: true }, HTTP_OPTIONS);
+    }
+
+    return jsonResponse(event, 405, { error: 'Metodo no permitido' }, HTTP_OPTIONS);
+  } catch (error) {
+    return handleError(event, error);
   }
 };

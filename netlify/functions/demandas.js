@@ -1,8 +1,25 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { requireAuth } from './_lib/auth.js';
+import { handleError, handleOptions, HttpError, jsonResponse, parseJsonBody } from './_lib/http.js';
+import {
+  requireText,
+  sanitizeMediaUrls,
+  sanitizeNumber,
+  sanitizePlainObject,
+  sanitizeText,
+} from './_lib/validation.js';
+import { findTiendaByOwnerUid, readTiendas } from './_lib/tiendas-store.js';
 
 const LOCAL_FILE = join('/tmp', 'lokal-demandas.json');
+const DATA_KEY = 'data/demandas.json';
+const BUCKET = process.env.R2_BUCKET_NAME;
+
+const HTTP_OPTIONS = {
+  allowHeaders: 'Content-Type, Authorization',
+  allowMethods: 'GET, POST, PATCH, DELETE, OPTIONS',
+};
 
 function isR2Configured() {
   return !!(
@@ -24,9 +41,6 @@ function getR2Client() {
   });
 }
 
-const BUCKET = process.env.R2_BUCKET_NAME;
-const DATA_KEY = 'data/demandas.json';
-
 async function readDemandas() {
   if (isR2Configured()) {
     try {
@@ -37,6 +51,7 @@ async function readDemandas() {
       throw err;
     }
   }
+
   if (!existsSync(LOCAL_FILE)) return [];
   return JSON.parse(readFileSync(LOCAL_FILE, 'utf8'));
 }
@@ -49,9 +64,10 @@ async function writeDemandas(data) {
       Body: JSON.stringify(data, null, 2),
       ContentType: 'application/json',
     }));
-  } else {
-    writeFileSync(LOCAL_FILE, JSON.stringify(data, null, 2));
+    return;
   }
+
+  writeFileSync(LOCAL_FILE, JSON.stringify(data, null, 2));
 }
 
 function tiempoRelativo(iso) {
@@ -63,113 +79,181 @@ function tiempoRelativo(iso) {
   return `Hace ${Math.floor(h / 24)}d`;
 }
 
-const headers = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-  'Content-Type': 'application/json',
-};
+function sanitizePresupuesto(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+
+  const min = sanitizeNumber(value.min, { field: 'presupuesto.min', min: 0, max: 999999999, nullable: true });
+  const max = sanitizeNumber(value.max, { field: 'presupuesto.max', min: 0, max: 999999999, nullable: true });
+
+  if (min === null && max === null) return null;
+  if (min !== null && max !== null && min > max) {
+    throw new HttpError(400, 'presupuesto invalido');
+  }
+
+  return { min, max };
+}
+
+function sanitizeDemandaBody(body) {
+  const fotos = sanitizeMediaUrls(body.fotos, { maxItems: 6 });
+  const foto = sanitizeMediaUrls(body.foto ? [body.foto] : [], { maxItems: 1 })[0] || fotos[0] || null;
+
+  return {
+    titulo: requireText(body.titulo, { field: 'titulo', min: 2, max: 160, multiline: false }),
+    descripcion: sanitizeText(body.descripcion, { max: 2000 }),
+    fotos,
+    foto,
+    categoryId: sanitizeText(body.categoryId, { max: 80, multiline: false }) || null,
+    attributes: sanitizePlainObject(body.attributes, { maxKeys: 24, maxStringLength: 120 }),
+    presupuesto: sanitizePresupuesto(body.presupuesto),
+  };
+}
+
+function sanitizeDemandaForResponse(demanda) {
+  const {
+    ownerUid,
+    ownerEmail,
+    ownerNombre,
+    ...rest
+  } = demanda;
+
+  return {
+    ...rest,
+    tiempoCreado: demanda.createdAt ? tiempoRelativo(demanda.createdAt) : demanda.tiempoCreado,
+  };
+}
+
+function ensureDemandOwner(user, demanda) {
+  if (!demanda) {
+    throw new HttpError(404, 'Demanda no encontrada');
+  }
+
+  if (!demanda.ownerUid && !user.isAdmin) {
+    throw new HttpError(403, 'Esta demanda no tiene propietario verificable');
+  }
+
+  if (!user.isAdmin && demanda.ownerUid !== user.uid) {
+    throw new HttpError(403, 'No autorizado para modificar esta demanda');
+  }
+}
 
 export const handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
+  if (event.httpMethod === 'OPTIONS') return handleOptions(event, HTTP_OPTIONS);
 
   try {
-    // ── GET: listar ─────────────────────────────────────────────────────────
+    const user = await requireAuth(event);
+
     if (event.httpMethod === 'GET') {
       const demandas = await readDemandas();
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify(
-          demandas.map(d => ({
-            ...d,
-            tiempoCreado: d.createdAt ? tiempoRelativo(d.createdAt) : d.tiempoCreado,
-          }))
-        ),
-      };
+      const tiendas = await readTiendas();
+      const hasStore = !!findTiendaByOwnerUid(tiendas, user.uid);
+      const mine = ['1', 'true', 'yes'].includes(String(event.queryStringParameters?.mine || '').toLowerCase());
+
+      let result = demandas;
+      if (mine || (!hasStore && !user.isAdmin)) {
+        result = demandas.filter((item) => item.ownerUid === user.uid);
+      }
+
+      return jsonResponse(
+        event,
+        200,
+        result.map(item => ({ ...sanitizeDemandaForResponse(item), isMine: item.ownerUid === user.uid })),
+        HTTP_OPTIONS
+      );
     }
 
-    // ── POST: crear ─────────────────────────────────────────────────────────
     if (event.httpMethod === 'POST') {
-      const body = JSON.parse(event.body || '{}');
-      if (!body.titulo?.trim()) {
-        return { statusCode: 400, headers, body: JSON.stringify({ error: 'titulo es requerido' }) };
-      }
+      const body = parseJsonBody(event);
+      const payload = sanitizeDemandaBody(body);
       const demandas = await readDemandas();
       const nueva = {
         id: Date.now(),
-        titulo: body.titulo.trim(),
-        descripcion: body.descripcion?.trim() || '',
-        fotos: body.fotos || [],
-        foto: body.foto || null,
-        categoryId: body.categoryId || null,
-        attributes: body.attributes || null,
-        presupuesto: body.presupuesto || null,
+        ...payload,
         respuestas: 0,
         estado: 'activa',
+        ownerUid: user.uid,
+        ownerNombre: sanitizeText(user.name || '', { max: 120, multiline: false }),
+        ownerEmail: sanitizeText(user.email || '', { max: 160, multiline: false }),
         tiempoCreado: 'Hace un momento',
         createdAt: new Date().toISOString(),
       };
+
       demandas.unshift(nueva);
       await writeDemandas(demandas);
-      return { statusCode: 201, headers, body: JSON.stringify(nueva) };
+      return jsonResponse(event, 201, sanitizeDemandaForResponse(nueva), HTTP_OPTIONS);
     }
 
-    // ── PATCH: actualizar (estado, titulo, descripcion, foto, etc.) ─────────
     if (event.httpMethod === 'PATCH') {
-      const body = JSON.parse(event.body || '{}');
+      const body = parseJsonBody(event);
       const { id, ...changes } = body;
 
       if (!id) {
-        return { statusCode: 400, headers, body: JSON.stringify({ error: 'id es requerido' }) };
+        throw new HttpError(400, 'id es requerido');
       }
 
       const demandas = await readDemandas();
-      const idx = demandas.findIndex(d => String(d.id) === String(id));
-
+      // eslint-disable-next-line eqeqeq
+      const idx = demandas.findIndex((item) => item.id == id || item._id == id);
       if (idx === -1) {
-        return { statusCode: 404, headers, body: JSON.stringify({ error: 'Demanda no encontrada' }) };
+        return jsonResponse(event, 404, { error: 'Demanda no encontrada' }, HTTP_OPTIONS);
       }
 
-      // Solo se permiten actualizar estos campos
-      const allowed = ['estado', 'titulo', 'descripcion', 'fotos', 'foto', 'categoryId', 'attributes', 'presupuesto', 'respuestas'];
+      ensureDemandOwner(user, demandas[idx]);
+
       const update = {};
-      for (const key of allowed) {
-        if (key in changes) update[key] = changes[key];
+      if ('estado' in changes) {
+        const estado = sanitizeText(changes.estado, { max: 24, multiline: false });
+        if (!['activa', 'pausada', 'finalizada'].includes(estado)) {
+          throw new HttpError(400, 'estado invalido');
+        }
+        update.estado = estado;
       }
+      if ('titulo' in changes) update.titulo = requireText(changes.titulo, { field: 'titulo', min: 2, max: 160, multiline: false });
+      if ('descripcion' in changes) update.descripcion = sanitizeText(changes.descripcion, { max: 2000 });
+      if ('fotos' in changes) update.fotos = sanitizeMediaUrls(changes.fotos, { maxItems: 6 });
+      if ('foto' in changes) update.foto = sanitizeMediaUrls(changes.foto ? [changes.foto] : [], { maxItems: 1 })[0] || null;
+      if ('categoryId' in changes) update.categoryId = sanitizeText(changes.categoryId, { max: 80, multiline: false }) || null;
+      if ('attributes' in changes) update.attributes = sanitizePlainObject(changes.attributes, { maxKeys: 24, maxStringLength: 120 });
+      if ('presupuesto' in changes) update.presupuesto = sanitizePresupuesto(changes.presupuesto);
 
-      demandas[idx] = { ...demandas[idx], ...update, updatedAt: new Date().toISOString() };
-      await writeDemandas(demandas);
-
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          ...demandas[idx],
-          tiempoCreado: tiempoRelativo(demandas[idx].createdAt),
-        }),
+      demandas[idx] = {
+        ...demandas[idx],
+        ...update,
+        updatedAt: new Date().toISOString(),
       };
+
+      await writeDemandas(demandas);
+      return jsonResponse(event, 200, sanitizeDemandaForResponse(demandas[idx]), HTTP_OPTIONS);
     }
 
-    // ── DELETE: eliminar por id ──────────────────────────────────────────────
     if (event.httpMethod === 'DELETE') {
       const id = event.queryStringParameters?.id;
       if (!id) {
-        return { statusCode: 400, headers, body: JSON.stringify({ error: 'id es requerido' }) };
+        throw new HttpError(400, 'id es requerido');
       }
+
       const demandas = await readDemandas();
-      const filtradas = demandas.filter(d => String(d.id) !== String(id));
-      if (filtradas.length === demandas.length) {
-        return { statusCode: 404, headers, body: JSON.stringify({ error: 'Demanda no encontrada' }) };
+      const idx = demandas.findIndex(
+        // eslint-disable-next-line eqeqeq
+        (item) => item.id == id || item._id == id
+      );
+      if (idx === -1) {
+        // diagnóstico: devolver qué ids hay para detectar mismatch
+        return jsonResponse(event, 404, {
+          error: 'Demanda no encontrada',
+          searchId: id,
+          searchIdType: typeof id,
+          storedIds: demandas.map(d => ({ id: d.id, type: typeof d.id, owner: d.ownerUid === user.uid })),
+        }, HTTP_OPTIONS);
       }
-      await writeDemandas(filtradas);
-      return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
+
+      ensureDemandOwner(user, demandas[idx]);
+      demandas.splice(idx, 1);
+      await writeDemandas(demandas);
+      return jsonResponse(event, 200, { ok: true }, HTTP_OPTIONS);
     }
 
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Metodo no permitido' }) };
-
-  } catch (err) {
-    console.error('[demandas]', err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    return jsonResponse(event, 405, { error: 'Metodo no permitido' }, HTTP_OPTIONS);
+  } catch (error) {
+    return handleError(event, error);
   }
 };

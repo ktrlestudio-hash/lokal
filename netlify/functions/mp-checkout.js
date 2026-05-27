@@ -1,19 +1,39 @@
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { requireAuth } from './_lib/auth.js';
+import { handleError, handleOptions, HttpError, jsonResponse, parseJsonBody } from './_lib/http.js';
+import {
+  requireText,
+  sanitizeEmail,
+  sanitizeMediaUrls,
+  sanitizePhone,
+  sanitizeStringArray,
+  sanitizeText,
+} from './_lib/validation.js';
+import { ensureStoreOwner, findTiendaById, findTiendaByOwnerUid, readTiendas } from './_lib/tiendas-store.js';
 
-// ─── Precios — ajustá según tu modelo de negocio ─────────────────────────────
-export const PRECIO_MENSUAL = 4990;  // ARS
-export const PRECIO_ANUAL   = 47900; // ARS  (~20% de ahorro vs 12 meses)
+export const PRECIO_MENSUAL = 4990;
+export const PRECIO_ANUAL = 47900;
+export const PRECIO_PREMIUM = 9990;
 
-// ─── Storage helpers ──────────────────────────────────────────────────────────
-const BUCKET       = process.env.R2_BUCKET_NAME;
-const PENDING_KEY  = 'data/mp-pending.json';
+const PLANES = new Set(['mensual', 'anual', 'premium']);
+const HTTP_OPTIONS = {
+  allowHeaders: 'Content-Type, Authorization',
+  allowMethods: 'POST, OPTIONS',
+};
+
+const BUCKET = process.env.R2_BUCKET_NAME;
+const PENDING_KEY = 'data/mp-pending.json';
 const PENDING_LOCAL = join('/tmp', 'lokal-mp-pending.json');
 
 function isR2() {
-  return !!(process.env.CF_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID &&
-    process.env.R2_SECRET_ACCESS_KEY && process.env.R2_BUCKET_NAME);
+  return !!(
+    process.env.CF_ACCOUNT_ID &&
+    process.env.R2_ACCESS_KEY_ID &&
+    process.env.R2_SECRET_ACCESS_KEY &&
+    process.env.R2_BUCKET_NAME
+  );
 }
 
 function r2() {
@@ -37,6 +57,7 @@ async function readPending() {
       throw err;
     }
   }
+
   if (!existsSync(PENDING_LOCAL)) return {};
   return JSON.parse(readFileSync(PENDING_LOCAL, 'utf8'));
 }
@@ -44,76 +65,96 @@ async function readPending() {
 async function writePending(data) {
   if (isR2()) {
     await r2().send(new PutObjectCommand({
-      Bucket: BUCKET, Key: PENDING_KEY,
-      Body: JSON.stringify(data, null, 2), ContentType: 'application/json',
+      Bucket: BUCKET,
+      Key: PENDING_KEY,
+      Body: JSON.stringify(data, null, 2),
+      ContentType: 'application/json',
     }));
-  } else {
-    writeFileSync(PENDING_LOCAL, JSON.stringify(data, null, 2));
+    return;
   }
+
+  writeFileSync(PENDING_LOCAL, JSON.stringify(data, null, 2));
 }
 
-const headers = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Content-Type': 'application/json',
-};
+function sanitizePlan(value) {
+  const plan = sanitizeText(value, { max: 16, multiline: false }).toLowerCase();
+  if (!PLANES.has(plan)) {
+    throw new HttpError(400, 'plan invalido');
+  }
+  return plan;
+}
 
-// ─── Handler ──────────────────────────────────────────────────────────────────
+function sanitizeTiendaInfo(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new HttpError(400, 'tiendaInfo es requerido');
+  }
+
+  return {
+    nombre: requireText(raw.nombre, { field: 'nombre', min: 2, max: 120, multiline: false }),
+    descripcion: sanitizeText(raw.descripcion, { max: 1500 }),
+    ciudad: requireText(raw.ciudad, { field: 'ciudad', min: 2, max: 80, multiline: false }),
+    telefono: sanitizePhone(raw.telefono),
+    rubros: sanitizeStringArray(raw.rubros, { maxItems: 10, maxItemLength: 48 }),
+    emailContacto: raw.emailContacto ? sanitizeEmail(raw.emailContacto, { field: 'emailContacto' }) : '',
+    foto: sanitizeMediaUrls(raw.foto ? [raw.foto] : [], { maxItems: 1 })[0] || null,
+    galeria: sanitizeMediaUrls(raw.galeria, { maxItems: 6 }),
+  };
+}
+
 export const handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
-  if (event.httpMethod !== 'POST')
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Método no permitido' }) };
+  if (event.httpMethod === 'OPTIONS') return handleOptions(event, HTTP_OPTIONS);
+  if (event.httpMethod !== 'POST') {
+    return jsonResponse(event, 405, { error: 'Metodo no permitido' }, HTTP_OPTIONS);
+  }
 
   if (!process.env.MP_ACCESS_TOKEN) {
-    return {
-      statusCode: 503, headers,
-      body: JSON.stringify({ error: 'Pagos no configurados aún. Contactá al administrador.' }),
-    };
+    return jsonResponse(event, 503, { error: 'Pagos no configurados aun. Contacta al administrador.' }, HTTP_OPTIONS);
   }
 
   try {
-    const body = JSON.parse(event.body || '{}');
-    const {
-      plan,       // 'mensual' | 'anual'
-      tiendaInfo, // objeto con datos de la tienda (solo en registro nuevo)
-      googleUid,
-      ownerNombre,
-      ownerEmail,
-      tiendaId,   // si está presente → es una renovación
-    } = body;
-
-    if (!plan || !googleUid || !ownerEmail) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: 'plan, googleUid y ownerEmail son requeridos' }) };
-    }
-
+    const user = await requireAuth(event);
+    const body = parseJsonBody(event);
+    const plan = sanitizePlan(body.plan);
+    const tiendaId = body.tiendaId ? sanitizeText(String(body.tiendaId), { max: 64, multiline: false }) : '';
     const isRenovacion = !!tiendaId;
     const precio = plan === 'anual' ? PRECIO_ANUAL : PRECIO_MENSUAL;
     const titulo = plan === 'anual'
-      ? 'Lokal Tienda — Plan Anual (13 meses de acceso)'
-      : 'Lokal Tienda — Plan Mensual (2 meses al activar)';
-
+      ? 'Lokal Tienda - Plan Anual (13 meses de acceso)'
+      : 'Lokal Tienda - Plan Mensual (2 meses al activar)';
     const appUrl = (process.env.URL || 'http://localhost:8888').replace(/\/$/, '');
+    const tiendas = await readTiendas();
 
-    // Referencia única — también usada como clave en pending-registrations
-    const ref = `${isRenovacion ? 'renewal' : 'new'}_${googleUid}_${Date.now()}`;
+    if (isRenovacion) {
+      const tienda = findTiendaById(tiendas, tiendaId);
+      ensureStoreOwner(user, tienda, 'No autorizado para renovar esta tienda');
+    } else {
+      if (findTiendaByOwnerUid(tiendas, user.uid)) {
+        throw new HttpError(409, 'Esta cuenta ya tiene una tienda registrada');
+      }
+      if (body.termsAccepted !== true) {
+        throw new HttpError(400, 'Debes aceptar los terminos y la politica de privacidad');
+      }
+    }
 
-    // Guardar datos pendientes en R2 para que el webhook pueda crear la tienda
-    if (!isRenovacion && tiendaInfo) {
+    const ref = `${isRenovacion ? 'renewal' : 'new'}_${user.uid}_${Date.now()}`;
+
+    if (!isRenovacion) {
+      const tiendaInfo = sanitizeTiendaInfo(body.tiendaInfo);
       const pending = await readPending();
       pending[ref] = {
         tiendaInfo,
-        googleUid,
-        ownerNombre: ownerNombre || '',
-        ownerEmail,
+        googleUid: user.uid,
+        ownerNombre: sanitizeText(user.name || '', { max: 120, multiline: false }),
+        ownerEmail: sanitizeEmail(user.email, { required: true, field: 'ownerEmail' }),
         plan,
         creadoEn: new Date().toISOString(),
       };
-      // Limpiar entradas de más de 48h para no acumular basura
+
       const cutoff = Date.now() - 48 * 3600 * 1000;
-      for (const k of Object.keys(pending)) {
-        if (new Date(pending[k].creadoEn).getTime() < cutoff) delete pending[k];
+      for (const key of Object.keys(pending)) {
+        if (new Date(pending[key].creadoEn).getTime() < cutoff) delete pending[key];
       }
+
       await writePending(pending);
     }
 
@@ -126,22 +167,21 @@ export const handler = async (event) => {
         currency_id: 'ARS',
       }],
       payer: {
-        name: ownerNombre || '',
-        email: ownerEmail,
+        name: sanitizeText(user.name || '', { max: 120, multiline: false }),
+        email: sanitizeEmail(user.email, { required: true, field: 'ownerEmail' }),
       },
       back_urls: {
-        success:  `${appUrl}/?mp_status=approved&ref=${ref}`,
-        failure:  `${appUrl}/?mp_status=failure&ref=${ref}`,
-        pending:  `${appUrl}/?mp_status=pending&ref=${ref}`,
+        success: `${appUrl}/?mp_status=approved&ref=${ref}`,
+        failure: `${appUrl}/?mp_status=failure&ref=${ref}`,
+        pending: `${appUrl}/?mp_status=pending&ref=${ref}`,
       },
       auto_return: 'approved',
       notification_url: `${appUrl}/.netlify/functions/mp-webhook`,
       external_reference: ref,
-      // metadata: MP convierte las keys a snake_case en el objeto de pago
       metadata: {
         plan,
-        google_uid:    googleUid,
-        tienda_id:     tiendaId || null,
+        google_uid: user.uid,
+        tienda_id: tiendaId || null,
         is_renovacion: isRenovacion,
       },
       statement_descriptor: 'LOKAL TIENDA',
@@ -150,37 +190,32 @@ export const handler = async (event) => {
     const mpRes = await fetch('https://api.mercadopago.com/checkout/preferences', {
       method: 'POST',
       headers: {
-        Authorization:      `Bearer ${process.env.MP_ACCESS_TOKEN}`,
-        'Content-Type':     'application/json',
+        Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
         'X-Idempotency-Key': ref,
       },
       body: JSON.stringify(preference),
     });
 
     if (!mpRes.ok) {
-      const mpErr = await mpRes.json();
-      console.error('[mp-checkout] MP error:', mpErr);
-      return {
-        statusCode: 502, headers,
-        body: JSON.stringify({ error: 'Error al crear preferencia de pago', detail: mpErr }),
-      };
+      let detail = null;
+      try {
+        detail = await mpRes.json();
+      } catch {
+        detail = null;
+      }
+      console.error('[mp-checkout] MP error:', detail || mpRes.status);
+      throw new HttpError(502, 'Error al crear preferencia de pago');
     }
 
     const pref = await mpRes.json();
-
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
-        initPoint:        pref.init_point,         // producción
-        sandboxInitPoint: pref.sandbox_init_point,  // sandbox / testing
-        preferenceId:     pref.id,
-        ref,
-      }),
-    };
-
-  } catch (err) {
-    console.error('[mp-checkout]', err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    return jsonResponse(event, 200, {
+      initPoint: pref.init_point,
+      sandboxInitPoint: pref.sandbox_init_point,
+      preferenceId: pref.id,
+      ref,
+    }, HTTP_OPTIONS);
+  } catch (error) {
+    return handleError(event, error);
   }
 };

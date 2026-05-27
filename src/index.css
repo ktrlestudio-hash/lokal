@@ -2,9 +2,194 @@
 @tailwind components;
 @tailwind utilities;
 
-* {
-  -webkit-tap-highlight-color: transparent;
+/* ══════════════════════════════════════════════════════════════════════════════
+   LOKAL DESIGN TOKENS
+   ──────────────────────────────────────────────────────────────────────────────
+   Para cambiar el color de marca de toda la app, editá SOLO la primera sección
+   de :root (las variables --brand-*). Todo lo demás se calcula a partir de ahí.
+
+   Clases Tailwind disponibles:
+     bg-brand          text-brand          border-brand
+     bg-brand-light    text-brand-light    (hover/foco)
+     bg-brand-dark     text-brand-dark     (pressed/activo)
+     bg-brand-muted    text-brand-muted    (fondo suave, chips)
+     text-brand-fg                         (texto sobre brand)
+
+     bg-ok / bg-danger / bg-warn / bg-info / bg-new / bg-pending / bg-urgent
+     (mismo patrón -light -dark -muted -fg para cada semántico)
+
+   Inline styles: var(--brand-hex) para SVGs, canvas, mapas.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. BRAND — EDITÁ SOLO ESTA SECCIÓN PARA REPINTAR TODA LA APP ──────────── */
+:root {
+  /* Primario de marca (RGB separado por espacios — requerido por Tailwind) */
+  --brand:           0 184 217;   /* #00B8D9  turquesa     — base          */
+  --brand-light:    51 201 226;   /* #33C9E2               — hover / foco  */
+  --brand-dark:      0 154 183;   /* #009AB7               — pressed       */
+  --brand-muted:   224 247 251;   /* #E0F7FB               — fondo suave   */
+  --brand-fg:      255 255 255;   /* texto sobre fondo brand               */
+  --brand-hex:     #00B8D9;       /* para inline styles, SVGs, canvas      */
+
+  /* Alias legacy — código existente que usa bg-primary sigue funcionando */
+  --primary:       var(--brand);
+  --primary-hover: var(--brand-light);
+  --primary-muted: var(--brand-muted);
+  --primary-fg:    var(--brand-fg);
+  --primary-hex:   var(--brand-hex);
 }
+
+/* ── 2. COLORES SEMÁNTICOS (no tocar salvo redesign intencional) ─────────────── */
+:root {
+  /* Positivo: éxito, activo, abierto, disponible */
+  --ok:            34 197  94;    /* #22C55E  green-500   */
+  --ok-light:      74 222 128;    /* #4ADE80  green-400   */
+  --ok-dark:       22 163  74;    /* #16A34A  green-600   */
+  --ok-muted:     220 252 231;    /* #DCFCE7  green-100   */
+  --ok-fg:        255 255 255;
+  --ok-hex:       #22C55E;
+
+  /* Negativo: error, cancelado, vencido, fallo */
+  --danger:       239  68  68;    /* #EF4444  red-500     */
+  --danger-light: 248 113 113;    /* #F87171  red-400     */
+  --danger-dark:  220  38  38;    /* #DC2626  red-600     */
+  --danger-muted: 254 226 226;    /* #FEE2E2  red-100     */
+  --danger-fg:    255 255 255;
+  --danger-hex:   #EF4444;
+
+  /* Advertencia: expira pronto, atención no crítica */
+  --warn:         245 158  11;    /* #F59E0B  amber-500   */
+  --warn-light:   251 191  36;    /* #FBBF24  amber-400   */
+  --warn-dark:    217 119   6;    /* #D97706  amber-600   */
+  --warn-muted:   254 243 199;    /* #FEF3C7  amber-100   */
+  --warn-fg:      255 255 255;
+  --warn-hex:     #F59E0B;
+
+  /* Información: neutro, tip, recordatorio */
+  --info:          59 130 246;    /* #3B82F6  blue-500    */
+  --info-light:    96 165 250;    /* #60A5FA  blue-400    */
+  --info-dark:     37 99  235;    /* #2563EB  blue-600    */
+  --info-muted:   219 234 254;    /* #DBEAFE  blue-100    */
+  --info-fg:      255 255 255;
+  --info-hex:     #3B82F6;
+
+  /* Nuevo: badges "nuevo", "estreno", novedades */
+  --new:          139  92 246;    /* #8B5CF6  violet-500  */
+  --new-light:    167 139 250;    /* #A78BFA  violet-400  */
+  --new-dark:     124  58 237;    /* #7C3AED  violet-600  */
+  --new-muted:    237 233 254;    /* #EDE9FE  violet-100  */
+  --new-fg:       255 255 255;
+  --new-hex:      #8B5CF6;
+
+  /* Urgente: tiempo límite, deadline, alerta crítica */
+  --urgent:       239  68  68;    /* mismo que danger     */
+  --urgent-light: 248 113 113;
+  --urgent-dark:  220  38  38;
+  --urgent-muted: 254 226 226;
+  --urgent-fg:    255 255 255;
+  --urgent-hex:   #EF4444;
+
+  /* Proceso: cargando, pendiente, en curso */
+  --pending:       59 130 246;    /* mismo que info       */
+  --pending-light: 96 165 250;
+  --pending-dark:  37  99 235;
+  --pending-muted:219 234 254;
+  --pending-fg:   255 255 255;
+  --pending-hex:  #3B82F6;
+}
+
+/* ── 3. DARK MODE — ajuste automático de todos los tokens ────────────────────── */
+.dark {
+  /* Brand: más claro en dark para mantener contraste */
+  --brand:        34 211 238;    /* cyan-400  #22D3EE  */
+  --brand-light: 103 232 249;    /* cyan-300  #67E8F9  */
+  --brand-dark:    0 184 217;    /* turquesa  #00B8D9  */
+  --brand-muted:   8  51  68;    /* cyan-950  #083344  */
+  --brand-hex:   #22D3EE;
+
+  /* OK */
+  --ok:          74 222 128;
+  --ok-light:   134 239 172;
+  --ok-dark:     34 197  94;
+  --ok-muted:    20  83  45;
+  --ok-hex:     #4ADE80;
+
+  /* Danger */
+  --danger:      248 113 113;
+  --danger-light:252 165 165;
+  --danger-dark: 239  68  68;
+  --danger-muted: 69  10  10;
+  --danger-hex: #F87171;
+
+  /* Warn */
+  --warn:        251 191  36;
+  --warn-light:  253 211  77;
+  --warn-dark:   245 158  11;
+  --warn-muted:   69  26   3;
+  --warn-hex:   #FBBF24;
+
+  /* Info */
+  --info:         96 165 250;
+  --info-light:  147 197 253;
+  --info-dark:    59 130 246;
+  --info-muted:   23  37  84;
+  --info-hex:   #60A5FA;
+
+  /* New */
+  --new:         167 139 250;
+  --new-light:   196 181 253;
+  --new-dark:    139  92 246;
+  --new-muted:    46  16 101;
+  --new-hex:    #A78BFA;
+
+  /* Urgent y Pending: same as danger/info dark equivalents */
+  --urgent:       248 113 113;
+  --urgent-muted:  69  10  10;
+  --urgent-hex:  #F87171;
+
+  --pending:       96 165 250;
+  --pending-muted: 23  37  84;
+  --pending-hex: #60A5FA;
+}
+
+/* ── 4. UI CONTROL TOKENS (tamaños y radios globales) ────────────────────────── */
+:root {
+  --ui-control-size:   2.5rem;
+  --ui-control-radius: 1rem;
+
+  /* Superficies — usar en degradados de carrusel para que se adapten al tema.
+     from-surface     → sobre fondos blancos (headers, cards blancas)
+     from-surface-dim → sobre fondos slate-50/gris claro (secciones de contenido) */
+  --surface:     255 255 255;      /* blanco puro */
+  --surface-dim: 248 250 252;      /* slate-50    */
+}
+.dark {
+  --surface:     18  24  38;       /* equiv .dark .bg-white    (rgb 18 24 38)  */
+  --surface-dim:  2   6  23;       /* equiv .dark .bg-slate-950 (rgb 2 6 23)   */
+}
+
+/* ── Utilidades de degradado adaptativas al tema ─────────────────────────────
+   Usan --surface / --surface-dim que cambian entre :root y .dark.
+   Tailwind no puede resolver variables CSS en from-* directamente, por eso
+   las definimos acá como clases CSS puras. */
+@layer utilities {
+  .from-surface {
+    --tw-gradient-from: rgb(var(--surface));
+    --tw-gradient-stops: var(--tw-gradient-from), transparent;
+  }
+  .from-surface-dim {
+    --tw-gradient-from: rgb(var(--surface-dim));
+    --tw-gradient-stops: var(--tw-gradient-from), transparent;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   RESET / BASE
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.rounded-3xl { border-radius: 1rem; }
+
+* { -webkit-tap-highlight-color: transparent; }
 
 html, body, #root {
   max-width: 100vw;
@@ -12,94 +197,346 @@ html, body, #root {
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  /* Poppins para títulos y marca, Inter para UI y texto corrido */
+  font-family: 'Poppins', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.01em;
 }
 
-/* Animaciones */
-@keyframes fade-up {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
+/* ══════════════════════════════════════════════════════════════════════════════
+   COMPONENTES UI REUTILIZABLES
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.ui-icon-btn {
+  width: var(--ui-control-size);
+  height: var(--ui-control-size);
+  border-radius: var(--ui-control-radius);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ui-avatar-btn {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--ui-control-radius);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.ui-chip  { border-radius: var(--ui-control-radius); }
+.ui-input { min-height: var(--ui-control-size); border-radius: var(--ui-control-radius); }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   FEEDBACK TÁCTIL
+   no-press en elementos donde el scale se ve mal (accordions, full-width items)
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+button:not(.no-press),
+[role="button"]:not(.no-press) {
+  transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+/* Preserva translateX/Y de Tailwind al escalar — evita el salto en botones posicionados con -translate-y-1/2 */
+button:not(.no-press):active,
+[role="button"]:not(.no-press):active {
+  transform:
+    translateX(var(--tw-translate-x, 0))
+    translateY(var(--tw-translate-y, 0))
+    rotate(var(--tw-rotate, 0deg))
+    scale(0.93);
+  transition: transform 0.06s ease;
+}
+button.nav-arrow:active {
+  transform:
+    translateX(var(--tw-translate-x, 0))
+    translateY(var(--tw-translate-y, 0))
+    scale(0.82);
+  transition: transform 0.06s ease;
+}
+button[disabled]:active,
+button[disabled] {
+  transform: none !important;
+  transition: none !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   ANIMACIONES
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 @keyframes fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 @keyframes dropdown-in {
   from { opacity: 0; transform: translateY(-6px) scale(0.98); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
-.animate-fade-up      { animation: fade-up      0.3s ease forwards; }
-.animate-fade-in      { animation: fade-in      0.2s ease forwards; }
-.animate-dropdown-in  { animation: dropdown-in  0.18s cubic-bezier(0.2,0,0,1) forwards; }
+@keyframes popup-in {
+  from { opacity: 0; transform: scale(0.86) translateY(-8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes popup-out {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to   { opacity: 0; transform: scale(0.86) translateY(-8px); }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-6px); }
+  40%       { transform: translateX(6px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(4px); }
+}
+@keyframes sheet-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes sheet-down {
+  from { transform: translateY(0); }
+  to   { transform: translateY(100%); }
+}
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes slide-out-left {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-100%); }
+}
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes backdrop-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@keyframes overlay-in {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes overlay-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(14px); }
+}
+@keyframes bounce-slow {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-10px); }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-8px); }
+}
+@keyframes fade-in-tailwind {
+  0%   { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes lokalpulse {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  60%       { transform: scale(2.8); opacity: 0; }
+}
+@keyframes radar-ring {
+  0%   { transform: translate(-50%, -50%) scale(0.05); opacity: 0; }
+  8%   { opacity: 0.65; }
+  100% { transform: translate(-50%, -50%) scale(1);   opacity: 0; }
+}
 
-/* ── Dark mode: color base heredado por todos los elementos sin clase de color */
+.animate-fade-in      { animation: fade-in      0.2s ease forwards; }
+.animate-fade-up      { animation: fade-up      0.3s ease forwards; }
+.animate-dropdown-in  { animation: dropdown-in  0.18s cubic-bezier(0.2,0,0,1) forwards; }
+.animate-popup-in     { animation: popup-in  0.22s cubic-bezier(0.34,1.3,0.64,1) forwards; transform-origin: top right; }
+.animate-popup-out    { animation: popup-out 0.16s cubic-bezier(0.4,0,1,1)       forwards; transform-origin: top right; }
+.animate-sheet-up     { animation: sheet-up   0.28s cubic-bezier(0.34,1,0.64,1) forwards; }
+.animate-sheet-down   { animation: sheet-down  0.18s cubic-bezier(0.5,0,0.8,1)  forwards; }
+/* ── prefers-reduced-motion: deshabilita animaciones para accesibilidad ──────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:   0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration:  0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.animate-slide-in-left  { animation: slide-in-left  0.32s cubic-bezier(0.22,1,0.36,1) forwards; }
+.animate-slide-out-left { animation: slide-out-left 0.22s cubic-bezier(0.4,0,1,1)     forwards; }
+.animate-backdrop-in    { animation: backdrop-in  0.25s ease forwards; }
+.animate-backdrop-out   { animation: backdrop-out 0.22s ease forwards; }
+.animate-overlay-in     { animation: overlay-in  0.22s cubic-bezier(0.22,1,0.36,1) forwards; }
+.animate-overlay-out    { animation: overlay-out 0.18s cubic-bezier(0.4,0,1,1) forwards; }
+.animate-bounce-slow  { animation: bounce-slow 3s ease-in-out infinite; }
+.animate-float        { animation: float 4s ease-in-out infinite; }
+.lokal-user-pulse     { animation: lokalpulse 2.2s ease-out infinite; }
+
+/* ── Transición suave al cambiar tema ──────────────────────────────────────── */
+/* Se activa brevemente via JS al llamar toggleTheme() */
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+  transition:
+    background-color 250ms ease,
+    border-color     220ms ease,
+    color            200ms ease,
+    fill             220ms ease,
+    stroke           220ms ease !important;
+  /* excluir las animaciones keyframe para que no se interrumpan */
+  animation-duration: 0s !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   DARK MODE — fondos, textos, bordes, hovers
+   ══════════════════════════════════════════════════════════════════════════════ */
+
 .dark body {
-  color: rgb(241 245 249); /* slate-100 – blanco suave, hereda hacia abajo */
+  color: rgb(241 245 249);
   background-color: rgb(10 13 22);
 }
 
-/* ── Dark mode: fondos ────────────────────────────────────────────────────── */
-.dark .bg-white       { background-color: rgb(18 24 38) !important; }
-.dark .bg-slate-50    { background-color: rgb(10 13 22) !important; }
-.dark .bg-slate-100   { background-color: rgba(255,255,255,0.07) !important; }
-.dark .bg-slate-200   { background-color: rgba(255,255,255,0.11) !important; }
+/* Fondos */
+.dark .bg-white        { background-color: rgb(18 24 38)          !important; }
+.dark .bg-slate-50     { background-color: rgb(10 13 22)           !important; }
+.dark .bg-slate-100    { background-color: rgba(255,255,255,0.07)  !important; }
+.dark .bg-slate-200    { background-color: rgba(255,255,255,0.11)  !important; }
+.dark .bg-slate-300    { background-color: rgba(255,255,255,0.16)  !important; }
+.dark .bg-gray-50      { background-color: rgb(10 13 22)           !important; }
+.dark .bg-gray-100     { background-color: rgba(255,255,255,0.07)  !important; }
+.dark .bg-gray-200     { background-color: rgba(255,255,255,0.11)  !important; }
 
-/* ── Dark mode: textos ────────────────────────────────────────────────────── */
-.dark .text-slate-900 { color: rgb(241 245 249) !important; }
-.dark .text-slate-800 { color: rgb(226 232 240) !important; }
-.dark .text-slate-700 { color: rgb(203 213 225) !important; }
-.dark .text-slate-600 { color: rgb(148 163 184) !important; }
-.dark .text-slate-500 { color: rgb(100 116 139) !important; }
+/* Fondos de colores tintados */
+.dark .bg-amber-50     { background-color: rgba(245,158,11,0.12)   !important; }
+.dark .bg-amber-100    { background-color: rgba(245,158,11,0.18)   !important; }
+.dark .bg-violet-50    { background-color: rgba(139,92,246,0.12)   !important; }
+.dark .bg-violet-100   { background-color: rgba(139,92,246,0.18)   !important; }
+.dark .bg-rose-50      { background-color: rgba(244,63,94,0.10)    !important; }
+.dark .bg-rose-100     { background-color: rgba(244,63,94,0.16)    !important; }
+.dark .bg-emerald-50   { background-color: rgba(16,185,129,0.10)   !important; }
+.dark .bg-emerald-100  { background-color: rgba(16,185,129,0.16)   !important; }
+.dark .bg-blue-50      { background-color: rgba(59,130,246,0.10)   !important; }
+.dark .bg-blue-100     { background-color: rgba(59,130,246,0.16)   !important; }
 
-/* ── Dark mode: bordes ────────────────────────────────────────────────────── */
+/* Textos */
+.dark .text-slate-900  { color: rgb(241 245 249) !important; }
+.dark .text-slate-800  { color: rgb(226 232 240) !important; }
+.dark .text-slate-700  { color: rgb(203 213 225) !important; }
+.dark .text-slate-600  { color: rgb(148 163 184) !important; }
+.dark .text-slate-500  { color: rgb(100 116 139) !important; }
+.dark .text-slate-400  { color: rgb(71  85 105)  !important; }
+.dark .text-slate-300  { color: rgb(51  65  85)  !important; }
+.dark .text-gray-900   { color: rgb(241 245 249) !important; }
+.dark .text-gray-700   { color: rgb(203 213 225) !important; }
+.dark .text-gray-500   { color: rgb(100 116 139) !important; }
+
+/* Bordes */
 .dark .border-slate-100 { border-color: rgba(255,255,255,0.07) !important; }
 .dark .border-slate-200 { border-color: rgba(255,255,255,0.11) !important; }
 .dark .border-slate-300 { border-color: rgba(255,255,255,0.16) !important; }
+.dark .border-gray-200  { border-color: rgba(255,255,255,0.11) !important; }
 
-/* ── Dark mode: hovers ────────────────────────────────────────────────────── */
+/* Hovers */
 .dark .hover\:bg-slate-50:hover  { background-color: rgba(255,255,255,0.04) !important; }
 .dark .hover\:bg-slate-100:hover { background-color: rgba(255,255,255,0.08) !important; }
 .dark .hover\:bg-slate-200:hover { background-color: rgba(255,255,255,0.13) !important; }
+.dark .hover\:bg-gray-100:hover  { background-color: rgba(255,255,255,0.08) !important; }
 
-/* ── Dark mode: formularios ───────────────────────────────────────────────── */
+/* Formularios */
 .dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
 .dark textarea,
 .dark select {
   background-color: rgba(255,255,255,0.05) !important;
-  color: rgb(226 232 240) !important;
-  border-color: rgba(255,255,255,0.1) !important;
+  color: rgb(226 232 240)                   !important;
+  border-color: rgba(255,255,255,0.1)       !important;
 }
 .dark input::placeholder,
 .dark textarea::placeholder {
   color: rgb(100 116 139) !important;
-  opacity: 1 !important;
+  opacity: 1              !important;
 }
 
-/* ── Dark mode: skeletons ─────────────────────────────────────────────────── */
+/* Skeletons */
 .dark .animate-pulse .bg-slate-100,
 .dark .animate-pulse .bg-slate-200 {
   background-color: rgba(255,255,255,0.08) !important;
 }
 
-/* ── Scrollbar global — light mode ────────────────────────────────────────── */
-::-webkit-scrollbar         { width: 10px; height: 10px; }
-::-webkit-scrollbar-button  { display: none; height: 0; width: 0; }
-::-webkit-scrollbar-track   { background: #f1f5f9; }
-::-webkit-scrollbar-thumb   { background: #cbd5e1; border-radius: 6px; border: 2px solid #f1f5f9; }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-::-webkit-scrollbar-corner  { background: #f1f5f9; }
+/* ══════════════════════════════════════════════════════════════════════════════
+   SCROLLBARS
+   ══════════════════════════════════════════════════════════════════════════════ */
 
-/* ── Scrollbar global — dark mode ─────────────────────────────────────────── */
-.dark ::-webkit-scrollbar-track  { background: #0a0d16; }
-.dark ::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.15); border-radius: 6px; border: 2px solid #0a0d16; }
-.dark ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); }
-.dark ::-webkit-scrollbar-corner { background: #0a0d16; }
+::-webkit-scrollbar               { width: 4px; height: 4px; }
+::-webkit-scrollbar-button        { display: none; width: 0; height: 0; }
+::-webkit-scrollbar-track         { background: transparent; }
+::-webkit-scrollbar-track-piece   { background: transparent; }
+::-webkit-scrollbar-thumb         { background: #cbd5e1; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover   { background: #94a3b8; }
+::-webkit-scrollbar-corner        { background: transparent; }
 
-/* Firefox — light */
-* { scrollbar-width: auto; scrollbar-color: #cbd5e1 #f1f5f9; }
-/* Firefox — dark */
-.dark * { scrollbar-width: auto; scrollbar-color: rgba(255,255,255,0.15) #0a0d16; }
+.dark ::-webkit-scrollbar-thumb       { background: rgba(255,255,255,0.18); }
+.dark ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.35); }
+
+/* Firefox */
+* { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+.dark * { scrollbar-color: rgba(255,255,255,0.18) transparent; }
+
+
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   MAPA (Leaflet)
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.leaflet-container {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #f8fafc;
+}
+.dark .leaflet-container { background: #0d111e; }
+
+.leaflet-popup-content-wrapper {
+  border-radius: 14px !important;
+  box-shadow: 0 4px 24px rgba(0,0,0,.14) !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+.leaflet-popup-content { margin: 0 !important; }
+.leaflet-popup-tip-container { display: none !important; }
+.dark .leaflet-popup-content-wrapper {
+  background: #1e2536 !important;
+  color: #e2e8f0    !important;
+}
+.lokal-map-compact .leaflet-control-attribution { display: none; }
+
+.lokal-radar-ring {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 80vmin; height: 80vmin;
+  border-radius: 50%;
+  border: 2px solid var(--ok-hex);
+  pointer-events: none;
+  animation: radar-ring 1.4s cubic-bezier(0.2, 0, 0.6, 1) both;
+}
+.lokal-radar-ring:nth-child(2) { animation-delay: 0.22s; }
+.lokal-radar-ring:nth-child(3) { animation-delay: 0.44s; }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   MODULAR STYLES (Fase 2B)
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+@import './styles/tokens.css';
+@import './styles/base.css';
+@import './styles/components.css';
+@import './styles/animations.css';
+@import './styles/themes.css';
+
+@media (min-width: 1024px) { [data-has-bottom-nav] { padding-bottom: 0 !important; } }

@@ -1,0 +1,98 @@
+Tomá como referencia conceptual el sistema de exploración y resultados de Mercado Libre, pero NO copies visualmente su interfaz.
+
+La pantalla de resultados debe entenderse como un sistema adaptativo de exploración comercial y reducción de incertidumbre, no simplemente como una lista de productos.
+
+La UI debe responder dinámicamente según:
+
+- categoría
+- intención del usuario
+- tipo de producto o servicio
+- contexto mobile o desktop
+- urgencia
+- complejidad de decisión
+- cantidad de variantes
+- necesidad de comparación
+
+Principios clave a respetar:
+
+## 1. Progressive disclosure
+No mostrar toda la complejidad al mismo tiempo.
+La información secundaria debe colapsarse, expandirse o aparecer contextualmente.
+
+## 2. Jerarquía comercial
+La pantalla debe priorizar:
+- confianza
+- precio
+- disponibilidad
+- tiempo
+- envío
+- cercanía
+- beneficios relevantes
+según el tipo de publicación.
+
+## 3. Arquitectura modular
+La UI debe construirse mediante módulos reutilizables y configurables:
+- filtros
+- quick filters
+- badges
+- cards
+- carruseles
+- chips
+- rankings
+- destacados
+- recomendaciones
+- comparadores
+
+Cada categoría debe poder decidir:
+- qué módulos usar
+- en qué orden
+- qué peso visual tienen
+
+## 4. Adaptación contextual
+No usar la misma card ni misma lógica para todas las categorías.
+
+Ejemplos:
+- comida → abierto ahora, delivery, combos
+- servicios → disponibilidad, turnos, confianza
+- tecnología → specs, marca, cuotas
+- usados → estado, ubicación, reputación
+
+## 5. Mobile-first inteligente
+En mobile:
+- evitar sidebars persistentes
+- usar bottom sheets o pantallas de filtros colapsadas
+- priorizar exploración vertical
+- minimizar ruido visual
+- usar disclosure progresivo
+
+## 6. Desktop como espacio de control
+En desktop:
+- permitir filtros persistentes
+- exploración simultánea
+- comparación visual rápida
+- más densidad de información sin saturar
+
+## 7. Adaptación por intención
+Detectar diferencias entre:
+- búsqueda exploratoria
+- búsqueda específica
+- búsqueda urgente
+- búsqueda comparativa
+
+Y adaptar:
+- orden visual
+- filtros
+- badges
+- CTA
+- densidad informativa
+
+## 8. Pensar en sistema, no pantalla
+La arquitectura debe ser extensible para futuras categorías y tipos de negocio sin rehacer la UI.
+
+La interfaz debe sentirse:
+- viva
+- contextual
+- comercialmente inteligente
+- escalable
+- modular
+- adaptable

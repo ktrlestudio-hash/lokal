@@ -1,0 +1,346 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  Camera, MapPin, Search, Store, Package, MessageSquare, MessageCircle, Bell, User, Menu,
+  ChevronRight, ChevronLeft, Clock, Navigation, LocateFixed, X, AlertCircle, ArrowLeft, Send,
+  Tag, Loader2, Check, CheckCircle, Pause, Edit3, Trash2, RotateCcw,
+  Star, ChevronDown, Filter, History, TrendingUp, Sun, Moon, LogOut, Play,
+  Flame, Home, Zap, Plus, ToggleLeft, ToggleRight, ImagePlus, CreditCard, Gift,
+  Phone, ExternalLink, ArrowUpDown, Heart, Pin, LayoutGrid, LayoutList, ShieldCheck, Paperclip, PanelLeft, List,
+  Globe, Share2, Truck
+} from 'lucide-react';
+import CategoryPicker from './CategoryPicker';
+import AdminDashboard from './AdminDashboard';
+import AttributesEditor from './AttributesEditor';
+import CategoryIcon from './CategoryIcon';
+import { CATEGORIES, getCategoryPath, getAllDescendants } from './categories';
+import { StoreMap, TiendasMap, LocationPreviewMap } from './LeafletMap';
+import { apiFetch } from './api';
+import { LogoSymbol, LogoBadge, LogoFull, KtrlMark } from './Brand';
+import { MOCK_TIENDAS, MOCK_OFERTAS, getMockRespuestas } from './data/mockData';
+import HomeScreen from './screens/HomeScreen';
+
+const API_BASE = '/.netlify/functions';
+const MAP_LOCATION_MODE_KEY    = 'lokal-map-location-mode';
+const MAP_LAST_POSITION_KEY    = 'lokal-map-last-position';
+const MAP_FIXED_POSITION_KEY   = 'lokal-map-fixed-position'; // solo se escribe al guardar manualmente
+const MAP_SAVED_LOCATIONS_KEY  = 'lokal-map-saved-locations';
+
+function readStoredMapPosition() {
+  try {
+    const raw = localStorage.getItem(MAP_LAST_POSITION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length !== 2) return null;
+    const [lat, lng] = parsed;
+    if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+    // HomeScreen extracted to src/screens/HomeScreen.jsx
+          text: m.text,
+          attachment: m.attachment || null,
+          time: tiempoRelativo(m.ts),
+          ts: m.ts,
+        }));
+        setChatHistories(prev => ({ ...prev, [key]: formatted }));
+        // Update conversation metadata with latest message
+        const last = formatted[formatted.length - 1];
+        if (last) {
+          setChatConversations(prev => ({
+            ...prev,
+            [key]: { ...(prev[key] || { id: tiendaId, tienda: showChat.tienda, foto: showChat.foto, telefono: showChat.telefono }), lastMsg: last.attachment ? `📦 ${last.attachment.titulo}` : last.text, lastTime: last.ts, unread: 0 },
+          }));
+        }
+      } catch { fails++; }
+    };
+    load();
+    const t = setInterval(() => { if (fails < 3) load(); }, 4000);
+    return () => clearInterval(t);
+  }, [showChat?.id, firebaseUser]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (!e.target.closest('[data-gsearch]') && !e.target.closest('[data-gdropdown]')) setGOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Ocultar scrollbar nativa cuando el menú mobile está abierto
+  useEffect(() => {
+    document.body.style.overflow = showMobileMenu ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [showMobileMenu]);
+
+  // ─── Back button (Android / PWA) ─────────────────────────────────────────
+  // Mantiene una entrada en history por cada "capa" abierta.
+  // Cuando el usuario aprieta atrás, popstate la consume y cerramos la capa.
+  useEffect(() => {
+    const hasLayer =
+      showMobileMenu || showNotifications || showProfile ||
+      showChat || showConfirm || createSheetOpen || !!nudgeModal ||
+      navStack.length > 1;
+
+    if (hasLayer) {
+      window.history.pushState({ lokal: true }, '');
+    }
+  }, [
+    showMobileMenu, showNotifications, showProfile,
+    showChat, showConfirm, createSheetOpen, nudgeModal,
+    navStack.length,
+  ]);
+
+  useEffect(() => {
+    const onPop = () => {
+      // Cerrar en orden de prioridad: modales primero, navegación al final
+      if (showConfirm)       { setShowConfirm(null);             return; }
+      if (nudgeModal)        { setNudgeModal(null);              return; }
+      if (createSheetOpen)   { setCreateSheetOpen(false);        return; }
+      if (showChat)          { setShowChat(null);                return; }
+      if (showProfile)       { setShowProfile(false);            return; }
+      if (showNotifications) { setShowNotifications(false);      return; }
+      if (showMobileMenu)    { setShowMobileMenu(false); setMobileMenuClosing(false); return; }
+      if (navStack.length > 1) { goBack(); return; }
+      // Si no hay nada que cerrar dejamos que el browser maneje (sale de la PWA)
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [
+    showConfirm, nudgeModal, createSheetOpen, showChat,
+    showProfile, showNotifications, showMobileMenu, navStack,
+  ]);
+
+  // ─── API ──────────────────────────────────────────────────────────────────
+  const fetchDemandas = async () => {
+    setLoadingDemandas(true);
+    setErrorDemandas(null);
+    try {
+      const res = await apiFetch(`${API_BASE}/demandas?mine=1`, {
+        authRequired: true,
+      });
+      if (!res.ok) throw new Error('Error al cargar');
+      setAllDemandas(await res.json());
+    } catch (err) {
+      setErrorDemandas(err.message);
+    } finally {
+      setLoadingDemandas(false);
+    }
+  };
+
+  const fetchOfertas = async () => {
+    try {
+      const res = await apiFetch(`${API_BASE}/ofertas?activa=true`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          if (demoMode) {
+            // En demoMode siempre mezclar reales + mock
+            setAllOfertas([...MOCK_OFERTAS, ...data.filter(o => !MOCK_OFERTAS.some(m => m.id === o.id))]);
+          } else if (data.length > 0) {
+            setAllOfertas(data);
+          }
+          // Si data vacío y sin demoMode → queda el estado inicial (MOCK_OFERTAS)
+        }
+      }
+    } catch { /* silencioso */ } finally {
+      setLoadingOfertas(false);
+    }
+  };
+
+  const updateDemandaEstado = async (id, estado) => {
+    // Optimista
+    setAllDemandas(prev => prev.map(d => d.id === id ? { ...d, estado } : d));
+    if (selectedDemanda?.id === id) setSelectedDemanda(d => ({ ...d, estado }));
+    try {
+      await apiFetch(`${API_BASE}/demandas`, {
+        method: 'PATCH',
+        authRequired: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, estado }),
+      });
+    } catch { /* silencioso: ya actualizado localmente */ }
+  };
+
+  const deleteDemanda = async (id) => {
+    setAllDemandas(prev => prev.filter(d => d.id !== id));
+    navRoot('home');
+    try {
+      await apiFetch(`${API_BASE}/demandas?id=${id}`, { method: 'DELETE', authRequired: true });
+    } catch { /* silencioso */ }
+  };
+
+  // ─── Chat ─────────────────────────────────────────────────────────────────
+  const [chatProductPicker, setChatProductPicker] = useState(false);
+  const [chatPendingAttach, setChatPendingAttach] = useState(null); // product to attach
+
+  const openChat = (tienda, contextProduct = null) => {
+    const key = `${tienda.tienda}-${tienda.id}`;
+    setShowChat({ ...tienda, chatKey: key, contextProduct });
+    setChatProductPicker(false);
+    setChatPendingAttach(null);
+    // Register/update conversation metadata and clear unread
+    const ctx = contextProduct
+      ? { type: 'product', label: contextProduct.titulo, productId: contextProduct.id, imagen: contextProduct.imagenes?.[0] || contextProduct.foto || null }
+      : { type: 'store', label: tienda.tienda };
+    setChatConversations(prev => ({
+      ...prev,
+      [key]: { ...(prev[key] || {}), id: tienda.id, tienda: tienda.tienda, foto: tienda.foto, telefono: tienda.telefono, unread: 0, direction: 'sent', context: prev[key]?.context || ctx, status: prev[key]?.status === 'closed' ? 'closed' : 'read' },
+    }));
+  };
+
+  const sendChatMessage = async (attachProduct = null) => {
+    const hasText = chatMessage.trim();
+    const attach = attachProduct || chatPendingAttach;
+    if (!hasText && !attach) return;
+    if (!showChat || !firebaseUser) return;
+    const text = hasText || '';
+    const key = showChat.chatKey;
+    const optimistic = {
+      id: `opt-${Date.now()}`,
+      from: 'user',
+      text,
+      time: 'Ahora',
+      ...(attach ? { attachment: { type: 'product', id: attach.id, titulo: attach.titulo, precio: attach.precio, imagen: attach.imagenes?.[0] || attach.foto || null } } : {}),
+    };
+    setChatHistories(prev => ({ ...prev, [key]: [...(prev[key] || []), optimistic] }));
+    setChatMessage('');
+    setChatPendingAttach(null);
+    setChatConversations(prev => ({
+      ...prev,
+      [key]: { ...(prev[key] || { id: showChat.id, tienda: showChat.tienda, foto: showChat.foto, telefono: showChat.telefono }), lastMsg: attach ? `📦 ${attach.titulo}` : text, lastTime: new Date().toISOString(), unread: 0 },
+    }));
+    try {
+      await apiFetch(`${API_BASE}/messages`, {
+        method: 'POST',
+        authRequired: true,
+        body: JSON.stringify({ tiendaId: showChat.id, text, attachment: optimistic.attachment || null }),
+      });
+    } catch { /* silencioso — el poll lo corrige */ }
+  };
+
+  // ─── Notificaciones ───────────────────────────────────────────────────────
+  const markNotifRead = (id) => {
+    setNotifList(prev => prev.map(n => n.id === id ? { ...n, leido: true } : n));
+    if (firebaseUser) {
+      apiFetch(`${API_BASE}/notifications`, {
+        method: 'PATCH', authRequired: true,
+        body: JSON.stringify({ ids: [id] }),
+      }).catch(() => {});
+    }
+  };
+
+  const markAllRead = () => {
+    setNotifList(prev => prev.map(n => ({ ...n, leido: true })));
+    if (firebaseUser) {
+      apiFetch(`${API_BASE}/notifications`, {
+        method: 'PATCH', authRequired: true,
+        body: JSON.stringify({ all: true }),
+      }).catch(() => {});
+    }
+  };
+
+  const addNotif = (mensaje, tipo = 'sistema', demandaId = null) => {
+    setNotifList(prev => [{
+      id: Date.now(), tipo, mensaje, tiempo: new Date().toISOString(), leido: false, demandaId,
+    }, ...prev]);
+  };
+
+  const tiendas = MOCK_TIENDAS;
+
+    // ─── Filtros y sort ───────────────────────────────────────────────────────
+  const demandasActivas = allDemandas.filter(d => d.estado === 'activa');
+  const demandasHistorial = allDemandas.filter(d => d.estado !== 'activa');
+
+  // Dado un categoryId, devuelve el id de la categoría raíz (o null)
+  const getRootCategoryId = (categoryId) => {
+    if (!categoryId) return null;
+    let cat = allCategories.find(c => c.id === categoryId);
+    while (cat && cat.parentId !== null) {
+      cat = allCategories.find(c => c.id === cat.parentId);
+    }
+    return cat?.id ?? null;
+  };
+
+  // Set de ids raíz presentes en demandas activas
+  const demandaRootIds = new Set(
+    demandasActivas.map(d => getRootCategoryId(d.categoryId)).filter(Boolean)
+  );
+
+  // Set de ids raíz presentes en ofertas
+  const ofertaRootIds = new Set(
+    visibleOfertas.map(o => getRootCategoryId(o.categoryId)).filter(Boolean)
+  );
+
+  const sortedDemandas = [...demandasActivas]
+    .filter(d => {
+      const q = searchQuery.toLowerCase();
+      const matchesSearch = !q ||
+        d.titulo.toLowerCase().includes(q) ||
+        (d.descripcion || '').toLowerCase().includes(q);
+      const matchesCategory = !filterCategory || (() => {
+        if (!d.categoryId) return false;
+        const descendants = getAllDescendants(filterCategory, allCategories);
+        return d.categoryId === filterCategory || descendants.includes(d.categoryId);
+      })();
+      return matchesSearch && matchesCategory;
+    })
+    .sort((a, b) => sortBy === 'respuestas' ? (b.respuestas - a.respuestas) : (new Date(b.createdAt) - new Date(a.createdAt)));
+
+  const filteredOfertas = visibleOfertas.filter(o => {
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = o.titulo.toLowerCase().includes(q) || o.descripcion.toLowerCase().includes(q);
+    const matchesCategory = !filterCategory || (() => {
+      if (!o.categoryId) return false;
+      const descendants = getAllDescendants(filterCategory, allCategories);
+      return o.categoryId === filterCategory || descendants.includes(o.categoryId);
+    })();
+    return matchesSearch && matchesCategory;
+  });
+
+  const unreadCount = notifList.filter(n => !n.leido).length;
+
+  // ─── Mobile Nav Overlay (full-screen "Más") ──────────────────────────────
+  const closeMobileMenu = () => { setMobileMenuClosing(true); };
+  const onMobileMenuAnimEnd = () => {
+    if (mobileMenuClosing) { setMobileMenuClosing(false); setShowMobileMenu(false); }
+  };
+  const menuNav = (screen) => {
+    setShowMobileMenu(false);
+    setMobileMenuClosing(false);
+    navRoot(screen);
+  };
+
+  const MobileMenu = () => {
+    const firstName = firebaseUser?.displayName?.split(' ')[0] || null;
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches';
+
+    const menuItem = (Icon, label, onClick, badge) => (
+      <button
+        key={label}
+        onClick={onClick}
+        className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-white/6 active:bg-slate-100 dark:active:bg-white/8 transition-colors text-left">
+        <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/8 flex items-center justify-center shrink-0 relative">
+          <Icon className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+          {badge > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center">{badge > 9 ? '9+' : badge}</span>} 
+        </div>
+        <span className="font-semibold text-[15px] text-slate-700 dark:text-slate-200">{label}</span>
+        <ChevronRight className="w-4 h-4 text-slate-300 dark:text-white/20 ml-auto" />
+      </button>
+    );
+
+    return (
+      <div
+        className={`lg:hidden fixed inset-0 z-[4000] flex flex-col bg-[#f7f8fa] dark:bg-[#0a0d16] ${mobileMenuClosing ? 'animate-overlay-out pointer-events-none' : 'animate-overlay-in'}`}
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+        onAnimationEnd={onMobileMenuAnimEnd}
+      >
+        {/* Header con logo completo + X */}
+        <div className="flex items-center justify-between px-4 h-14 border-b border-slate-200/60 dark:border-white/8 shrink-0">
+          <LogoFull size={26} className="text-slate-900 dark:text-white" />
+          <button
+            onClick={closeMobileMenu}
+            className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-slate-200 dark:hover:bg-white/10 transition-colors">
+            <X className="w-5 h-5 text-slate-500 dark:text-slate-400" />
+          </button>
+        </div>
+
+... (archivo backup truncado por longitud)

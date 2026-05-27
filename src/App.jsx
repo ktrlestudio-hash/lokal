@@ -1,356 +1,368 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
-  Camera, MapPin, Search, Store, Package, MessageSquare, Bell, User,
-  ChevronRight, Clock, Navigation, X, AlertCircle, ArrowLeft, Send,
-  Tag, Loader2, CheckCircle, Pause, Edit3, Trash2, RotateCcw,
-  Star, ChevronDown, Filter, History, TrendingUp, Sun, Moon, LogOut, Play
+  Camera, MapPin, Search, Store, Package, MessageSquare, MessageCircle, Bell, User, Menu,
+  ChevronRight, ChevronLeft, Clock, Navigation, LocateFixed, X, AlertCircle, ArrowLeft, Send,
+  Tag, Loader2, Check, CheckCircle, Pause, Edit3, Trash2, RotateCcw,
+  Star, ChevronDown, ChevronUp, Filter, History, TrendingUp, Sun, Moon, LogOut, Play,
+  Flame, Home, Zap, Plus, ToggleLeft, ToggleRight, ImagePlus, CreditCard, Gift,
+  Phone, ExternalLink, ArrowUpDown, Heart, Pin, LayoutGrid, LayoutList, ShieldCheck, Paperclip, PanelLeft, List,
+  Globe, Share2, Truck
 } from 'lucide-react';
 import CategoryPicker from './CategoryPicker';
+import AdminDashboard from './AdminDashboard';
 import AttributesEditor from './AttributesEditor';
 import CategoryIcon from './CategoryIcon';
 import { CATEGORIES, getCategoryPath, getAllDescendants } from './categories';
+import { StoreMap, TiendasMap, LocationPreviewMap } from './LeafletMap';
+import { apiFetch } from './api';
+import { LogoSymbol, LogoBadge, LogoFull, KtrlMark } from './Brand';
+import { MOCK_TIENDAS, MOCK_OFERTAS, getMockRespuestas } from './data/mockData';
+import LoginBottomSheet from './components/LoginBottomSheet';
+import HomeScreen from './screens/HomeScreen';
+import TiendasScreen from './screens/TiendasScreen';
+import CategoriasScreen from './screens/CategoriasScreen';
+import MisDemandas from './screens/MisDemandas';
+import HistorialScreen from './screens/HistorialScreen';
+import MisCosasScreen from './screens/MisCosasScreen';
+import ChatsScreen from './screens/ChatsScreen';
+import CrearDemandaScreen from './screens/CrearDemandaScreen';
+import DetalleDemandaScreen from './screens/DetalleDemandaScreen';
+import TiendaDetailScreen from './screens/TiendaDetailScreen';
+import ProductDetailScreen from './screens/ProductDetailScreen';
+import TodasOfertasScreen from './screens/TodasOfertasScreen';
+import MapaScreen from './screens/MapaScreen';
+import VenderProductoScreen from './screens/VenderProductoScreen';
+import MisProductosScreen from './screens/MisProductosScreen';
+import { DAY_NAMES, isStoreOpen, getNextOpen, tiempoRelativo } from './utils/helpers';
 
 const API_BASE = '/.netlify/functions';
+const UserApp = ({
+  firebaseUser, onLogout, isDark, toggleTheme,
+  onRegisterStore, isAdmin, onOpenDashboard, /* hasTienda = false, */ setDemoMode, demoMode,
+  featureModules, onUpgradeRole, userProfile, setRoleSim, initialScreen,
+}) => {
+  // featureModules: array { id, enabled } desde site-config, o null = todo habilitado
+  const isModuleEnabled = React.useCallback((id) => {
+    if (!featureModules) return true;
+    const m = featureModules.find(m => m.id === id);
+    return m ? m.enabled : true;
+  }, [featureModules]);
 
-const KtrlLogo = ({ className = '' }) => (
-  <svg className={className} viewBox="0 0 1629.2 404.35" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
-    <path d="M838.15,41.28v74.06c0,20.45-16.58,37.03-37.03,37.03h-55.55c-10.23,0-18.52,8.29-18.52,18.52v191.9c0,20.6-16.7,37.3-37.3,37.3h-73.53c-20.6,0-37.3-16.7-37.3-37.3v-191.86c0-10.24-8.31-18.54-18.56-18.52l-55.43.15c-20.48.04-37.11-16.55-37.11-37.03V41.28c0-20.45,16.58-37.03,37.03-37.03h296.26c20.45,0,37.03,16.58,37.03,37.03Z"/>
-    <path d="M1629.2,289.56v74.06c0,20.45-16.58,37.03-37.03,37.03h-222.19c-20.45,0-37.03-16.58-37.03-37.03V41.84c0-20.45,16.58-37.03,37.03-37.03h74.06c20.45,0,37.03,16.58,37.03,37.03v192.17c0,10.23,8.29,18.52,18.52,18.52h92.58c20.45,0,37.03,16.58,37.03,37.03Z"/>
-    <path d="M1098.1,152.38h-56.26c-10.23,0-18.52,8.29-18.52,18.52v191.97c0,20.45-16.58,37.03-37.03,37.03h-74.08c-20.45,0-37.03-16.58-37.03-37.03V78.31c0-40.9,33.16-74.06,74.06-74.06h247.71c40.9,0,74.06,33.16,74.06,74.06v100.72c0,9.82-3.9,19.24-10.85,26.19l-52.61,52.6c-6.78,6.72-8.03,18.46-.12,26.36l52.77,52.75c23.34,23.34,6.8,63.25-26.21,63.22l-95.66-.07c-9.82,0-19.24-3.9-26.19-10.85l-40.95-40.95c-6.94-6.94-10.85-16.36-10.85-26.19v-71.94c0-9.82,3.9-19.24,10.85-26.19l39.99-39.99c11.66-11.66,3.4-31.61-13.09-31.61Z"/>
-    <path d="M83.04,14.06L10.79,86.32C3.88,93.22,0,102.59,0,112.36v179.62c0,9.77,3.88,19.14,10.79,26.05l72.26,72.26c23.21,23.21,62.88,6.77,62.88-26.05V40.11c0-32.82-39.68-49.25-62.88-26.05Z"/>
-    <path d="M416.11,340.58l-52.97,52.97c-14.39,14.39-37.71,14.39-52.09,0l-117.4-117.4c-6.97-6.97-10.88-16.41-10.88-26.27v-95.43c0-9.85,3.91-19.3,10.88-26.27L311.04,10.79c14.39-14.39,37.71-14.39,52.09,0l52.97,52.97c14.39,14.39,14.39,37.71,0,52.09l-73.29,73.29c-7.19,7.19-7.19,18.85,0,26.05l73.29,73.29c14.39,14.39,14.39,37.71,0,52.09Z"/>
-  </svg>
-);
+  // ─── hasTienda DEPRECADO: ahora se deriva de userRole ────────────────────
+  // const hasTienda = userRole === 'empresa'; // derivado, no prop
+  // ─── Navegación ──────────────────────────────────────────────────────────
+  // ─── URL ↔ navStack sync ──────────────────────────────────────────────────
+  const SCREEN_TO_PATH = {
+    'home': '/', 'mapa': '/mapa', 'tiendas': '/tiendas',
+    'todas-ofertas': '/ofertas', 'mis-demandas': '/mis-demandas',
+    'crear': '/crear', 'historial': '/historial', 'admin': '/admin',
+    'vender-producto': '/vender', 'suscripcion': '/suscripcion',
+    'detalle': '/demanda', 'product-detail': '/producto', 'tienda-detail': '/tienda',
+    'mis-cosas': '/mis-cosas', 'chats': '/chats', 'categorias': '/categorias',
+    'mis-productos': '/mis-productos',
+  };
+  const PATH_TO_SCREEN = Object.fromEntries(Object.entries(SCREEN_TO_PATH).map(([k,v]) => [v, k]));
 
-const TIENDA_REPLIES = [
-  'Si, tenemos stock. Pasa cuando quieras.',
-  'Te lo separamos hasta manana si nos avisas.',
-  'El precio incluye garantia de 6 meses.',
-  'Tambien hacemos envio a domicilio.',
-  'Que horario te queda mejor para venir?',
-  'Tenemos varios modelos, cual preferis?',
-];
-
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-function tiempoRelativo(iso) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'Hace un momento';
-  if (m < 60) return `Hace ${m} min`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `Hace ${h}h`;
-  return `Hace ${Math.floor(h / 24)}d`;
-}
-
-// ─── Category Filter Bar ──────────────────────────────────────────────────────
-const CategoryFilterBar = ({ filterCategory, setFilterCategory, categories = CATEGORIES, presentIds }) => {
-  const scrollRef = useRef(null);
-  const [canScrollRight, setCanScrollRight] = React.useState(false);
-  const isDragging = useRef(false);
-  const dragStartX = useRef(0);
-  const dragScrollLeft = useRef(0);
-
-  const checkScroll = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  const screenFromPath = () => {
+    const path = window.location.pathname;
+    return PATH_TO_SCREEN[path] || PATH_TO_SCREEN[path.replace(/\/$/, '')] || 'home';
   };
 
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    checkScroll();
-    el.addEventListener('scroll', checkScroll);
-    const ro = new ResizeObserver(checkScroll);
-    ro.observe(el);
-    // Wheel no-pasivo para poder hacer preventDefault y scroll horizontal
-    const onWheel = (e) => {
-      e.preventDefault();
-      el.scrollLeft += e.deltaY + e.deltaX;
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => {
-      el.removeEventListener('scroll', checkScroll);
-      el.removeEventListener('wheel', onWheel);
-      ro.disconnect();
-    };
-  }, []);
-
-  // Mouse drag
-  const onMouseDown = (e) => {
-    isDragging.current = true;
-    dragStartX.current = e.pageX - scrollRef.current.offsetLeft;
-    dragScrollLeft.current = scrollRef.current.scrollLeft;
-    scrollRef.current.style.cursor = 'grabbing';
+  const pushUrl = (screen) => {
+    const path = SCREEN_TO_PATH[screen] || `/${screen}`;
+    if (window.location.pathname !== path) window.history.pushState({ screen }, '', path);
   };
-  const onMouseMove = (e) => {
-    if (!isDragging.current) return;
-    e.preventDefault();
-    const x = e.pageX - scrollRef.current.offsetLeft;
-    scrollRef.current.scrollLeft = dragScrollLeft.current - (x - dragStartX.current);
-  };
-  const onMouseUp = () => {
-    isDragging.current = false;
-    if (scrollRef.current) scrollRef.current.style.cursor = '';
+  const replaceUrl = (screen) => {
+    const path = SCREEN_TO_PATH[screen] || `/${screen}`;
+    window.history.replaceState({ screen }, '', path);
   };
 
-  const scrollRight = () => {
-    if (!scrollRef.current) return;
-    scrollRef.current.scrollBy({ left: 160, behavior: 'smooth' });
+  // Siempre arranca en home, sin importar la URL actual
+  // initialScreen permite sobrescribir desde el padre (ej: abrir admin desde StoreApp)
+  const [navStack, setNavStack] = useState(() => {
+    if (initialScreen) return [initialScreen];
+    const goto = sessionStorage.getItem('lokal-goto');
+    if (goto) { sessionStorage.removeItem('lokal-goto'); return [goto]; }
+    return ['home'];
+  });
+  const currentScreen = navStack[navStack.length - 1];
+
+  const closeOverlaysRef = useRef(null);
+
+  const navigate        = (screen) => { closeOverlaysRef.current?.(); pushUrl(screen);    setNavStack(prev => [...prev, screen]); };
+  const navigateReplace = (screen) => { closeOverlaysRef.current?.(); replaceUrl(screen); setNavStack(prev => [...prev.slice(0, -1), screen]); };
+  const navigateSearch  = (q) => { setSearchResultsQuery(q); navigate('todas-ofertas'); };
+  const navRoot         = (screen) => { closeOverlaysRef.current?.(); replaceUrl(screen); setNavStack([screen]); };
+  const goBack          = () => {
+    setNavStack(prev => {
+      const next = prev.length > 1 ? prev.slice(0, -1) : ['home'];
+      replaceUrl(next[next.length - 1]);
+      return next;
+    });
   };
 
-  // Si se pasan presentIds, solo mostrar categorías raíz con contenido real
-  const cats = categories.filter(c => c.parentId === null && (!presentIds || presentIds.has(c.id)));
-  const btnClass = (active) => `shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors ${
-    active ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-white/8 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/12'
-  }`;
+  // Sincronizar URL inicial
+  useEffect(() => { replaceUrl(navStack[0]); }, []);
 
-  return (
-    <div className="relative w-full min-w-0 overflow-hidden flex items-center">
-      <div
-        ref={scrollRef}
-        className="flex gap-2 overflow-x-auto scrollbar-none px-5 lg:px-8 py-3 select-none w-full min-w-0"
-        style={{ cursor: 'grab' }}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}
-      >
-        <button onClick={() => setFilterCategory(null)} className={btnClass(!filterCategory)}>
-          Todas
-        </button>
-        {cats.map(cat => (
-          <button
-            key={cat.id}
-            onClick={() => setFilterCategory(filterCategory === cat.id ? null : cat.id)}
-            className={btnClass(filterCategory === cat.id)}
-          >
-            <CategoryIcon name={cat.icon} className="w-3.5 h-3.5" />
-            <span>{cat.name.split(' ')[0]}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Flecha derecha */}
-      {canScrollRight && (
-        <button
-          onClick={scrollRight}
-          className="absolute right-0 flex items-center justify-center w-10 h-full bg-gradient-to-l from-slate-50 dark:from-slate-950 to-transparent pr-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-        >
-          <ChevronRight className="w-5 h-5" />
-        </button>
-      )}
-    </div>
-  );
-};
-
-// ─── Photo Carousel ───────────────────────────────────────────────────────────
-const PhotoCarousel = ({ photos = [], className = '' }) => {
-  const [idx, setIdx] = React.useState(0);
-  if (!photos.length) return null;
-  const prev = () => setIdx(i => (i - 1 + photos.length) % photos.length);
-  const next = () => setIdx(i => (i + 1) % photos.length);
-  return (
-    <div className={`relative bg-slate-100 dark:bg-black/30 ${className}`}>
-      <img
-        src={photos[idx]}
-        alt=""
-        className="w-full object-contain max-h-72"
-        style={{ aspectRatio: '16/9' }}
-      />
-      {photos.length > 1 && (
-        <>
-          <button onClick={prev} className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors">
-            <ChevronDown className="w-4 h-4 rotate-90" />
-          </button>
-          <button onClick={next} className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors">
-            <ChevronDown className="w-4 h-4 -rotate-90" />
-          </button>
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
-            {photos.map((_, i) => (
-              <button key={i} onClick={() => setIdx(i)} className={`w-1.5 h-1.5 rounded-full transition-all ${i === idx ? 'bg-white w-4' : 'bg-white/50'}`} />
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-};
-
-// ─── Photo Slot (miniatura editable) ─────────────────────────────────────────
-const PhotoSlot = ({ foto, idx, onRemove, isFirst }) => (
-  <div className="relative aspect-square rounded-2xl overflow-hidden bg-slate-100 dark:bg-white/10 group shrink-0 h-full">
-    <img src={foto.preview} alt="" className="w-full h-full object-cover" />
-    <button
-      type="button"
-      onClick={() => onRemove(idx)}
-      className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity"
-    >
-      <X className="w-3.5 h-3.5" />
-    </button>
-    {isFirst && (
-      <span className="absolute bottom-1 left-1 text-[10px] bg-black/50 text-white px-1.5 py-0.5 rounded-md font-medium leading-none">Principal</span>
-    )}
-  </div>
-);
-
-// ─── Custom Select ────────────────────────────────────────────────────────────
-const CustomSelect = ({ value, onChange, options, size = 'md' }) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  const isSmall = size === 'sm';
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  const selected = options.find(o => o.value === value);
-
-  // Always border-2 (transparent when closed) to avoid layout shift on open
-  // transition-colors only — border-radius must change instantly, not animate
-  const btnCls = [
-    'flex items-center gap-2 font-semibold bg-slate-100 dark:bg-white/5',
-    'border-2 transition-colors focus:outline-none',
-    isSmall ? 'text-xs py-1.5 px-3' : 'text-sm py-2.5 px-4',
-    open
-      ? (isSmall
-          ? 'rounded-t-xl rounded-b-none border-slate-200 dark:border-white/10 border-b-transparent'
-          : 'rounded-t-2xl rounded-b-none border-slate-200 dark:border-white/10 border-b-transparent')
-      : (isSmall
-          ? 'rounded-xl border-transparent'
-          : 'rounded-2xl border-transparent'),
-  ].join(' ');
-
-  return (
-    <div ref={ref} className="relative inline-block">
-      <button type="button" onClick={() => setOpen(o => !o)} className={btnCls}>
-        {/* Ghost span sets stable width using longest option — never shifts layout */}
-        <span className="relative">
-          <span className="invisible select-none" aria-hidden>
-            {options.reduce((a, b) => a.label.length >= b.label.length ? a : b).label}
-          </span>
-          <span className="absolute inset-0 flex items-center transition-opacity duration-150">
-            {selected?.label}
-          </span>
-        </span>
-        <ChevronDown className={[
-          'shrink-0 text-slate-400 dark:text-slate-500 transition-transform duration-200',
-          isSmall ? 'w-3 h-3' : 'w-4 h-4',
-          open ? 'rotate-180' : '',
-        ].join(' ')} />
-      </button>
-      {open && (
-        <div className={[
-          'absolute right-0 top-full z-50 min-w-full',
-          'bg-white dark:bg-slate-900',
-          'border-2 border-t-0 border-slate-200 dark:border-white/10 shadow-2xl animate-dropdown-in',
-          isSmall ? 'rounded-b-xl' : 'rounded-b-2xl',
-          'p-1.5 space-y-1.5',
-        ].join(' ')}>
-          {options.map(o => (
-            <button key={o.value} type="button"
-              onClick={() => { onChange(o.value); setOpen(false); }}
-              className={[
-                'w-full text-left px-3 font-semibold transition-colors rounded-xl',
-                isSmall ? 'py-2 text-xs' : 'py-2.5 text-sm',
-                o.value === value
-                  ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 dark:text-emerald-400'
-                  : 'hover:bg-slate-100 dark:hover:bg-white/10',
-              ].join(' ')}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ─── App principal ────────────────────────────────────────────────────────────
-const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore }) => {
-  // Navegacion
-  const [currentScreen, setCurrentScreen] = useState('home');
+  // ─── Selecciones ──────────────────────────────────────────────────────────
   const [selectedDemanda, setSelectedDemanda] = useState(null);
-  const [selectedTienda, setSelectedTienda] = useState(null);
-  const [activeTab, setActiveTab] = useState('demandas');
+  const [selectedTienda,  setSelectedTienda]  = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [editingDemanda,  setEditingDemanda]  = useState(null);
 
-  // Modales
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
-  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
-  const [showChat, setShowChat] = useState(null);
-  const [showConfirm, setShowConfirm] = useState(null); // { title, msg, onOk }
-  const profileDropdownRef = useRef(null);
+  // ─── Modales / overlays ───────────────────────────────────────────────────
+  const [showNotifications,  setShowNotifications]  = useState(false);
+  const [notifClosing,       setNotifClosing]       = useState(false);
+  const [notifAnchor,        setNotifAnchor]        = useState({ top: 60, right: 16 });
+  const notifBtnRef = useRef(null);
+  const [showProfile,        setShowProfile]        = useState(false);
+  const [showProfileDropdown,setShowProfileDropdown]= useState(false);
+  const [profileDropdownClosing, setProfileDropdownClosing] = useState(false);
+  const [showChat,           setShowChat]           = useState(null);
+  const [chatCollapsed,      setChatCollapsed]      = useState(false);
+  const [showConfirm,        setShowConfirm]        = useState(null);
+  const [showMobileMenu,     setShowMobileMenu]     = useState(false);
+  const [mobileMenuClosing,  setMobileMenuClosing]  = useState(false);
+  closeOverlaysRef.current = () => {
+    setShowProfile(false);
+    setShowMobileMenu(false);
+    setMobileMenuClosing(false);
+    setShowNotifications(false);
+  };
+  const [nudgeModal,         setNudgeModal]         = useState(null);
+  const [createSheetOpen,    setCreateSheetOpen]    = useState(false);
+  const [createSheetClosing, setCreateSheetClosing] = useState(false);
+  const [sidebarExpanded,    setSidebarExpanded]    = useState(false);
+  const [sidebarPinned,      setSidebarPinned]      = useState(() => localStorage.getItem('lokal-sidebar-pinned') === 'true');
 
-  // Crear/Editar demanda
-  const [editingDemanda, setEditingDemanda] = useState(null);
+  // ─── Guest mode: Login Bottom Sheet ────────────────────────────────────────
+  const [loginSheet, setLoginSheet] = useState({ open: false, context: 'default' });
+  const openLoginSheet = (context = 'default') => setLoginSheet({ open: true, context });
+  const closeLoginSheet = () => setLoginSheet({ open: false, context: 'default' });
+  const requireAuth = (action, context = 'default') => {
+    if (firebaseUser) { action(); return; }
+    openLoginSheet(context);
+  };
+  const isGuest = !firebaseUser;
 
-  // Home
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState('recientes');
-  const [filterCategory, setFilterCategory] = useState(null); // id de categoría raíz para filtrar
+  // ─── Admin ────────────────────────────────────────────────────────────────
+  const [suspended, setSuspended] = useState({ stores: new Set(), users: new Set(), products: new Set() });
 
-  // Chat
-  const [chatHistories, setChatHistories] = useState({});
-  const [chatMessage, setChatMessage] = useState('');
-  const chatEndRef = useRef(null);
+  const handleAdminAction = async (accion, tipo, id, motivo = '') => {
+    const token = await firebaseUser?.getIdToken();
+    if (!token) return;
+    try {
+      const res = await fetch('/.netlify/functions/admin-actions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ accion, tipo, id, motivo }),
+      });
+      if (res.ok) {
+        // Refrescar datos
+        if (tipo === 'store' || tipo === 'tienda') fetchTiendas();
+        else if (tipo === 'product' || tipo === 'producto') fetchOfertas();
+        else if (tipo === 'demand' || tipo === 'demanda') fetchDemandas();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert('Error: ' + (err.error || 'No se pudo realizar la acción'));
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
 
-  // Notificaciones (stateful)
-  const [notifList, setNotifList] = useState([
-    { id: 1, tipo: 'respuesta', mensaje: 'TecnoStore respondio tu demanda de Cable USB-C', tiempo: new Date(Date.now() - 5 * 60000).toISOString(), leido: false, demandaId: null },
-    { id: 2, tipo: 'oferta', mensaje: 'Nueva oferta cerca: Mouse Gaming en TecnoStore', tiempo: new Date(Date.now() - 60 * 60000).toISOString(), leido: false, demandaId: null },
-    { id: 3, tipo: 'sistema', mensaje: 'Tu demanda fue vista por 8 tiendas', tiempo: new Date(Date.now() - 2 * 3600000).toISOString(), leido: true, demandaId: null },
-  ]);
+  const handleAdminSuspend  = (type, id) => handleAdminAction('suspender', type, id);
+  const handleAdminRestore  = (type, id) => handleAdminAction('activar', type, id);
+  const handleAdminDelete   = (type, id) => handleAdminAction('eliminar', type, id);
 
-  // Categorías (base + custom del servidor)
+  // ─── Búsqueda y filtros ───────────────────────────────────────────────────
+  const [searchQuery,       setSearchQuery]       = useState('');
+  const [searchResultsQuery,setSearchResultsQuery]= useState('');
+  const [sortBy,            setSortBy]            = useState('recientes');
+  const [filterCategory,    setFilterCategory]    = useState(null);
+  const [homeActiveCat,     setHomeActiveCat]     = useState(null);
+  const [ofertasStoreFilter,setOfertasStoreFilter]= useState(null);
+  const [mapaFocusStore,    setMapaFocusStore]    = useState(null);
+  const [mapaFocusProduct,  setMapaFocusProduct]  = useState(null);
+  const [mapaAutoRoute,     setMapaAutoRoute]     = useState(false);
+
+  // ─── Búsqueda global (desktop) ───────────────────────────────────────────
+  const [gQuery,     setGQuery]     = useState('');
+  const [gOpen,      setGOpen]      = useState(false);
+  const [gAnchorRect,setGAnchorRect]= useState(null);
+
+  // ─── Chat ─────────────────────────────────────────────────────────────────
+  const [chatHistories,    setChatHistories]    = useState({});
+  const [chatMessage,      setChatMessage]      = useState('');
+  const [chatConversations,setChatConversations]= useState({});
+
+  // ─── Notificaciones ───────────────────────────────────────────────────────
+  const [notifList, setNotifList] = useState([]);
+
+  // ─── Datos ────────────────────────────────────────────────────────────────
   const [allCategories, setAllCategories] = useState(CATEGORIES);
+  const [allDemandas,   setAllDemandas]   = useState([]);
+  const [loadingDemandas,setLoadingDemandas]= useState(true);
+  const [errorDemandas, setErrorDemandas] = useState(null);
+  const [allOfertas,    setAllOfertas]    = useState(MOCK_OFERTAS);
+  const [loadingOfertas,setLoadingOfertas]= useState(true);
+  const [userRole,      setUserRole]      = useState('usuario');
+  const [toastMsg,      setToastMsg]      = useState(null);
+
+  // ─── Refs ─────────────────────────────────────────────────────────────────
+  const mainScrollRef      = useRef(null);
+  const profileDropdownRef = useRef(null);
+  const chatEndRef         = useRef(null);
+
+  // ─── Helpers derivados ────────────────────────────────────────────────────
+  const visibleOfertas     = allOfertas;
+  const notifAnimClose = () => setNotifClosing(true);
+  const openNotifications  = (btnEl) => {
+    if (isGuest) { openLoginSheet('default'); return; }
+    if (showNotifications) { notifAnimClose(); return; }
+    setShowProfileDropdown(false);
+    setProfileDropdownClosing(false);
+    setShowProfile(false);
+    const el = (btnEl instanceof Element ? btnEl : null) || notifBtnRef.current;
+    if (el) {
+      const r = el.getBoundingClientRect();
+      setNotifAnchor({ top: r.bottom + 8, right: window.innerWidth - r.right });
+    }
+    setNotifClosing(false);
+    setShowNotifications(true);
+  };
+  const profileDropdownAnimClose = () => setProfileDropdownClosing(true);
+  const toggleProfileMenu = () => {
+    if (showProfileDropdown) { profileDropdownAnimClose(); return; }
+    setShowNotifications(false);
+    setProfileDropdownClosing(false);
+    setShowProfileDropdown(true);
+  };
+  const showToast          = (msg, type = 'info') => { setToastMsg({ msg, type }); setTimeout(() => setToastMsg(null), 3000); };
+
+  // Cargar categorías custom + demandas + ofertas al montar
+  const createCategory = async (name, parentId = null) => {
+    const res = await fetch(`${API_BASE}/categories`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, parentId }),
+    });
+    const cat = await res.json();
+    setAllCategories(prev => prev.find(c => c.id === cat.id) ? prev : [...prev, cat]);
+    return cat;
+  };
 
   useEffect(() => {
     fetch(`${API_BASE}/categories`)
       .then(r => r.ok ? r.json() : [])
-      .then(custom => {
-        if (custom.length > 0) {
-          setAllCategories([...CATEGORIES, ...custom]);
-        }
-      })
+      .then(custom => { if (custom.length > 0) setAllCategories([...CATEGORIES, ...custom]); })
       .catch(() => {});
+    fetchDemandas();
+    // fetchOfertas y fetchTiendas se llaman desde el useEffect de demoMode
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const createCategory = async (name, parentId = null) => {
-    const res = await fetch(`${API_BASE}/categories`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, parentId }),
-    });
-    const cat = await res.json();
-    setAllCategories(prev =>
-      prev.find(c => c.id === cat.id) ? prev : [...prev, cat]
-    );
-    return cat;
-  };
-
-  // Demandas
-  const [allDemandas, setAllDemandas] = useState([]);
-  const [loadingDemandas, setLoadingDemandas] = useState(true);
-  const [errorDemandas, setErrorDemandas] = useState(null);
-
-  useEffect(() => { fetchDemandas(); }, []);
 
   useEffect(() => {
     if (showChat) chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistories, showChat]);
+
+  // Re-fetch cuando cambia demoMode
+  useEffect(() => {
+    fetchOfertas();
+    fetchTiendas();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoMode]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (!e.target.closest('[data-gsearch]') && !e.target.closest('[data-gdropdown]')) setGOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Cargar notificaciones reales cuando el usuario está autenticado
+  useEffect(() => {
+    if (!firebaseUser) { setNotifList([]); return; }
+    apiFetch(`${API_BASE}/notifications`, { authRequired: true })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { if (Array.isArray(data)) setNotifList(data); })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firebaseUser?.uid]);
+
+  // Sincronizar userRole con el perfil que viene de Root
+  useEffect(() => {
+    if (userProfile?.role) {
+      setUserRole(userProfile.role);
+    } else if (firebaseUser?.uid) {
+      // Fallback: leer de localStorage
+      try {
+        const raw = localStorage.getItem(`lokal-user-profile:${firebaseUser.uid}`);
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (parsed?.role) setUserRole(parsed.role);
+      } catch { /* ignore */ }
+    }
+  }, [userProfile, firebaseUser]);
+
+  // ─── hasTienda DEPRECADO: ahora se deriva de userRole ────────────────────
+  // Tiendas existentes se detectan por userRole === 'empresa'
+  // const hasTienda = userRole === 'empresa';
+
+  // Ocultar scrollbar nativa cuando el menú mobile está abierto
+  useEffect(() => {
+    document.body.style.overflow = showMobileMenu ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [showMobileMenu]);
+
+  // ─── Back button (Android / PWA) ─────────────────────────────────────────
+  // Mantiene una entrada en history por cada "capa" abierta.
+  // Cuando el usuario aprieta atrás, popstate la consume y cerramos la capa.
+  useEffect(() => {
+    const hasLayer =
+      showMobileMenu || showNotifications || showProfile ||
+      (showChat && !chatCollapsed) || showConfirm || createSheetOpen || !!nudgeModal ||
+      navStack.length > 1;
+
+    if (hasLayer) {
+      window.history.pushState({ lokal: true }, '');
+    }
+  }, [
+    showMobileMenu, showNotifications, showProfile,
+    showChat, showConfirm, createSheetOpen, nudgeModal,
+    navStack.length,
+  ]);
+
+  useEffect(() => {
+    const onPop = () => {
+      // Cerrar en orden de prioridad: modales primero, navegación al final
+      if (showConfirm)       { setShowConfirm(null);             return; }
+      if (nudgeModal)        { setNudgeModal(null);              return; }
+      if (createSheetOpen)   { setCreateSheetOpen(false);        return; }
+      if (showChat && !chatCollapsed) { setChatCollapsed(true);   return; }
+      if (showChat && chatCollapsed) { setShowChat(null); setChatCollapsed(false); return; }
+      if (showProfile)       { setShowProfile(false);            return; }
+      if (showNotifications) { setShowNotifications(false);      return; }
+      if (showMobileMenu)    { setShowMobileMenu(false); setMobileMenuClosing(false); return; }
+      if (navStack.length > 1) { goBack(); return; }
+      // Si no hay nada que cerrar dejamos que el browser maneje (sale de la PWA)
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [
+    showConfirm, nudgeModal, createSheetOpen, showChat, chatCollapsed,
+    showProfile, showNotifications, showMobileMenu, navStack,
+  ]);
 
   // ─── API ──────────────────────────────────────────────────────────────────
   const fetchDemandas = async () => {
     setLoadingDemandas(true);
     setErrorDemandas(null);
     try {
-      const res = await fetch(`${API_BASE}/demandas`);
+      const res = await apiFetch(`${API_BASE}/demandas?mine=1`, { authRequired: true });
       if (!res.ok) throw new Error('Error al cargar');
       setAllDemandas(await res.json());
     } catch (err) {
@@ -360,13 +372,48 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore 
     }
   };
 
+  const fetchOfertas = async () => {
+    try {
+      const res = await apiFetch(`${API_BASE}/ofertas?activa=true`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          if (demoMode) {
+            setAllOfertas([...MOCK_OFERTAS, ...data.filter(o => !MOCK_OFERTAS.some(m => m.id === o.id))]);
+          } else {
+            setAllOfertas(data); // vacío si no hay reales
+          }
+        }
+      }
+    } catch { /* silencioso */ } finally {
+      setLoadingOfertas(false);
+    }
+  };
+
+  const fetchTiendas = async () => {
+    try {
+      const res = await apiFetch(`${API_BASE}/tiendas-crud`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          if (demoMode) {
+            setAllTiendas([...MOCK_TIENDAS, ...data.filter(t => !MOCK_TIENDAS.some(m => m.id === t.id))]);
+          } else {
+            setAllTiendas(data); // vacío si no hay reales
+          }
+        }
+      }
+    } catch { /* silencioso */ }
+  };
+
   const updateDemandaEstado = async (id, estado) => {
     // Optimista
     setAllDemandas(prev => prev.map(d => d.id === id ? { ...d, estado } : d));
     if (selectedDemanda?.id === id) setSelectedDemanda(d => ({ ...d, estado }));
     try {
-      await fetch(`${API_BASE}/demandas`, {
+      await apiFetch(`${API_BASE}/demandas`, {
         method: 'PATCH',
+        authRequired: true,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, estado }),
       });
@@ -375,44 +422,82 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore 
 
   const deleteDemanda = async (id) => {
     setAllDemandas(prev => prev.filter(d => d.id !== id));
-    setCurrentScreen('home');
+    navRoot('home');
     try {
-      await fetch(`${API_BASE}/demandas?id=${id}`, { method: 'DELETE' });
+      await apiFetch(`${API_BASE}/demandas?id=${id}`, { method: 'DELETE', authRequired: true });
     } catch { /* silencioso */ }
   };
 
   // ─── Chat ─────────────────────────────────────────────────────────────────
-  const openChat = (tienda) => {
+  const [chatProductPicker, setChatProductPicker] = useState(false);
+  const [chatPendingAttach, setChatPendingAttach] = useState(null); // product to attach
+
+  const openChat = (tienda, contextProduct = null) => {
     const key = `${tienda.tienda}-${tienda.id}`;
-    if (!chatHistories[key]) {
-      setChatHistories(prev => ({
-        ...prev,
-        [key]: [{ id: 1, from: 'tienda', text: tienda.mensaje || `Hola! Puedo ayudarte con lo que buscas.`, time: tienda.tiempoRespuesta || 'Ahora' }],
-      }));
-    }
-    setShowChat({ ...tienda, chatKey: key });
+    setShowChat({ ...tienda, chatKey: key, contextProduct });
+    setChatCollapsed(false);
+    setChatProductPicker(false);
+    setChatPendingAttach(null);
+    // Register/update conversation metadata and clear unread
+    const ctx = contextProduct
+      ? { type: 'product', label: contextProduct.titulo, productId: contextProduct.id, imagen: contextProduct.imagenes?.[0] || contextProduct.foto || null }
+      : { type: 'store', label: tienda.tienda };
+    setChatConversations(prev => ({
+      ...prev,
+      [key]: { ...(prev[key] || {}), id: tienda.id, tienda: tienda.tienda, foto: tienda.foto, telefono: tienda.telefono, unread: 0, direction: 'sent', context: prev[key]?.context || ctx, status: prev[key]?.status === 'closed' ? 'closed' : 'read' },
+    }));
   };
 
-  const sendChatMessage = () => {
-    if (!chatMessage.trim() || !showChat) return;
+  const sendChatMessage = async (attachProduct = null) => {
+    const hasText = chatMessage.trim();
+    const attach = attachProduct || chatPendingAttach;
+    if (!hasText && !attach) return;
+    if (!showChat || !firebaseUser) return;
+    const text = hasText || '';
     const key = showChat.chatKey;
-    const msg = { id: Date.now(), from: 'user', text: chatMessage.trim(), time: 'Ahora' };
-    setChatHistories(prev => ({ ...prev, [key]: [...(prev[key] || []), msg] }));
+    const optimistic = {
+      id: `opt-${Date.now()}`,
+      from: 'user',
+      text,
+      time: 'Ahora',
+      ...(attach ? { attachment: { type: 'product', id: attach.id, titulo: attach.titulo, precio: attach.precio, imagen: attach.imagenes?.[0] || attach.foto || null } } : {}),
+    };
+    setChatHistories(prev => ({ ...prev, [key]: [...(prev[key] || []), optimistic] }));
     setChatMessage('');
-    setTimeout(() => {
-      const reply = {
-        id: Date.now() + 1,
-        from: 'tienda',
-        text: TIENDA_REPLIES[Math.floor(Math.random() * TIENDA_REPLIES.length)],
-        time: 'Ahora',
-      };
-      setChatHistories(prev => ({ ...prev, [key]: [...(prev[key] || []), reply] }));
-    }, 1200);
+    setChatPendingAttach(null);
+    setChatConversations(prev => ({
+      ...prev,
+      [key]: { ...(prev[key] || { id: showChat.id, tienda: showChat.tienda, foto: showChat.foto, telefono: showChat.telefono }), lastMsg: attach ? `📦 ${attach.titulo}` : text, lastTime: new Date().toISOString(), unread: 0 },
+    }));
+    try {
+      await apiFetch(`${API_BASE}/messages`, {
+        method: 'POST',
+        authRequired: true,
+        body: JSON.stringify({ tiendaId: showChat.id, text, attachment: optimistic.attachment || null }),
+      });
+    } catch { /* silencioso — el poll lo corrige */ }
   };
 
   // ─── Notificaciones ───────────────────────────────────────────────────────
-  const markNotifRead = (id) => setNotifList(prev => prev.map(n => n.id === id ? { ...n, leido: true } : n));
-  const markAllRead = () => setNotifList(prev => prev.map(n => ({ ...n, leido: true })));
+  const markNotifRead = (id) => {
+    setNotifList(prev => prev.map(n => n.id === id ? { ...n, leido: true } : n));
+    if (firebaseUser) {
+      apiFetch(`${API_BASE}/notifications`, {
+        method: 'PATCH', authRequired: true,
+        body: JSON.stringify({ ids: [id] }),
+      }).catch(() => {});
+    }
+  };
+
+  const markAllRead = () => {
+    setNotifList(prev => prev.map(n => ({ ...n, leido: true })));
+    if (firebaseUser) {
+      apiFetch(`${API_BASE}/notifications`, {
+        method: 'PATCH', authRequired: true,
+        body: JSON.stringify({ all: true }),
+      }).catch(() => {});
+    }
+  };
 
   const addNotif = (mensaje, tipo = 'sistema', demandaId = null) => {
     setNotifList(prev => [{
@@ -420,27 +505,11 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore 
     }, ...prev]);
   };
 
-  // ─── Datos mock ───────────────────────────────────────────────────────────
-  const tiendas = [
-    { id: 1, nombre: 'TecnoStore', rubro: 'Electronica y Computacion', categoryIds: ['electronica', 'computacion'], distancia: '0.8 km', rating: 4.7, foto: '📱', horario: 'Abierto hasta 20:00', abierto: true, telefono: '3456001234' },
-    { id: 2, nombre: 'Electro Total', rubro: 'Electronica', categoryIds: ['electronica'], distancia: '1.2 km', rating: 4.5, foto: '⚡', horario: 'Cierra a las 19:00', abierto: true, telefono: '3456005678' },
-    { id: 3, nombre: 'Ferreteria Central', rubro: 'Ferreteria y Construccion', categoryIds: ['construccion'], distancia: '0.5 km', rating: 4.8, foto: '🔧', horario: 'Abierto ahora', abierto: true, telefono: '3456009012' },
-    { id: 4, nombre: 'CompuMundo', rubro: 'Computacion', categoryIds: ['computacion'], distancia: '2.5 km', rating: 4.6, foto: '💻', horario: 'Abierto hasta 21:00', abierto: true, telefono: '3456003456' },
-  ];
+  const [allTiendas, setAllTiendas] = useState([]);
+  const tiendas = allTiendas;
+  const canPostNewProduct = userRole !== 'usuario';
 
-  const ofertas = [
-    { id: 1, tienda: 'TecnoStore', tiendaId: 1, titulo: 'Mouse Logitech G203', descripcion: 'Gaming RGB, 8000 DPI', precio: 15900, foto: '🖱️', distancia: '0.8 km' },
-    { id: 2, tienda: 'Ferreteria Central', tiendaId: 3, titulo: 'Taladro percutor 13mm', descripcion: 'Incluye 10 mechas y maletin', precio: null, foto: '🔨', distancia: '0.5 km' },
-    { id: 3, tienda: 'CompuMundo', tiendaId: 4, titulo: 'Teclado mecanico', descripcion: 'Switches blue, retroiluminado RGB', precio: 28500, foto: '⌨️', distancia: '2.5 km' },
-    { id: 4, tienda: 'TecnoStore', tiendaId: 1, titulo: 'Hub USB-C 7 en 1', descripcion: 'HDMI 4K, USB 3.0, SD, carga rapida', precio: 12400, foto: '🔌', distancia: '0.8 km' },
-  ];
-
-  const getMockRespuestas = (demanda) => [
-    { id: 101, tienda: 'TecnoStore', distancia: '0.8 km', mensaje: `Tenemos exactamente lo que buscas! Calidad garantizada.`, precio: 8500, foto: '📱', tiempoRespuesta: 'Hace 1 hora', horario: 'Abierto hasta 20:00', rating: 4.7 },
-    { id: 102, tienda: 'Electro Total', distancia: '1.2 km', mensaje: 'Tenemos varias opciones disponibles. Veni a verlas.', precio: 7200, foto: '⚡', tiempoRespuesta: 'Hace 2 horas', horario: 'Cierra a las 19:00', rating: 4.5 },
-  ];
-
-  // ─── Filtros y sort ───────────────────────────────────────────────────────
+    // ─── Filtros y sort ───────────────────────────────────────────────────────
   const demandasActivas = allDemandas.filter(d => d.estado === 'activa');
   const demandasHistorial = allDemandas.filter(d => d.estado !== 'activa');
 
@@ -461,7 +530,7 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore 
 
   // Set de ids raíz presentes en ofertas
   const ofertaRootIds = new Set(
-    ofertas.map(o => getRootCategoryId(o.categoryId)).filter(Boolean)
+    visibleOfertas.map(o => getRootCategoryId(o.categoryId)).filter(Boolean)
   );
 
   const sortedDemandas = [...demandasActivas]
@@ -479,7 +548,7 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore 
     })
     .sort((a, b) => sortBy === 'respuestas' ? (b.respuestas - a.respuestas) : (new Date(b.createdAt) - new Date(a.createdAt)));
 
-  const filteredOfertas = ofertas.filter(o => {
+  const filteredOfertas = visibleOfertas.filter(o => {
     const q = searchQuery.toLowerCase();
     const matchesSearch = o.titulo.toLowerCase().includes(q) || o.descripcion.toLowerCase().includes(q);
     const matchesCategory = !filterCategory || (() => {
@@ -492,6 +561,144 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore 
 
   const unreadCount = notifList.filter(n => !n.leido).length;
 
+  // ─── Mobile Nav Overlay (full-screen "Más") ──────────────────────────────
+  const closeMobileMenu = () => { setMobileMenuClosing(true); };
+  const onMobileMenuAnimEnd = () => {
+    if (mobileMenuClosing) { setMobileMenuClosing(false); setShowMobileMenu(false); }
+  };
+  const menuNav = (screen) => {
+    setShowMobileMenu(false);
+    setMobileMenuClosing(false);
+    navRoot(screen);
+  };
+
+  const MobileMenu = () => {
+    const firstName = firebaseUser?.displayName?.split(' ')[0] || null;
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches';
+
+    const menuItem = (Icon, label, onClick, badge) => (
+      <button
+        key={label}
+        onClick={onClick}
+        className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-white/6 active:bg-slate-100 dark:active:bg-white/8 transition-colors text-left">
+        <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/8 flex items-center justify-center shrink-0 relative">
+          <Icon className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+          {badge > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center">{badge > 9 ? '9+' : badge}</span>}
+        </div>
+        <span className="font-semibold text-[15px] text-slate-700 dark:text-slate-200">{label}</span>
+        <ChevronRight className="w-4 h-4 text-slate-300 dark:text-white/20 ml-auto" />
+      </button>
+    );
+
+    return (
+      <div
+        className={`lg:hidden fixed inset-0 z-[4000] flex flex-col bg-[#f7f8fa] dark:bg-[#0a0d16] ${mobileMenuClosing ? 'animate-overlay-out pointer-events-none' : 'animate-overlay-in'}`}
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+        onAnimationEnd={onMobileMenuAnimEnd}
+      >
+        {/* Header con logo completo + X */}
+        <div className="flex items-center justify-between px-4 h-14 border-b border-slate-200/60 dark:border-white/8 shrink-0">
+          <LogoFull size={26} className="text-slate-900 dark:text-white" />
+          <button
+            onClick={closeMobileMenu}
+            className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-slate-200 dark:hover:bg-white/10 transition-colors">
+            <X className="w-5 h-5 text-slate-500 dark:text-slate-400" />
+          </button>
+        </div>
+
+        {/* Perfil / Guest CTA */}
+        <div className="px-5 py-5 border-b border-slate-200/60 dark:border-white/8 shrink-0">
+          {isGuest ? (
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand/20 to-brand/5 border border-brand/20 flex items-center justify-center shrink-0">
+                <User className="w-7 h-7 text-brand" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-black text-lg truncate">¡Hola! 👋</p>
+                <p className="text-sm text-slate-400 truncate">Entrá para guardar, pedir y chatear</p>
+              </div>
+              <button
+                onClick={() => { setShowMobileMenu(false); openLoginSheet('default'); }}
+                className="shrink-0 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold px-4 py-2 rounded-xl text-sm"
+              >
+                Entrar
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl overflow-hidden ring-2 ring-brand/30 shrink-0">
+                {firebaseUser?.photoURL
+                  ? <img src={firebaseUser.photoURL} alt="" className="w-full h-full object-cover" />
+                  : <div className="w-full h-full bg-brand flex items-center justify-center font-bold text-white text-xl">{(firebaseUser?.displayName || 'U')[0].toUpperCase()}</div>
+                }
+              </div>
+              <div className="min-w-0">
+                <p className="font-black text-lg truncate">{firebaseUser?.displayName || 'Usuario'}</p>
+                <p className="text-sm text-slate-400 truncate">{greeting}{firstName ? `, ${firstName}` : ''} 👋</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Nav items — scrollable */}
+        <div className="flex-1 overflow-y-auto px-3 py-3" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 6rem)' }}>
+          <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-4 pb-1 pt-2">Explorar</p>
+          {menuItem(Home,       'Inicio',         () => menuNav('home'))}
+          {menuItem(Flame,      'Ofertas',         () => menuNav('todas-ofertas'))}
+          {menuItem(Store,      'Tiendas',         () => menuNav('tiendas'))}
+          {menuItem(MapPin,     'Mapa',            () => menuNav('mapa'))}
+          {menuItem(TrendingUp, 'Oportunidades',   () => menuNav('oportunidades'))}
+
+          {!isGuest && (
+            <>
+              <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-4 pb-1 pt-4">Mi cuenta</p>
+              {menuItem(User,           'Yo / Mis cosas',  () => menuNav('mis-cosas'))}
+              {menuItem(MessageSquare,  'Mensajes',        () => menuNav('chats'), Object.values(chatConversations).reduce((s, c) => s + (c.unread || 0), 0) || null)}
+              {menuItem(Package,        'Mis demandas',    () => menuNav('mis-demandas'))}
+              {menuItem(Tag,            'Mis productos',   () => menuNav('mis-productos'))}
+              {menuItem(History,        'Historial',       () => menuNav('historial'))}
+            </>
+          )}
+
+          {onOpenDashboard && (
+            <>
+              <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-4 pb-1 pt-4">Mi tienda</p>
+              {menuItem(Store, 'Panel de mi tienda', () => { setShowMobileMenu(false); onOpenDashboard(); })}
+            </>
+          )}
+
+          <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-4 pb-1 pt-4">Configuración</p>
+          {!isGuest && menuItem(Bell, 'Notificaciones', () => { setShowMobileMenu(false); openNotifications(); }, unreadCount)}
+          <button
+            onClick={toggleTheme}
+            className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl hover:bg-slate-100 dark:hover:bg-white/6 transition-colors text-left">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/8 flex items-center justify-center shrink-0">
+              {isDark ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5 text-slate-600" />}
+            </div>
+            <span className="font-semibold text-[15px] text-slate-700 dark:text-slate-200">
+              {isDark ? 'Modo claro' : 'Modo oscuro'}
+            </span>
+          </button>
+          {isAdmin && menuItem(ShieldCheck, 'Panel Admin', () => menuNav('admin'))}
+
+          {!isGuest && (
+            <div className="px-1 pt-4">
+              <button
+                onClick={() => { setShowMobileMenu(false); setTimeout(onLogout, 100); }}
+                className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors text-left group">
+                <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/8 group-hover:bg-rose-100 dark:group-hover:bg-rose-500/15 flex items-center justify-center shrink-0 transition-colors">
+                  <LogOut className="w-5 h-5 text-slate-500 group-hover:text-rose-500 transition-colors" />
+                </div>
+                <span className="font-semibold text-[15px] text-slate-500 group-hover:text-rose-500 dark:group-hover:text-rose-400 transition-colors">Cerrar sesión</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // ─── Confirm Modal ────────────────────────────────────────────────────────
   const ConfirmModal = ({ title, msg, onOk, onCancel }) => (
     <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
@@ -500,7 +707,7 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore 
         <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">{msg}</p>
         <div className="grid grid-cols-2 gap-3">
           <button onClick={onCancel} className="py-3 bg-slate-100 rounded-2xl font-semibold">Cancelar</button>
-          <button onClick={onOk} className="py-3 bg-slate-900 dark:bg-emerald-500 text-white rounded-2xl font-semibold">Confirmar</button>
+          <button onClick={onOk} className="py-3 bg-slate-900 dark:bg-primary text-white rounded-2xl font-semibold">Confirmar</button>
         </div>
       </div>
     </div>
@@ -508,94 +715,140 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore 
 
   // ─── Sidebar Desktop ──────────────────────────────────────────────────────
   const DesktopSidebar = () => {
-    const [expanded, setExpanded] = React.useState(false);
+    const expanded = sidebarExpanded;
+    const setExpanded = setSidebarExpanded;
+    const sidebarRef = React.useRef(null);
+    const isHome = currentScreen === 'home';
+    const [tooltip, setTooltip] = React.useState(null); // { label, y, icon: Icon }
 
     const navItems = [
-      { label: 'Mis Demandas', icon: Package, screen: 'home', tab: 'demandas' },
-      { label: 'Ofertas',      icon: Tag,     screen: 'home', tab: 'ofertas'  },
-      { label: 'Tiendas',      icon: Store,   screen: 'tiendas'               },
-      { label: 'Historial',    icon: History, screen: 'historial'              },
+      { label: 'Inicio',        icon: Home,         screen: 'home'          },
+      { divider: true, key: 'explorar', sectionLabel: 'Explorar' },
+      ...(isModuleEnabled('ofertas')       ? [{ label: 'Ofertas',       icon: Flame,         screen: 'todas-ofertas' }] : []),
+      { label: 'Tiendas',       icon: Store,         screen: 'tiendas'       },
+      ...(isModuleEnabled('mapa')          ? [{ label: 'Mapa',          icon: MapPin,        screen: 'mapa'          }] : []),
+      ...(isModuleEnabled('oportunidades') ? [{ label: 'Oportunidades', icon: TrendingUp,    screen: 'oportunidades' }] : []),
+      { divider: true, key: 'cuenta', sectionLabel: 'Mi cuenta' },
+      { label: 'Yo',            icon: User,          screen: 'mis-cosas'     },
+      ...(isModuleEnabled('mensajes')      ? [{ label: 'Mensajes',      icon: MessageSquare, screen: 'chats'         }] : []),
+      ...(isModuleEnabled('demandas')      ? [{ label: 'Mis demandas',  icon: Package,       screen: 'mis-demandas'  }] : []),
+      { label: 'Mis productos', icon: Tag,           screen: 'mis-productos' },
+      { label: 'Historial',     icon: History,       screen: 'historial'     },
+      ...(isAdmin ? [{ divider: true, key: 'admin-div' }, { label: 'Admin', icon: ShieldCheck, screen: 'admin' }] : []),
     ];
 
     // Ancho colapsado = 64px (4rem), expandido = 224px (14rem)
     const W_COLLAPSED = 64;
     const W_EXPANDED  = 224;
+    const handleSidebarMouseEnter = () => {};
+    const handleSidebarMouseLeave = () => {};
+    const togglePin = () => {
+      const next = !expanded;
+      setSidebarPinned(next);
+      setExpanded(next);
+      localStorage.setItem('lokal-sidebar-pinned', String(next));
+    };
+
 
     return (
+      <>
       <div
-        className="hidden lg:flex lg:flex-col bg-white dark:bg-[#111827] border-r border-slate-100 dark:border-white/8 h-screen sticky top-0 shrink-0 overflow-hidden"
+        ref={sidebarRef}
+        onMouseEnter={handleSidebarMouseEnter}
+        onMouseLeave={handleSidebarMouseLeave}
+        className="hidden lg:flex lg:flex-col bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-white/8 h-screen fixed top-0 left-0 z-[200] overflow-hidden"
         style={{
           width: expanded ? W_EXPANDED : W_COLLAPSED,
-          transition: 'width 260ms cubic-bezier(0.4,0,0.2,1)',
+          transition: 'width 380ms cubic-bezier(0.16,1,0.3,1)',
         }}
-        onMouseEnter={() => setExpanded(true)}
-        onMouseLeave={() => setExpanded(false)}
       >
         {/* ── Logo + botón ── */}
-        <div className="border-b border-slate-100 dark:border-white/8 py-4 px-3 shrink-0">
-          {/* Logo */}
-          <div className="flex items-center h-10 mb-4 overflow-hidden">
-            <div className="w-10 h-10 shrink-0 flex items-center justify-center">
-              <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center">
-                <Store className="w-4 h-4 text-white" />
-              </div>
-            </div>
-            <div
-              className="overflow-hidden whitespace-nowrap ml-2"
-              style={{
-                opacity: expanded ? 1 : 0,
-                transition: 'opacity 180ms ease',
-                transitionDelay: expanded ? '80ms' : '0ms',
-              }}
+        <div className="border-b border-slate-100 dark:border-white/8 shrink-0">
+          {/* Logo + toggle pin */}
+          <div className={`flex items-center h-14 px-3 overflow-hidden gap-1 ${expanded ? '' : 'justify-center'}`}>
+            {expanded && (
+              <button className="ui-chip flex items-center gap-2 px-2 flex-1 text-slate-900 dark:text-white" style={{ height: 42 }}>
+                <LogoFull size={18} className="text-slate-900 dark:text-white" />
+              </button>
+            )}
+            <button
+              onClick={togglePin}
+              title={sidebarPinned ? 'Soltar sidebar' : 'Fijar sidebar'}
+              className={`ui-chip ui-icon-btn shrink-0 transition-colors ${sidebarPinned ? 'text-primary bg-primary/10' : 'text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/8'}`}
             >
-              <p className="text-base font-black tracking-tight text-slate-900 dark:text-white leading-none">Lokal</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">Marketplace local</p>
-            </div>
+              <PanelLeft className="w-4 h-4" />
+            </button>
           </div>
 
           {/* Botón nueva demanda */}
-          <button
-            onClick={() => { setEditingDemanda(null); setCurrentScreen('crear'); }}
-            className="w-full flex items-center bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white rounded-xl transition-colors overflow-hidden"
-            style={{ height: 38 }}
-          >
-            <div className="w-10 h-10 shrink-0 flex items-center justify-center">
-              <Camera className="w-4 h-4" />
-            </div>
-            <span
-              className="text-sm font-semibold whitespace-nowrap overflow-hidden"
-              style={{
-                opacity: expanded ? 1 : 0,
-                transition: 'opacity 160ms ease',
-                transitionDelay: expanded ? '90ms' : '0ms',
-              }}
+          <div className="px-3 pb-3">
+            <button
+              onClick={() => { setEditingDemanda(null); navigate('crear'); }}
+              className="w-full flex items-center bg-primary hover:bg-primary-hover active:bg-primary-hover text-white ui-chip transition-colors overflow-hidden"
+              style={{ height: 40 }}
             >
-              Nueva Demanda
-            </span>
-          </button>
+              <div className="ui-icon-btn shrink-0">
+                <Camera className="w-4 h-4" />
+              </div>
+              <span
+                className="text-sm font-semibold whitespace-nowrap overflow-hidden"
+                style={{
+                  opacity: expanded ? 1 : 0,
+                  transition: 'opacity 160ms ease',
+                  transitionDelay: expanded ? '90ms' : '0ms',
+                }}
+              >
+                Nueva Demanda
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* ── Nav items ── */}
-        <nav className="flex-1 py-3 px-3 space-y-0.5 overflow-y-auto overflow-x-hidden">
-          {navItems.map(({ label, icon: Icon, screen, tab }) => {
-            const active = currentScreen === screen && (!tab || activeTab === tab);
-            const badge = label === 'Historial' && demandasHistorial.length > 0 ? demandasHistorial.length : null;
+        <nav className="flex-1 py-2 px-3 overflow-y-auto overflow-x-hidden">
+          {navItems.map((item) => {
+            if (item.divider) return (
+              <div key={item.key} className="mt-2 mb-1">
+                <div className="h-px bg-slate-100 dark:bg-white/6 mx-1" />
+                {item.sectionLabel && (
+                  <p
+                    className="text-[10px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-wider px-2 pt-2 pb-0.5 whitespace-nowrap overflow-hidden"
+                    style={{
+                      opacity: expanded ? 1 : 0,
+                      transition: 'opacity 140ms ease',
+                      transitionDelay: expanded ? '60ms' : '0ms',
+                    }}
+                  >
+                    {item.sectionLabel}
+                  </p>
+                )}
+              </div>
+            );
+
+            const { label, icon: Icon, screen } = item;
+            const active = currentScreen === screen;
+            const badge = label === 'Mis demandas' && demandasHistorial.length > 0 ? demandasHistorial.length : null;
             return (
               <button
                 key={label}
-                onClick={() => { setCurrentScreen(screen); if (tab) setActiveTab(tab); }}
-                className={`w-full flex items-center rounded-xl transition-colors overflow-hidden ${
+                onClick={() => { navRoot(screen); setTooltip(null); }}
+                onMouseEnter={e => {
+                  if (!expanded) {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setTooltip({ label, y: rect.top + rect.height / 2, badge });
+                  }
+                }}
+                onMouseLeave={() => setTooltip(null)}
+                className={`w-full flex items-center ui-chip transition-colors overflow-hidden mb-0.5 ${
                   active
                     ? 'bg-slate-100 dark:bg-white/8 text-slate-900 dark:text-white font-bold'
                     : 'text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300'
                 }`}
                 style={{ height: 42 }}
               >
-                {/* Icono — siempre centrado en los primeros 40px */}
-                <div className="w-10 h-10 shrink-0 flex items-center justify-center">
+                <div className="ui-icon-btn shrink-0">
                   <Icon className="w-4.5 h-4.5" />
                 </div>
-                {/* Label */}
                 <span
                   className="text-sm font-semibold whitespace-nowrap flex-1 text-left overflow-hidden"
                   style={{
@@ -606,7 +859,6 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore 
                 >
                   {label}
                 </span>
-                {/* Badge */}
                 {badge && (
                   <span
                     className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full mr-2 shrink-0 ${active ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-slate-400'}`}
@@ -624,33 +876,65 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore 
           })}
         </nav>
 
-        {/* ── Footer: legal links (solo cuando sidebar está expandido) ── */}
-        {expanded && (
-          <div className="px-3 pb-1 flex items-center gap-2 overflow-hidden">
+        {/* ── Panel de mi tienda / Registrar ── */}
+        {(onOpenDashboard || onRegisterStore) && (
+          <div className="px-3 pb-2 shrink-0">
+            <button
+              onClick={() => onOpenDashboard ? onOpenDashboard() : onRegisterStore()}
+              onMouseEnter={e => {
+                if (!expanded) {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setTooltip({ label: onOpenDashboard ? 'Panel de mi tienda' : 'Registrá tu tienda', y: rect.top + rect.height / 2, icon: Store });
+                }
+              }}
+              onMouseLeave={() => setTooltip(null)}
+              className="w-full flex items-center ui-chip text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300 transition-colors overflow-hidden"
+              style={{ height: 42 }}
+            >
+              <div className="ui-icon-btn shrink-0">
+                <Store className="w-4.5 h-4.5" />
+              </div>
+              <span
+                className="text-sm font-semibold whitespace-nowrap flex-1 text-left overflow-hidden"
+                style={{ opacity: expanded ? 1 : 0, transition: 'opacity 160ms ease', transitionDelay: expanded ? '80ms' : '0ms' }}
+              >
+                {onOpenDashboard ? 'Panel de mi tienda' : 'Registrá tu tienda'}
+              </span>
+            </button>
+          </div>
+        )}
+
+        {/* ── Footer: legal links ── */}
+        <div className="px-3 pb-1 overflow-hidden" style={{ opacity: expanded ? 1 : 0, transition: 'opacity 160ms ease', transitionDelay: expanded ? '80ms' : '0ms' }}>
+          <div className="flex items-center justify-center gap-3">
             {[
               { label: 'Términos', path: '/terminos-y-condiciones' },
               { label: 'Privacidad', path: '/politica-de-privacidad' },
             ].map(({ label, path }) => (
-              <a
-                key={path}
-                href={path}
+              <a key={path} href={path}
                 className="text-[10px] text-slate-400 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-400 transition-colors whitespace-nowrap"
-                onClick={e => { e.preventDefault(); window.history.pushState({}, '', path); window.dispatchEvent(new PopStateEvent('popstate')); }}
-              >
+                onClick={e => { e.preventDefault(); window.history.pushState({}, '', path); window.dispatchEvent(new PopStateEvent('popstate')); }}>
                 {label}
               </a>
             ))}
           </div>
-        )}
+        </div>
 
         {/* ── Footer: theme toggle ── */}
         <div className="py-3 px-3 border-t border-slate-100 dark:border-white/8 shrink-0">
           <button
             onClick={toggleTheme}
-            className="w-full flex items-center rounded-xl text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300 transition-colors overflow-hidden"
-            style={{ height: 42 }}
+            onMouseEnter={e => {
+              if (!expanded) {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setTooltip({ label: isDark ? 'Modo claro' : 'Modo oscuro', y: rect.top + rect.height / 2 });
+              }
+            }}
+            onMouseLeave={() => setTooltip(null)}
+            className="w-full flex items-center ui-chip text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300 transition-colors overflow-hidden"
+            style={{ height: 40 }}
           >
-            <div className="w-10 h-10 shrink-0 flex items-center justify-center">
+            <div className="ui-icon-btn shrink-0">
               {isDark ? <Sun className="w-4.5 h-4.5 text-amber-400" /> : <Moon className="w-4.5 h-4.5" />}
             </div>
             <span
@@ -666,91 +950,176 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore 
           </button>
         </div>
       </div>
+
+      {/* ── Tooltip flotante (position:fixed, bypasea overflow:hidden) ── */}
+      {tooltip && !expanded && (
+        <div
+          className="fixed z-[9999] pointer-events-none"
+          style={{ left: W_COLLAPSED + 8, top: tooltip.y, transform: 'translateY(-50%)' }}
+        >
+          <div className="relative flex items-center gap-2 bg-slate-900 dark:bg-slate-700 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-xl animate-fade-in whitespace-nowrap">
+            {/* triángulo izquierdo */}
+            <span className="absolute right-full top-1/2 -translate-y-1/2 w-0 h-0 border-y-[5px] border-y-transparent border-r-[6px] border-r-slate-900 dark:border-r-slate-700" />
+            {tooltip.label}
+            {tooltip.badge && (
+              <span className="bg-white/20 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                {tooltip.badge}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+      </>
     );
   };
 
-  // ─── Notifications Modal ──────────────────────────────────────────────────
-  const NotificationsModal = () => (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md max-h-[80vh] flex flex-col">
-        <div className="p-5 border-b border-slate-200 dark:border-white/10 flex justify-between items-center">
+  // ─── Notifications Panel (dropdown desktop / bottom-sheet mobile) ─────────
+  const notifDropdownRef = useRef(null);
+  useEffect(() => {
+    if (!showNotifications) return;
+    const handler = (e) => {
+      const insidePanel = notifDropdownRef.current?.contains(e.target);
+      const insideBtn   = notifBtnRef.current?.contains(e.target);
+      if (!insidePanel && !insideBtn) notifAnimClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showNotifications]);
+
+  const NotificationsPanel = ({ anchor = { top: 60, right: 16 } }) => {
+    const onAnimEnd = () => { if (notifClosing) { setShowNotifications(false); setNotifClosing(false); } };
+
+    const notifContent = (close) => (
+      <>
+        <div className="p-4 border-b border-slate-100 dark:border-white/8 flex items-center justify-between shrink-0">
           <div>
-            <h2 className="font-bold text-lg">Notificaciones</h2>
-            {unreadCount > 0 && <p className="text-xs text-slate-500 dark:text-slate-400">{unreadCount} sin leer</p>}
+            <h2 className="font-bold text-base">Notificaciones</h2>
+            {unreadCount > 0 && <p className="text-xs text-slate-400 mt-0.5">{unreadCount} sin leer</p>}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             {unreadCount > 0 && (
-              <button onClick={markAllRead} className="text-xs text-emerald-600 font-semibold px-3 py-1.5 hover:bg-emerald-50 rounded-xl">
+              <button onClick={markAllRead} className="text-xs text-primary dark:text-primary font-semibold px-3 py-1.5 ui-chip hover:bg-primary/8 dark:hover:bg-primary/10 transition-colors">
                 Marcar todas
               </button>
             )}
-            <button onClick={() => setShowNotifications(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl">
-              <X className="w-5 h-5" />
+            <button onClick={close} className="ui-icon-btn hover:bg-slate-100 dark:hover:bg-white/8 transition-colors">
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
-        <div className="overflow-y-auto">
+        <div className="overflow-y-auto flex-1">
           {notifList.length === 0 ? (
             <div className="p-8 text-center text-slate-400">
-              <Bell className="w-10 h-10 mx-auto mb-2 opacity-30" />
+              <Bell className="w-8 h-8 mx-auto mb-2 opacity-30" />
               <p className="text-sm">Sin notificaciones</p>
             </div>
           ) : notifList.map(n => (
-            <button
-              key={n.id}
-              onClick={() => {
-                markNotifRead(n.id);
-                if (n.demandaId) {
-                  const d = allDemandas.find(x => x.id === n.demandaId);
-                  if (d) { setSelectedDemanda(d); setCurrentScreen('detalle'); }
-                }
-                setShowNotifications(false);
-              }}
-              className={`w-full text-left p-4 border-b border-slate-100 dark:border-white/5 last:border-0 flex gap-3 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors ${!n.leido ? 'bg-emerald-50 dark:bg-emerald-500/10' : ''}`}
+            <button key={n.id}
+              onClick={() => { markNotifRead(n.id); if (n.demandaId) { const d = allDemandas.find(x => x.id === n.demandaId); if (d) { setSelectedDemanda(d); navigate('detalle'); } } close(); }}
+              className={`w-full text-left p-4 border-b border-slate-100 dark:border-white/5 last:border-0 flex gap-3 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors ${!n.leido ? 'bg-primary/8 dark:bg-primary/10' : ''}`}
             >
-              <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${!n.leido ? 'bg-emerald-500' : 'bg-transparent'}`} />
-              <div className="flex-1">
+              <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${!n.leido ? 'bg-primary' : 'bg-transparent'}`} />
+              <div className="flex-1 min-w-0">
                 <p className={`text-sm ${!n.leido ? 'font-semibold' : ''}`}>{n.mensaje}</p>
                 <p className="text-xs text-slate-400 mt-0.5">{tiempoRelativo(n.tiempo)}</p>
               </div>
-              {n.tipo === 'respuesta' && <MessageSquare className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />}
-              {n.tipo === 'oferta' && <Tag className="w-4 h-4 text-violet-500 shrink-0 mt-0.5" />}
+              {n.tipo === 'respuesta' && <MessageSquare className="w-4 h-4 text-primary shrink-0 mt-0.5" />}
+              {n.tipo === 'oferta' && <Tag className="w-4 h-4 text-brand shrink-0 mt-0.5" />}
             </button>
           ))}
         </div>
-      </div>
-    </div>
-  );
+      </>
+    );
+
+    return (
+      <>
+        {/* Mobile: bottom-sheet con backdrop */}
+        <div className="lg:hidden fixed inset-0 bg-black/40 z-[3900] flex items-end" onClick={notifAnimClose}>
+          <div
+            className={`w-full bg-white dark:bg-slate-900 rounded-t-3xl max-h-[75vh] flex flex-col ${notifClosing ? 'animate-sheet-down' : 'animate-sheet-up'}`}
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 5rem)' }}
+            onClick={e => e.stopPropagation()}
+            onAnimationEnd={onAnimEnd}
+          >
+            <div className="w-10 h-1 bg-slate-200 dark:bg-white/15 rounded-full mx-auto mt-3 mb-1 shrink-0" />
+            {notifContent(notifAnimClose)}
+          </div>
+        </div>
+
+        {/* Desktop: dropdown animado desde la esquina del botón */}
+        <div
+          ref={notifDropdownRef}
+          className={`hidden lg:flex lg:flex-col fixed z-50 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-white/8 w-80 max-h-[480px] overflow-hidden ${notifClosing ? 'animate-popup-out' : 'animate-popup-in'}`}
+          style={{ top: anchor.top, right: anchor.right, boxShadow: '0 8px 30px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06)' }}
+          onAnimationEnd={onAnimEnd}
+        >
+          {notifContent(notifAnimClose)}
+        </div>
+      </>
+    );
+  };
 
   // ─── Profile Dropdown (desktop) ──────────────────────────────────────────
+  useEffect(() => {
+    if (!showProfileDropdown) return;
+    const handler = (e) => {
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(e.target))
+        profileDropdownAnimClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showProfileDropdown]);
+
   const ProfileDropdown = () => {
-    useEffect(() => {
-      const handler = (e) => { if (profileDropdownRef.current && !profileDropdownRef.current.contains(e.target)) setShowProfileDropdown(false); };
-      document.addEventListener('mousedown', handler);
-      return () => document.removeEventListener('mousedown', handler);
-    }, []);
+
+    // Guest mode: mostrar invitación a login
+    if (isGuest) {
+      return (
+        <div
+          className={`absolute right-0 top-full mt-2.5 w-72 bg-white dark:bg-slate-900 rounded-2xl z-50 overflow-hidden border border-slate-100 dark:border-white/8 ${profileDropdownClosing ? 'animate-popup-out' : 'animate-popup-in'}`}
+          style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06)' }}
+          onAnimationEnd={() => { if (profileDropdownClosing) { setShowProfileDropdown(false); setProfileDropdownClosing(false); } }}
+        >
+          <div className="p-5 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand/20 to-brand/5 border border-brand/20 flex items-center justify-center mx-auto mb-3">
+              <User className="w-7 h-7 text-brand" />
+            </div>
+            <h3 className="font-black text-base mb-1">¡Hola! 👋</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Iniciá sesión para guardar, pedir y chatear.</p>
+            <button
+              onClick={() => { setShowProfileDropdown(false); openLoginSheet('perfil'); }}
+              className="w-full flex items-center justify-center gap-2 bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold py-3 px-4 rounded-xl transition-all shadow-lg text-sm"
+            >
+              <svg width={16} height={16} viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+              Entrar con Google
+            </button>
+          </div>
+        </div>
+      );
+    }
 
     const totalResp = allDemandas.reduce((a, d) => a + (d.respuestas || 0), 0);
     const firstName = firebaseUser?.displayName?.split(' ')[0] || 'Usuario';
 
     const menuItems = [
-      { label: 'Mis Demandas', icon: Package, action: () => { setCurrentScreen('home'); setActiveTab('demandas'); setShowProfileDropdown(false); } },
-      { label: 'Historial', icon: History, action: () => { setCurrentScreen('historial'); setShowProfileDropdown(false); } },
-      ...(onRegisterStore ? [{ label: 'Registrá tu tienda', icon: Store, action: () => { setShowProfileDropdown(false); onRegisterStore(); }, highlight: true }] : []),
+      { label: 'Mis Demandas', icon: Package, action: () => { navRoot('mis-demandas'); setShowProfileDropdown(false); } },
+      { label: 'Historial', icon: History, action: () => { navRoot('historial'); setShowProfileDropdown(false); } },
+      ...(onOpenDashboard ? [{ label: 'Panel de mi tienda', icon: Store, action: () => { setShowProfileDropdown(false); onOpenDashboard(); }, highlight: true }] : onRegisterStore ? [{ label: 'Registrá tu tienda', icon: Store, action: () => { setShowProfileDropdown(false); onRegisterStore(); }, highlight: true }] : []),
     ];
 
     return (
       <div
-        className="absolute right-0 top-full mt-2.5 w-72 bg-white dark:bg-[#181f2e] rounded-2xl z-50 animate-dropdown-in overflow-hidden border border-slate-100 dark:border-white/8"
+        className={`absolute right-0 top-full mt-2.5 w-72 bg-white dark:bg-slate-900 rounded-2xl z-50 overflow-hidden border border-slate-100 dark:border-white/8 ${profileDropdownClosing ? 'animate-popup-out' : 'animate-popup-in'}`}
         style={{ boxShadow: '0 8px 30px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06)' }}
+        onAnimationEnd={() => { if (profileDropdownClosing) { setShowProfileDropdown(false); setProfileDropdownClosing(false); } }}
       >
         {/* ── User header ── */}
         <div className="p-4 pb-3">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-11 h-11 rounded-full overflow-hidden shrink-0 bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center ring-2 ring-slate-100 dark:ring-white/10">
+            <div className="ui-avatar-btn bg-primary/10 dark:bg-primary/20 ring-2 ring-slate-100 dark:ring-white/10">
               {firebaseUser?.photoURL
                 ? <img src={firebaseUser.photoURL} alt="" className="w-full h-full object-cover" />
-                : <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">{firstName[0].toUpperCase()}</span>
+                : <span className="font-bold text-primary dark:text-primary text-sm">{firstName[0].toUpperCase()}</span>
               }
             </div>
             <div className="min-w-0 flex-1">
@@ -762,9 +1131,9 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore 
           {/* Stats — estilo Pexels: número grande + label pequeño */}
           <div className="grid grid-cols-3 gap-1">
             {[
-              { label: 'Activas', value: demandasActivas.length, color: 'text-emerald-500' },
+              { label: 'Activas', value: demandasActivas.length, color: 'text-primary' },
               { label: 'Historial', value: demandasHistorial.length, color: 'text-slate-900 dark:text-white' },
-              { label: 'Respuestas', value: totalResp, color: 'text-violet-500' },
+              { label: 'Respuestas', value: totalResp, color: 'text-brand' },
             ].map(({ label, value, color }) => (
               <div key={label} className="bg-slate-50 dark:bg-white/5 rounded-xl py-2.5 text-center">
                 <p className={`text-lg font-black leading-none ${color}`}>{value}</p>
@@ -783,10 +1152,10 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore 
             <button key={label} onClick={action}
               className={`w-full text-left px-3 py-2.5 rounded-xl text-sm flex items-center gap-2.5 transition-colors ${
                 highlight
-                  ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/8 font-semibold'
+                  ? 'text-primary dark:text-primary hover:bg-primary/8 dark:hover:bg-primary/8 font-semibold'
                   : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/6 font-medium'
               }`}>
-              <Icon className={`w-4 h-4 shrink-0 ${highlight ? 'text-emerald-500' : 'text-slate-400'}`} />
+              <Icon className={`w-4 h-4 shrink-0 ${highlight ? 'text-primary' : 'text-slate-400'}`} />
               <span>{label}</span>
               <ChevronRight className="w-3.5 h-3.5 text-slate-300 ml-auto" />
             </button>
@@ -805,21 +1174,62 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore 
   };
 
   // ─── Profile Modal (mobile) ───────────────────────────────────────────────
-  const ProfileModal = () => (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center lg:hidden">
-      <div className="bg-white dark:bg-slate-900 rounded-t-3xl w-full max-w-md animate-fade-in">
+  const ProfileModal = () => {
+    const [isClosing, setIsClosing] = useState(false);
+    const animClose = () => setIsClosing(true);
+
+    // Guest mode: mostrar invitación a login en vez del perfil
+    if (isGuest) {
+      return (
+        <div className="fixed inset-0 bg-black/40 z-[3900] flex items-end justify-center lg:hidden" onClick={animClose}>
+          <div
+            className={`bg-white dark:bg-slate-900 rounded-t-3xl w-full ${isClosing ? 'animate-sheet-down' : 'animate-sheet-up'}`}
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 5rem)' }}
+            onClick={e => e.stopPropagation()}
+            onAnimationEnd={() => { if (isClosing) setShowProfile(false); }}
+          >
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand/20 to-brand/5 border border-brand/20 flex items-center justify-center mx-auto mb-4">
+                <User className="w-8 h-8 text-brand" />
+              </div>
+              <h2 className="font-black text-lg mb-1.5">¡Hola! 👋</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-5">Iniciá sesión para ver tu perfil, demandas y mensajes.</p>
+              <button
+                onClick={() => { setShowProfile(false); openLoginSheet('perfil'); }}
+                className="w-full flex items-center justify-center gap-3 bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold py-3.5 px-6 rounded-2xl transition-all shadow-lg"
+              >
+                <svg width={20} height={20} viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                Entrar con Google
+              </button>
+              <button onClick={animClose} className="w-full mt-3 py-2.5 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                Seguir explorando
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+    <div className="fixed inset-0 bg-black/40 z-[3900] flex items-end justify-center lg:hidden" onClick={animClose}>
+      <div
+        className={`bg-white dark:bg-slate-900 rounded-t-3xl w-full ${isClosing ? 'animate-sheet-down' : 'animate-sheet-up'}`}
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 5rem)' }}
+        onClick={e => e.stopPropagation()}
+        onAnimationEnd={() => { if (isClosing) setShowProfile(false); }}
+      >
         <div className="p-5 border-b border-slate-200 dark:border-white/10">
           <div className="flex justify-between items-start mb-5">
             <h2 className="font-bold text-lg">Mi Perfil</h2>
-            <button onClick={() => setShowProfile(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl">
+            <button onClick={animClose} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl">
               <X className="w-5 h-5" />
             </button>
           </div>
           <div className="flex items-center gap-4 mb-5">
-            <div className="w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center bg-emerald-100">
+            <div className="w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center bg-primary/10">
               {firebaseUser?.photoURL
                 ? <img src={firebaseUser.photoURL} alt="" className="w-full h-full object-cover" />
-                : <span className="text-2xl font-bold text-emerald-600">{(firebaseUser?.displayName || 'U')[0].toUpperCase()}</span>
+                : <span className="text-2xl font-bold text-primary">{(firebaseUser?.displayName || 'U')[0].toUpperCase()}</span>
               }
             </div>
             <div>
@@ -829,9 +1239,9 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore 
           </div>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { label: 'Activas', value: demandasActivas.length, cls: 'bg-emerald-500/10 text-emerald-500' },
+              { label: 'Activas', value: demandasActivas.length, cls: 'bg-primary/10 text-primary' },
               { label: 'Historial', value: demandasHistorial.length, cls: 'bg-slate-100 dark:bg-white/10' },
-              { label: 'Respuestas', value: allDemandas.reduce((a, d) => a + (d.respuestas || 0), 0), cls: 'bg-violet-500/10 text-violet-500' },
+              { label: 'Respuestas', value: allDemandas.reduce((a, d) => a + (d.respuestas || 0), 0), cls: 'bg-brand/10 text-brand' },
             ].map(({ label, value, cls }) => (
               <div key={label} className={`${cls} rounded-2xl p-3 text-center`}>
                 <p className="text-2xl font-bold">{value}</p>
@@ -842,8 +1252,8 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore 
         </div>
         <div className="p-4 space-y-1">
           {[
-            { label: 'Mis demandas activas', action: () => { setCurrentScreen('home'); setActiveTab('demandas'); setShowProfile(false); } },
-            { label: 'Historial', action: () => { setCurrentScreen('historial'); setShowProfile(false); } },
+            { label: 'Mis demandas activas', action: () => { navRoot('mis-demandas'); setShowProfile(false); } },
+            { label: 'Historial', action: () => { navRoot('historial'); setShowProfile(false); } },
           ].map(({ label, action }) => (
             <button key={label} onClick={action}
               className="w-full text-left px-4 py-3 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl font-semibold flex items-center justify-between transition-colors">
@@ -851,6 +1261,20 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore 
               <ChevronRight className="w-4 h-4 text-slate-400" />
             </button>
           ))}
+          {(onOpenDashboard || onRegisterStore) && (
+            <button onClick={() => { setShowProfile(false); (onOpenDashboard || onRegisterStore)(); }}
+              className="w-full text-left px-4 py-3 hover:bg-brand/8 dark:hover:bg-brand/10 rounded-xl font-semibold text-brand flex items-center justify-between transition-colors">
+              <span className="flex items-center gap-2"><Store className="w-4 h-4" />{onOpenDashboard ? 'Panel de mi tienda' : 'Registrá tu tienda'}</span>
+              <ChevronRight className="w-4 h-4 opacity-50" />
+            </button>
+          )}
+          {isAdmin && (
+            <button onClick={() => { setShowProfile(false); navRoot('admin'); }}
+              className="w-full text-left px-4 py-3 hover:bg-primary/8 dark:hover:bg-primary/10 rounded-xl font-semibold text-primary flex items-center justify-between transition-colors">
+              <span className="flex items-center gap-2"><ShieldCheck className="w-4 h-4" /> Panel Admin</span>
+              <ChevronRight className="w-4 h-4 opacity-50" />
+            </button>
+          )}
           <div className="border-t border-slate-200 dark:border-white/10 pt-2 mt-2">
             <button onClick={onLogout}
               className="w-full text-left px-4 py-3 hover:bg-rose-500/10 rounded-xl font-semibold text-rose-500 flex items-center gap-2 transition-colors">
@@ -860,1280 +1284,937 @@ const UserApp = ({ firebaseUser, onLogout, isDark, toggleTheme, onRegisterStore 
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   // ChatModal is intentionally NOT a nested component — inlined at render site to avoid remount on every keystroke
 
-  // ─── Home Screen ──────────────────────────────────────────────────────────
-  const HomeScreen = () => {
-    const firstName = firebaseUser?.displayName?.split(' ')[0] || null;
-    const hour = new Date().getHours();
-    const greeting = hour < 12 ? 'Buenos días' : hour < 19 ? 'Buenas tardes' : 'Buenas noches';
-
-    return (
-    <div className="min-h-screen bg-[#f7f8fa] dark:bg-[#0a0d16] pb-28 lg:pb-8">
-
-      {/* ── Header Mobile ────────────────────────────────────────────────── */}
-      <div className="lg:hidden bg-white dark:bg-[#111827] sticky top-0 z-10 border-b border-slate-100 dark:border-white/8">
-        <div className="px-5 pt-5 pb-4">
-          {/* Top row */}
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 tracking-wide uppercase mb-0.5">
-                {greeting}{firstName ? `, ${firstName}` : ''}
-              </p>
-              <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">Lokal</h1>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <button onClick={toggleTheme}
-                className="w-9 h-9 flex items-center justify-center rounded-2xl hover:bg-slate-100 dark:hover:bg-white/8 transition-colors">
-                {isDark ? <Sun className="w-4.5 h-4.5 text-amber-400" /> : <Moon className="w-4.5 h-4.5 text-slate-500" />}
-              </button>
-              <button onClick={() => setShowNotifications(true)}
-                className="w-9 h-9 flex items-center justify-center rounded-2xl hover:bg-slate-100 dark:hover:bg-white/8 transition-colors relative">
-                <Bell className="w-4.5 h-4.5 text-slate-600 dark:text-slate-300" />
-                {unreadCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white dark:ring-[#111827]" />}
-              </button>
-              <button onClick={() => setShowProfile(true)}
-                className="w-9 h-9 rounded-2xl overflow-hidden ring-2 ring-transparent hover:ring-emerald-400 transition-all shrink-0">
-                {firebaseUser?.photoURL
-                  ? <img src={firebaseUser.photoURL} alt="" className="w-full h-full object-cover" />
-                  : <div className="w-full h-full bg-emerald-500 flex items-center justify-center font-bold text-white text-sm">{(firebaseUser?.displayName || 'U')[0].toUpperCase()}</div>
-                }
-              </button>
-            </div>
-          </div>
-
-          {/* Search */}
-          <div className="relative mb-4">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Buscar demandas, productos..."
-              className="w-full pl-10 pr-4 py-3 bg-slate-100 dark:bg-white/6 rounded-2xl text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all" />
-          </div>
-
-          {/* Tabs */}
-          <div className="flex gap-1 bg-slate-100 dark:bg-white/6 p-1 rounded-2xl">
-            {[{ id: 'demandas', label: 'Mis Demandas' }, { id: 'ofertas', label: 'Ofertas' }].map(t => (
-              <button key={t.id} onClick={() => { setActiveTab(t.id); setFilterCategory(null); }}
-                className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${
-                  activeTab === t.id
-                    ? 'bg-white dark:bg-white/12 text-slate-900 dark:text-white shadow-sm'
-                    : 'text-slate-500 dark:text-slate-400'
-                }`}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Header Desktop ───────────────────────────────────────────────── */}
-      <div className="hidden lg:block bg-white dark:bg-[#111827] border-b border-slate-100 dark:border-white/8 sticky top-0 z-10">
-        <div className="px-8 h-14 flex items-center gap-6">
-          <div className="shrink-0">
-            <h2 className="text-base font-bold text-slate-900 dark:text-white">{activeTab === 'demandas' ? 'Mis Demandas' : 'Ofertas'}</h2>
-          </div>
-
-          {/* Búsqueda centrada — estilo Pexels */}
-          <div className="flex items-center gap-2.5 flex-1 max-w-lg">
-            <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
-              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Buscar demandas, productos..."
-                className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-white/6 rounded-xl text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 border border-transparent focus:outline-none focus:border-emerald-400 dark:focus:border-emerald-500 transition-colors" />
-            </div>
-            {activeTab === 'demandas' && (
-              <CustomSelect value={sortBy} onChange={setSortBy}
-                options={[{ value: 'recientes', label: 'Recientes' }, { value: 'respuestas', label: 'Más respuestas' }]} />
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 ml-auto shrink-0">
-            <button onClick={() => setShowNotifications(true)}
-              className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8 relative transition-colors">
-              <Bell className="w-4.5 h-4.5" />
-              {unreadCount > 0 && <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-rose-500 rounded-full" />}
-            </button>
-            <div ref={profileDropdownRef} className="relative">
-              <button onClick={() => setShowProfileDropdown(o => !o)}
-                className={`w-9 h-9 rounded-full overflow-hidden transition-all ring-2 ${showProfileDropdown ? 'ring-emerald-500' : 'ring-transparent hover:ring-emerald-400'}`}>
-                {firebaseUser?.photoURL
-                  ? <img src={firebaseUser.photoURL} alt="" className="w-full h-full object-cover" />
-                  : <div className="w-full h-full bg-emerald-500 flex items-center justify-center font-bold text-white text-sm">{(firebaseUser?.displayName || 'U')[0].toUpperCase()}</div>
-                }
-              </button>
-              {showProfileDropdown && <ProfileDropdown />}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── CTA banner (mobile, cuando ya hay demandas) ──────────────────── */}
-      {activeTab === 'demandas' && demandasActivas.length > 0 && (
-        <div className="lg:hidden px-5 pt-5 pb-1">
-          <button onClick={() => { setEditingDemanda(null); setCurrentScreen('crear'); }}
-            className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-2xl p-4 shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-transform flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                <Camera className="w-5 h-5" />
-              </div>
-              <div className="text-left">
-                <p className="font-bold text-sm">¿Qué estás buscando?</p>
-                <p className="text-emerald-100 text-xs">Publicá tu demanda ahora</p>
-              </div>
-            </div>
-            <ChevronRight className="w-5 h-5 opacity-70" />
-          </button>
-        </div>
-      )}
-
-      {/* ── Filtro categorías ────────────────────────────────────────────── */}
-      {(activeTab === 'demandas' ? demandasActivas.length > 0 : ofertas.length > 0) && (
-        <CategoryFilterBar
-          filterCategory={filterCategory}
-          setFilterCategory={setFilterCategory}
-          categories={allCategories}
-          presentIds={activeTab === 'demandas' ? demandaRootIds : ofertaRootIds}
-        />
-      )}
-
-      {/* ── Contenido ───────────────────────────────────────────────────── */}
-      <div className="px-4 lg:px-6 py-4 max-w-3xl">
-
-        {/* Encabezado sección */}
-        {activeTab === 'demandas' && sortedDemandas.length > 0 && (
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-base text-slate-800 dark:text-slate-100">
-              {filterCategory ? allCategories.find(c => c.id === filterCategory)?.name : 'Activas'}
-            </h3>
-            <div className="flex items-center gap-2">
-              <div className="lg:hidden">
-                <CustomSelect value={sortBy} onChange={setSortBy} size="sm"
-                  options={[{ value: 'recientes', label: 'Recientes' }, { value: 'respuestas', label: 'Más resp.' }]} />
-              </div>
-              {loadingDemandas
-                ? <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
-                : <span className="text-xs text-slate-400 font-medium">{sortedDemandas.length}</span>
-              }
-            </div>
-          </div>
-        )}
-
-        {errorDemandas && activeTab === 'demandas' && (
-          <div className="bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-2xl p-4 mb-4 flex items-center gap-3">
-            <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
-            <p className="text-sm text-rose-700 dark:text-rose-400 flex-1">{errorDemandas}</p>
-            <button onClick={fetchDemandas} className="text-xs font-bold text-rose-600 dark:text-rose-400 underline">Reintentar</button>
-          </div>
-        )}
-
-        {/* ── Grid demandas ── */}
-        {activeTab === 'demandas' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {loadingDemandas
-              ? Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="bg-white dark:bg-[#111827] rounded-2xl overflow-hidden animate-pulse">
-                    <div className="h-40 bg-slate-200 dark:bg-white/8" />
-                    <div className="p-4 space-y-2.5">
-                      <div className="h-4 bg-slate-200 dark:bg-white/8 rounded-lg w-3/4" />
-                      <div className="h-3 bg-slate-100 dark:bg-white/5 rounded-lg" />
-                      <div className="h-3 bg-slate-100 dark:bg-white/5 rounded-lg w-2/3" />
-                    </div>
-                  </div>
-                ))
-              : sortedDemandas.map((d, i) => {
-                  const foto = d.fotos?.[0] || d.foto;
-                  const catPath = getCategoryPath(d.categoryId, allCategories);
-                  const catLabel = catPath.length > 0 ? catPath[catPath.length - 1].name
-                    : (typeof d.categoryId === 'string' && d.categoryId ? d.categoryId : null);
-                  return (
-                    <div key={d.id}
-                      onClick={() => { setSelectedDemanda(d); setCurrentScreen('detalle'); }}
-                      className="bg-white dark:bg-[#111827] rounded-2xl p-4 flex gap-4 cursor-pointer hover:shadow-md hover:shadow-black/5 dark:hover:shadow-black/30 transition-all duration-200 active:scale-[0.99] animate-fade-up"
-                      style={{ animationDelay: `${i * 40}ms` }}
-                    >
-                      {/* Foto cuadrada */}
-                      <div className="w-[72px] h-[72px] rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-white/6 dark:to-white/10 shrink-0 overflow-hidden relative flex items-center justify-center self-start">
-                        {foto
-                          ? <img src={foto} alt={d.titulo} className="w-full h-full object-cover" />
-                          : <Package className="w-7 h-7 text-slate-300 dark:text-white/20" />
-                        }
-                        {d.estado !== 'activa' && (
-                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-xl">
-                            <span className="text-[9px] font-bold text-white uppercase tracking-wider">{d.estado}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        {/* Categoria + tiempo */}
-                        <div className="flex items-center gap-2 mb-1">
-                          {catLabel && (
-                            <span className="text-[10px] font-bold tracking-widest uppercase text-emerald-500 dark:text-emerald-400 truncate">
-                              {catLabel.split(/\s+(?:y|e|&)\s+/i)[0]}
-                            </span>
-                          )}
-                          <span className="text-[10px] text-slate-300 dark:text-white/20">·</span>
-                          <span className="text-[10px] text-slate-400 shrink-0">{d.tiempoCreado}</span>
-                        </div>
-
-                        {/* Título */}
-                        <h3 className="font-bold text-slate-900 dark:text-white text-sm leading-snug line-clamp-1 mb-1">{d.titulo}</h3>
-
-                        {/* Descripción */}
-                        {d.descripcion && (
-                          <p className="text-xs text-slate-400 dark:text-slate-500 line-clamp-1 mb-2.5">{d.descripcion}</p>
-                        )}
-
-                        {/* Footer: atributos destacados + respuestas + presupuesto */}
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {/* Atributos como pills pequeñas */}
-                          {d.attributes && Object.entries(d.attributes).slice(0, 2).map(([k, v]) => (
-                            <span key={k} className="text-[10px] bg-slate-100 dark:bg-white/8 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full font-medium">
-                              {k}: {v}
-                            </span>
-                          ))}
-                          {/* Respuestas — siempre visible */}
-                          {(
-                            <span className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ml-auto ${
-                              d.respuestas > 0
-                                ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10'
-                                : 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-white/6'
-                            }`}>
-                              <MessageSquare className="w-2.5 h-2.5" />{d.respuestas} {d.respuestas === 1 ? 'resp.' : 'resp.'}
-                            </span>
-                          )}
-                          {/* Presupuesto */}
-                          {d.presupuesto?.max && (
-                            <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-white/8 px-2 py-0.5 rounded-full ml-auto">
-                              hasta ${Number(d.presupuesto.max).toLocaleString()}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-            }
-          </div>
-        )}
-
-        {/* ── Grid ofertas ── */}
-        {activeTab === 'ofertas' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-            {filteredOfertas.map((o, i) => (
-              <div key={o.id}
-                className="bg-white dark:bg-[#111827] rounded-2xl overflow-hidden hover:shadow-md hover:shadow-black/6 dark:hover:shadow-black/30 transition-all duration-200 animate-fade-up"
-                style={{ animationDelay: `${i * 40}ms` }}
-              >
-                <div className="h-44 bg-gradient-to-br from-violet-50 to-purple-100 dark:from-violet-900/20 dark:to-purple-900/20 flex items-center justify-center text-5xl">
-                  {o.foto}
-                </div>
-                <div className="p-4">
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <h3 className="font-bold text-slate-900 dark:text-white text-sm leading-snug line-clamp-2">{o.titulo}</h3>
-                    {o.precio && (
-                      <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 shrink-0">${o.precio.toLocaleString()}</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-400 mb-3 line-clamp-2">{o.descripcion}</p>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                      <div className="w-5 h-5 bg-slate-100 dark:bg-white/8 rounded-full flex items-center justify-center">
-                        <Store className="w-3 h-3" />
-                      </div>
-                      <span className="font-semibold text-slate-600 dark:text-slate-300">{o.tienda}</span>
-                      <span>·</span>
-                      <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{o.distancia}</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => openChat({ id: o.id, tienda: o.tienda, foto: tiendas.find(t => t.id === o.tiendaId)?.foto || '🏪', mensaje: `Te consultan por: ${o.titulo}. Tenemos stock disponible!` })}
-                    className="w-full py-2.5 bg-slate-900 dark:bg-emerald-500 text-white rounded-xl font-semibold text-xs hover:bg-slate-700 dark:hover:bg-emerald-400 transition-colors"
-                  >
-                    Consultar
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-      </div>
-
-      {/* ── Empty states — fuera del max-w-3xl para centrar en todo el ancho ── */}
-      {!loadingDemandas && activeTab === 'demandas' && sortedDemandas.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-24 text-center px-8">
-          <div className="w-24 h-24 bg-emerald-50 dark:bg-emerald-500/10 rounded-3xl flex items-center justify-center mb-5">
-            <Package className="w-12 h-12 text-emerald-400" />
-          </div>
-          <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2">
-            {searchQuery ? 'Sin resultados' : 'Sin demandas aún'}
-          </h3>
-          <p className="text-sm text-slate-400 max-w-xs mb-8">
-            {searchQuery ? 'Probá con otras palabras clave' : 'Publicá lo que necesitás y las tiendas locales te van a responder'}
-          </p>
-          {!searchQuery && (
-            <button onClick={() => { setEditingDemanda(null); setCurrentScreen('crear'); }}
-              className="px-8 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-white rounded-2xl font-bold text-sm transition-colors shadow-lg shadow-emerald-500/25">
-              Crear mi primera demanda
-            </button>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'ofertas' && filteredOfertas.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-24 text-center px-8">
-          <div className="w-24 h-24 bg-slate-100 dark:bg-white/5 rounded-3xl flex items-center justify-center mb-5">
-            <Tag className="w-12 h-12 text-slate-300 dark:text-white/20" />
-          </div>
-          <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2">Sin ofertas</h3>
-          <p className="text-sm text-slate-400 max-w-xs">Todavía no hay ofertas disponibles en tu zona</p>
-        </div>
-      )}
-    </div>
-    );
-  };
-
-  // ─── Crear / Editar Demanda ───────────────────────────────────────────────
-  const CrearDemandaScreen = () => {
-    const editing = !!editingDemanda;
-    const [titulo, setTitulo] = useState(editingDemanda?.titulo || '');
-    const [descripcion, setDescripcion] = useState(editingDemanda?.descripcion || '');
-    const [presupuestoMin, setPresupuestoMin] = useState(editingDemanda?.presupuesto?.min || '');
-    const [presupuestoMax, setPresupuestoMax] = useState(editingDemanda?.presupuesto?.max || '');
-    const [categoryId, setCategoryId] = useState(editingDemanda?.categoryId || null);
-    const [attributes, setAttributes] = useState(editingDemanda?.attributes || {});
-    // fotos: array de { file?: File, preview: string (dataURL o URL remota) }
-    const initFotos = () => {
-      const existing = editingDemanda?.fotos || (editingDemanda?.foto?.startsWith('http') ? [editingDemanda.foto] : []);
-      return existing.map(url => ({ preview: url }));
-    };
-    const [fotos, setFotos] = useState(initFotos);
-    const [submitting, setSubmitting] = useState(false);
-    const [submitError, setSubmitError] = useState(null);
-    const [success, setSuccess] = useState(false);
-    const fileInputRef = useRef(null);
-
-    const MAX_FOTOS = 5;
-
-    const handleImageChange = (e) => {
-      const files = Array.from(e.target.files || []);
-      if (!files.length) return;
-      const remaining = MAX_FOTOS - fotos.length;
-      const toAdd = files.slice(0, remaining);
-      toAdd.forEach(file => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setFotos(prev => prev.length < MAX_FOTOS ? [...prev, { file, preview: reader.result }] : prev);
-        };
-        reader.readAsDataURL(file);
-      });
-      e.target.value = '';
-    };
-
-    const removePhoto = (idx) => setFotos(prev => prev.filter((_, i) => i !== idx));
-
-    const uploadFoto = async (foto) => {
-      if (!foto.file) return foto.preview; // ya es URL remota
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result.split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(foto.file);
-      });
-      const up = await fetch(`${API_BASE}/upload`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileName: foto.file.name, fileData: base64, contentType: foto.file.type }),
-      });
-      if (up.ok) return (await up.json()).url;
-      return null;
-    };
-
-    const handleSubmit = async () => {
-      if (!titulo.trim() || !categoryId) return;
-      setSubmitting(true);
-      setSubmitError(null);
-      try {
-        const fotosUrls = (await Promise.all(fotos.map(uploadFoto))).filter(Boolean);
-
-        const payload = {
-          titulo: titulo.trim(),
-          descripcion: descripcion.trim(),
-          fotos: fotosUrls,
-          foto: fotosUrls[0] || null,  // backwards compat
-          categoryId: categoryId || null,
-          attributes: Object.keys(attributes).length > 0 ? attributes : null,
-          presupuesto: (presupuestoMin || presupuestoMax)
-            ? { min: presupuestoMin ? Number(presupuestoMin) : null, max: presupuestoMax ? Number(presupuestoMax) : null }
-            : null,
-        };
-
-        if (editing) {
-          // PATCH
-          setAllDemandas(prev => prev.map(d => d.id === editingDemanda.id ? { ...d, ...payload } : d));
-          await fetch(`${API_BASE}/demandas`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: editingDemanda.id, ...payload }),
-          });
-        } else {
-          // POST
-          const res = await fetch(`${API_BASE}/demandas`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-          if (!res.ok) throw new Error('Error al publicar');
-          const nueva = await res.json();
-          setAllDemandas(prev => [nueva, ...prev]);
-          addNotif('Tu demanda fue publicada. Las tiendas ya pueden verla.', 'sistema', nueva.id);
-        }
-
-        setSuccess(true);
-        setTimeout(() => {
-          setEditingDemanda(null);
-          setCurrentScreen('home');
-          setSuccess(false);
-        }, 1800);
-      } catch (err) {
-        setSubmitError(err.message);
-      } finally {
-        setSubmitting(false);
-      }
-    };
-
-    if (success) return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-8">
-        <div className="text-center">
-          <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-5">
-            <CheckCircle className="w-12 h-12 text-emerald-500" />
-          </div>
-          <h2 className="text-2xl font-bold mb-2">{editing ? 'Demanda actualizada' : 'Demanda publicada!'}</h2>
-          <p className="text-slate-500">{editing ? 'Los cambios fueron guardados' : 'Las tiendas ya pueden responderte'}</p>
-        </div>
-      </div>
-    );
-
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24">
-        <div className="bg-white border-b px-5 py-4 sticky top-0 z-10">
-          <div className="flex items-center gap-3">
-            <button onClick={() => { setEditingDemanda(null); setCurrentScreen('home'); }} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl">
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div>
-              <h1 className="text-lg font-bold">{editing ? 'Editar Demanda' : 'Nueva Demanda'}</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Completa los datos</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="max-w-2xl mx-auto px-5 py-6 space-y-6">
-          {/* Fotos */}
-          <div>
-            <label className="block font-bold mb-3 text-sm">
-              Fotos del producto
-              <span className="font-normal text-slate-400 ml-1">({fotos.length}/{MAX_FOTOS})</span>
-            </label>
-
-            {/* Altura fija en el wrapper → todos los hijos h-full → altura siempre idéntica */}
-            <div className="grid grid-cols-3 gap-2 h-28">
-              {fotos.map((f, idx) => (
-                <div key={idx} className="relative rounded-2xl overflow-hidden bg-slate-100 dark:bg-white/10 group h-full">
-                  <img src={f.preview} alt="" className="w-full h-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => removePhoto(idx)}
-                    className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                  {idx === 0 && (
-                    <span className="absolute bottom-1 left-1 text-[10px] bg-black/50 text-white px-1.5 py-0.5 rounded-md font-medium leading-none">Principal</span>
-                  )}
-                </div>
-              ))}
-              {fotos.length < MAX_FOTOS && (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`h-full rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/20 flex flex-col items-center justify-center gap-1.5 hover:border-emerald-400 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-slate-400 hover:text-emerald-500
-                    ${fotos.length === 0 ? 'col-span-3' : fotos.length === 1 ? 'col-span-2' : 'col-span-1'}`}
-                >
-                  <Camera className="w-6 h-6" />
-                  <span className="text-[11px] font-medium">{fotos.length === 0 ? 'Subir fotos' : 'Agregar'}</span>
-                  {fotos.length === 0 && <span className="text-xs text-slate-400 text-center px-2">Hasta {MAX_FOTOS} fotos · La primera será la principal</span>}
-                </button>
-              )}
-            </div>
-
-            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleImageChange} />
-          </div>
-
-          {/* Titulo */}
-          <div>
-            <label className="block font-bold mb-2 text-sm">Que estas buscando? *</label>
-            <input type="text" value={titulo} onChange={e => setTitulo(e.target.value)}
-              placeholder="Ej: Cable USB-C a HDMI 2 metros"
-              className={`w-full px-4 py-4 border-2 rounded-2xl focus:outline-none transition-colors ${titulo.trim() ? 'border-emerald-400' : 'border-slate-200 focus:border-emerald-400'}`} />
-          </div>
-
-          {/* Descripcion */}
-          <div>
-            <label className="block font-bold mb-2 text-sm">Descripcion <span className="font-normal text-slate-400">(opcional)</span></label>
-            <textarea rows={4} value={descripcion} onChange={e => setDescripcion(e.target.value)}
-              placeholder="Contanos mas detalles: marca, modelo, uso, medidas..."
-              className="w-full px-4 py-4 border-2 border-slate-200 dark:border-white/10 dark:bg-slate-800 dark:text-white rounded-2xl focus:outline-none focus:border-emerald-400 resize-none transition-colors" />
-          </div>
-
-          {/* Presupuesto */}
-          <div>
-            <label className="block font-bold mb-2 text-sm">Presupuesto <span className="font-normal text-slate-400">(opcional)</span></label>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-xs text-slate-400 mb-1.5">Desde $</p>
-                <input type="number" value={presupuestoMin} onChange={e => setPresupuestoMin(e.target.value)}
-                  placeholder="0" className="w-full px-4 py-3 border-2 border-slate-200 dark:border-white/10 dark:bg-slate-800 dark:text-white rounded-2xl focus:outline-none focus:border-emerald-400" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 mb-1.5">Hasta $</p>
-                <input type="number" value={presupuestoMax} onChange={e => setPresupuestoMax(e.target.value)}
-                  placeholder="0" className="w-full px-4 py-3 border-2 border-slate-200 dark:border-white/10 dark:bg-slate-800 dark:text-white rounded-2xl focus:outline-none focus:border-emerald-400" />
-              </div>
-            </div>
-          </div>
-
-          {/* Categoría */}
-          <div>
-            <label className="block font-bold mb-2 text-sm">Categoría <span className="text-rose-500">*</span></label>
-            <CategoryPicker
-              value={categoryId}
-              onChange={id => { setCategoryId(id); setAttributes({}); }}
-              onCreateCategory={createCategory}
-              categories={allCategories}
-              placeholder="¿En qué categoría entra lo que buscás?"
-            />
-          </div>
-
-          {/* Atributos */}
-          {(categoryId || Object.keys(attributes).length > 0) && (
-            <div>
-              <label className="block font-bold mb-2 text-sm">Detalles <span className="font-normal text-slate-400">(opcional)</span></label>
-              <AttributesEditor
-                categoryId={categoryId}
-                value={attributes}
-                onChange={setAttributes}
-                categories={allCategories}
-              />
-            </div>
-          )}
-
-          {submitError && (
-            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex gap-3">
-              <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
-              <p className="text-sm text-rose-700">{submitError}</p>
-            </div>
-          )}
-
-          <button onClick={handleSubmit} disabled={!titulo.trim() || !categoryId || submitting}
-            className="w-full bg-slate-900 dark:bg-emerald-500 text-white py-4 rounded-2xl font-bold disabled:opacity-40 hover:bg-slate-800 dark:hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2">
-            {submitting ? <><Loader2 className="w-5 h-5 animate-spin" /> Publicando...</> : (editing ? 'Guardar cambios' : 'Publicar Demanda')}
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  // ─── Detalle Demanda ──────────────────────────────────────────────────────
-  const DetalleDemandaScreen = () => {
-    const demanda = allDemandas.find(d => d.id === selectedDemanda?.id) || selectedDemanda;
-    const [respuestas, setRespuestas] = useState([]);
-    const [loadingResp, setLoadingResp] = useState(true);
-    const isPaused = demanda?.estado === 'pausada';
-
-    useEffect(() => {
-      if (!demanda?.id) return;
-      setLoadingResp(true);
-      fetch(`${API_BASE}/respuestas?demandaId=${demanda.id}`)
-        .then(r => r.ok ? r.json() : [])
-        .then(data => setRespuestas(data))
-        .catch(() => setRespuestas([]))
-        .finally(() => setLoadingResp(false));
-    }, [demanda?.id]);
-
-    const handlePausar = () => {
-      setShowConfirm({
-        title: isPaused ? 'Reactivar demanda' : 'Pausar demanda',
-        msg: isPaused ? 'Las tiendas volverin a ver tu demanda.' : 'Las tiendas dejarán de ver tu demanda temporalmente.',
-        onOk: () => {
-          updateDemandaEstado(demanda.id, isPaused ? 'activa' : 'pausada');
-          setShowConfirm(null);
-          if (!isPaused) { setCurrentScreen('home'); }
-        },
-      });
-    };
-
-    const handleFinalizar = () => {
-      setShowConfirm({
-        title: 'Finalizar demanda',
-        msg: 'Marca esta demanda como resuelta. Pasará al historial.',
-        onOk: () => {
-          updateDemandaEstado(demanda.id, 'finalizada');
-          setShowConfirm(null);
-          setCurrentScreen('home');
-        },
-      });
-    };
-
-    const handleEditar = () => {
-      setEditingDemanda(demanda);
-      setCurrentScreen('crear');
-    };
-
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24">
-        <div className="bg-white border-b px-5 py-4 sticky top-0 z-10">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setCurrentScreen('home')} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl">
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div className="flex-1">
-              <h1 className="text-lg font-bold">Detalle de Demanda</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {loadingResp ? 'Cargando...' : `${respuestas.length} ${respuestas.length === 1 ? 'respuesta' : 'respuestas'}`}
-              </p>
-            </div>
-            {demanda?.estado === 'pausada' && (
-              <span className="px-3 py-1.5 bg-amber-100 text-amber-700 text-xs font-bold rounded-xl">PAUSADA</span>
-            )}
-          </div>
-        </div>
-
-        <div className="max-w-4xl mx-auto">
-          {/* Header demanda */}
-          <div className="bg-white border-b px-5 py-6">
-            {/* Carrusel de fotos */}
-            {(() => {
-              const imgs = demanda?.fotos?.length ? demanda.fotos : demanda?.foto ? [demanda.foto] : [];
-              if (!imgs.length) return null;
-              return <PhotoCarousel photos={imgs} className="mb-5 rounded-3xl overflow-hidden" />;
-            })()}
-            <div className="mb-5">
-              <h2 className="font-bold text-lg mb-1">{demanda?.titulo}</h2>
-              {demanda?.descripcion && <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">{demanda.descripcion}</p>}
-              {demanda?.presupuesto && (
-                <p className="text-sm font-semibold text-emerald-700 mb-2">
-                  Presupuesto: ${demanda.presupuesto.min?.toLocaleString() || '0'} - ${demanda.presupuesto.max?.toLocaleString() || '?'}
-                </p>
-              )}
-              <div className="flex flex-wrap gap-2">
-                <span className={`px-3 py-1 rounded-xl text-xs font-bold border ${demanda?.estado === 'activa' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                  {(demanda?.estado || 'activa').toUpperCase()}
-                </span>
-                <span className="text-xs text-slate-400 flex items-center">{demanda?.tiempoCreado}</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <button onClick={handleEditar} className="py-2.5 bg-slate-100 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 hover:bg-slate-200 transition-colors">
-                <Edit3 className="w-4 h-4" /> Editar
-              </button>
-              <button onClick={handlePausar} className="py-2.5 bg-slate-100 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 hover:bg-slate-200 transition-colors">
-                {isPaused ? <><RotateCcw className="w-4 h-4" /> Reactivar</> : <><Pause className="w-4 h-4" /> Pausar</>}
-              </button>
-              <button onClick={handleFinalizar} className="py-2.5 bg-slate-900 dark:bg-emerald-500 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 hover:bg-slate-800 dark:hover:bg-emerald-400 transition-colors">
-                <CheckCircle className="w-4 h-4" /> Finalizar
-              </button>
-            </div>
-          </div>
-
-          {/* Respuestas */}
-          <div className="px-5 py-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-lg">Respuestas de tiendas</h3>
-              {respuestas.length > 0 && (
-                <span className="px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl text-xs font-bold">
-                  {respuestas.length} {respuestas.length === 1 ? 'tienda' : 'tiendas'}
-                </span>
-              )}
-            </div>
-
-            {[...respuestas].sort((a, b) => {
-              const order = { 'exacto-nuevo': 1, 'exacto-usado': 2, 'reacondicionado': 3, 'compatible': 4, 'similar': 5, 'imitacion': 6 };
-              return (order[a.matchType] || 99) - (order[b.matchType] || 99);
-            }).map(r => {
-              // Campos normalizados — soporta tanto datos viejos (mock) como nuevos (reales)
-              const nombreTienda = r.tiendaNombre || r.tienda || 'Tienda';
-              const fotoTienda   = r.tiendaFoto   || r.foto   || null;
-              const rating       = r.tiendaRating  || r.rating || null;
-              const horario      = r.tiendaHorario || r.horario || null;
-              const direccion    = r.tiendaDireccion ? `${r.tiendaDireccion}${r.tiendaCiudad ? ', ' + r.tiendaCiudad : ''}` : null;
-              const distancia    = r.distancia || null;
-
-              return (
-              <div key={r.id} className="bg-white dark:bg-[#111827] rounded-2xl p-5 hover:shadow-md hover:shadow-black/5 dark:hover:shadow-black/30 transition-all">
-                {/* Header tienda */}
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex gap-3">
-                    <div className="w-12 h-12 bg-gradient-to-br from-violet-100 to-purple-100 dark:from-violet-900/30 dark:to-purple-900/20 rounded-xl flex items-center justify-center shrink-0 overflow-hidden">
-                      {fotoTienda
-                        ? <img src={fotoTienda} alt="" className="w-full h-full object-cover" />
-                        : <Store className="w-5 h-5 text-violet-500" />
-                      }
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-slate-900 dark:text-white">{nombreTienda}</h4>
-                      <div className="flex flex-wrap gap-2 text-xs text-slate-400 mt-0.5">
-                        {distancia && <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{distancia}</span>}
-                        {rating && <span className="flex items-center gap-0.5"><Star className="w-3 h-3 text-amber-400 fill-amber-400" />{rating}</span>}
-                        {horario && <span className="flex items-center gap-0.5 text-emerald-500 font-medium"><Clock className="w-3 h-3" />{horario}</span>}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    {r.matchType && (() => {
-                      const matchLabels = {
-                        'exacto-nuevo':   { label: 'Exacto Nuevo',   color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
-                        'exacto-usado':   { label: 'Exacto Usado',   color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
-                        'reacondicionado':{ label: 'Reacondicionado',color: 'bg-teal-500/10 text-teal-600 dark:text-teal-400' },
-                        'compatible':     { label: 'Compatible',     color: 'bg-violet-500/10 text-violet-600 dark:text-violet-400' },
-                        'similar':        { label: 'Similar',        color: 'bg-violet-500/10 text-violet-600 dark:text-violet-400' },
-                        'imitacion':      { label: 'Imitación',      color: 'bg-slate-200/80 text-slate-500 dark:bg-white/8 dark:text-slate-400' },
-                      };
-                      const m = matchLabels[r.matchType];
-                      return m ? (
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${m.color}`}>{m.label}</span>
-                      ) : null;
-                    })()}
-                    <span className="text-xs text-slate-400">{r.tiempoRespuesta || 'Reciente'}</span>
-                  </div>
-                </div>
-
-                {/* Mensaje */}
-                <p className="text-sm bg-slate-50 dark:bg-white/5 rounded-xl p-3.5 mb-3 leading-relaxed text-slate-700 dark:text-slate-300">{r.mensaje}</p>
-
-                {/* Adjuntos — fotos y videos del producto */}
-                {r.adjuntos?.length > 0 && (() => {
-                  const [lightbox, setLightbox] = React.useState(null);
-                  return (
-                    <>
-                      <div className={`grid gap-1.5 mb-4 ${r.adjuntos.length === 1 ? 'grid-cols-1' : r.adjuntos.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                        {r.adjuntos.map((a, ai) => (
-                          <button
-                            key={ai}
-                            type="button"
-                            onClick={() => setLightbox(ai)}
-                            className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 dark:bg-white/8 group"
-                          >
-                            {a.type === 'video'
-                              ? (
-                                <>
-                                  <video src={a.url} className="w-full h-full object-cover" muted playsInline />
-                                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
-                                    <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
-                                      <Play className="w-5 h-5 text-slate-800 ml-0.5" />
-                                    </div>
-                                  </div>
-                                </>
-                              ) : (
-                                <img src={a.url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
-                              )
-                            }
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Lightbox */}
-                      {lightbox !== null && (
-                        <div
-                          className="fixed inset-0 bg-black/90 z-[70] flex items-center justify-center p-4"
-                          onClick={() => setLightbox(null)}
-                        >
-                          <button
-                            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
-                            onClick={() => setLightbox(null)}
-                          >
-                            <X className="w-5 h-5" />
-                          </button>
-                          {r.adjuntos[lightbox]?.type === 'video'
-                            ? <video src={r.adjuntos[lightbox].url} controls autoPlay className="max-w-full max-h-[85vh] rounded-xl" onClick={e => e.stopPropagation()} />
-                            : <img src={r.adjuntos[lightbox].url} alt="" className="max-w-full max-h-[85vh] rounded-xl object-contain" onClick={e => e.stopPropagation()} />
-                          }
-                          {r.adjuntos.length > 1 && (
-                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
-                              {r.adjuntos.map((_, ai) => (
-                                <button key={ai} onClick={e => { e.stopPropagation(); setLightbox(ai); }}
-                                  className={`w-2 h-2 rounded-full transition-all ${ai === lightbox ? 'bg-white w-5' : 'bg-white/40'}`} />
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
-
-                {/* Precio */}
-                {r.precio && (
-                  <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-100 dark:border-white/8">
-                    <div>
-                      <p className="text-xs text-slate-400 mb-0.5">Precio ofrecido</p>
-                      <p className="text-2xl font-black text-slate-900 dark:text-white">${r.precio.toLocaleString()}</p>
-                    </div>
-                    {direccion && (
-                      <div className="text-right">
-                        <p className="text-xs text-slate-400 mb-0.5">Dirección</p>
-                        <p className="text-xs font-medium text-slate-600 dark:text-slate-300 max-w-[160px] text-right leading-snug">{direccion}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Acciones */}
-                <div className="grid grid-cols-2 gap-2.5">
-                  <button
-                    onClick={() => openChat({
-                      id: r.id,
-                      tienda: nombreTienda,
-                      foto: fotoTienda || '🏪',
-                      mensaje: `Hola! Vi tu demanda "${demanda?.titulo}". ${r.mensaje}`,
-                      tiempoRespuesta: r.tiempoRespuesta,
-                      chatKey: `${r.tiendaId || r.id}-${r.demandaId}`,
-                    })}
-                    className="py-2.5 bg-slate-900 dark:bg-emerald-500 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-1.5 hover:bg-slate-700 dark:hover:bg-emerald-400 transition-colors">
-                    <MessageSquare className="w-4 h-4" /> Chatear
-                  </button>
-                  <button
-                    onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(direccion || nombreTienda)}`, '_blank')}
-                    className="py-2.5 bg-slate-100 dark:bg-white/8 text-slate-700 dark:text-slate-200 rounded-xl font-semibold text-sm flex items-center justify-center gap-1.5 hover:bg-slate-200 dark:hover:bg-white/12 transition-colors">
-                    <Navigation className="w-4 h-4" /> Navegar
-                  </button>
-                </div>
-              </div>
-              );
-            })}
-
-            {loadingResp && (
-              <div className="space-y-3">
-                {[1, 2].map(i => (
-                  <div key={i} className="bg-white dark:bg-[#111827] rounded-2xl p-5 animate-pulse">
-                    <div className="flex gap-3 mb-4">
-                      <div className="w-12 h-12 bg-slate-200 dark:bg-white/8 rounded-xl shrink-0" />
-                      <div className="flex-1 space-y-2 pt-1">
-                        <div className="h-4 bg-slate-200 dark:bg-white/8 rounded w-1/3" />
-                        <div className="h-3 bg-slate-100 dark:bg-white/5 rounded w-1/4" />
-                      </div>
-                    </div>
-                    <div className="h-16 bg-slate-100 dark:bg-white/5 rounded-xl mb-4" />
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <div className="h-10 bg-slate-200 dark:bg-white/8 rounded-xl" />
-                      <div className="h-10 bg-slate-100 dark:bg-white/5 rounded-xl" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {!loadingResp && respuestas.length === 0 && (
-              <div className="text-center py-12 bg-white dark:bg-[#111827] rounded-2xl">
-                <div className="w-16 h-16 bg-slate-100 dark:bg-white/5 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <MessageSquare className="w-8 h-8 text-slate-300 dark:text-white/20" />
-                </div>
-                <p className="font-bold text-slate-700 dark:text-slate-300 mb-1">Sin respuestas aún</p>
-                <p className="text-sm text-slate-400 max-w-xs mx-auto">Las tiendas locales están viendo tu demanda. Te avisaremos cuando alguien responda.</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // ─── Historial ────────────────────────────────────────────────────────────
-  const HistorialScreen = () => (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24">
-      <div className="bg-white border-b px-5 py-4 sticky top-0 z-10">
-        <div className="flex items-center gap-3">
-          <button onClick={() => setCurrentScreen('home')} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl lg:hidden">
+  // ─── PageHeader compartido ────────────────────────────────────────────────
+  const PageHeader = ({ title, onBack, children, searchInput, filtersSlot, hideTitle, showBell = false }) => (
+    <div className="bg-white dark:bg-slate-900 sticky top-0 z-30">
+      <div className="px-3 lg:px-8 h-14 flex items-center gap-2 border-b border-slate-100 dark:border-white/8">
+        {onBack && (
+          <button onClick={onBack} className="ui-icon-btn hover:bg-slate-100 dark:hover:bg-white/8 shrink-0">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div>
-            <h1 className="text-lg font-bold">Historial</h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Demandas pausadas y finalizadas</p>
-          </div>
+        )}
+        <h1 className={`font-bold text-base shrink-0 truncate max-w-[7rem] lg:max-w-fit ${hideTitle ? 'lg:block hidden' : ''}`}>{title}</h1>
+        {searchInput
+          ? <div className="flex-1 min-w-0 relative">{searchInput}</div>
+          : <div className="flex-1" />
+        }
+        {children}
+        {showBell && (
+          <button ref={notifBtnRef} onClick={openNotifications} className="ui-icon-btn text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8 relative transition-colors shrink-0">
+            <Bell className="w-4.5 h-4.5" />
+            {unreadCount > 0 && <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-rose-500 rounded-full" />}
+          </button>
+        )}
+        <button onClick={() => isGuest ? openLoginSheet('perfil') : toggleProfileMenu()} className="ui-avatar-btn ring-2 ring-transparent hover:ring-primary transition-all shrink-0 lg:hidden">
+          {firebaseUser?.photoURL ? <img src={firebaseUser.photoURL} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-200 dark:bg-white/10 flex items-center justify-center"><User className="w-4 h-4 text-slate-400" /></div>}
+        </button>
+        <div ref={profileDropdownRef} className="hidden lg:block relative">
+          <button onClick={() => isGuest ? openLoginSheet('perfil') : toggleProfileMenu()} className={`ui-avatar-btn transition-all ring-2 ${showProfileDropdown ? 'ring-primary' : 'ring-transparent hover:ring-primary'}`}>
+            {firebaseUser?.photoURL ? <img src={firebaseUser.photoURL} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-200 dark:bg-white/10 flex items-center justify-center"><User className="w-4 h-4 text-slate-400" /></div>}
+          </button>
+          {showProfileDropdown && ProfileDropdown()}
         </div>
       </div>
-
-      <div className="max-w-4xl mx-auto px-5 py-6 space-y-4">
-        {demandasHistorial.length === 0 ? (
-          <div className="text-center py-16">
-            <History className="w-14 h-14 text-slate-200 mx-auto mb-3" />
-            <p className="font-semibold text-slate-400">Sin historial todavia</p>
-            <p className="text-sm text-slate-300 mt-1">Las demandas pausadas o finalizadas apareceran aqui</p>
-          </div>
-        ) : demandasHistorial.map(d => (
-          <div key={d.id} className="bg-white rounded-3xl border-2 border-slate-100 p-5">
-            <div className="flex gap-4 mb-4">
-              <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-3xl shrink-0 overflow-hidden">
-                {d.foto?.startsWith('http') ? <img src={d.foto} alt="" className="w-full h-full object-cover" /> : (d.foto || '📦')}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2 mb-1">
-                  <h3 className="font-bold truncate">{d.titulo}</h3>
-                  <span className={`px-2.5 py-1 rounded-xl text-xs font-bold shrink-0 ${d.estado === 'finalizada' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                    {d.estado === 'finalizada' ? 'RESUELTA' : 'PAUSADA'}
-                  </span>
-                </div>
-                {d.descripcion && <p className="text-sm text-slate-400 line-clamp-1">{d.descripcion}</p>}
-                <p className="text-xs text-slate-400 mt-1">{d.tiempoCreado}</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {d.estado === 'pausada' && (
-                <button onClick={() => updateDemandaEstado(d.id, 'activa')}
-                  className="py-2.5 bg-emerald-500 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 hover:bg-emerald-600 transition-colors">
-                  <RotateCcw className="w-4 h-4" /> Reactivar
-                </button>
-              )}
-              <button
-                onClick={() => setShowConfirm({ title: 'Eliminar demanda', msg: 'Esta accion no se puede deshacer.', onOk: () => { deleteDemanda(d.id); setShowConfirm(null); } })}
-                className={`py-2.5 bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 hover:bg-rose-50 hover:text-rose-600 transition-colors ${d.estado !== 'pausada' ? 'col-span-2' : ''}`}>
-                <Trash2 className="w-4 h-4" /> Eliminar
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+      {filtersSlot && (
+        <div className="border-b border-slate-100 dark:border-white/8">
+          {filtersSlot}
+        </div>
+      )}
     </div>
   );
 
-  // ─── Tiendas Screen ───────────────────────────────────────────────────────
-  const TiendasScreen = () => {
-    const [query, setQuery] = useState('');
+  // ─── Home Screen (Feed) ───────────────────────────────────────────────────
+  const VENTAJA_CONFIG = {
+    precio:         { label: 'Mejor precio',   color: 'bg-primary',   pastel: 'bg-slate-100 dark:bg-white/8',   iconColor: 'text-primary',              Icon: Tag        },
+    disponibilidad: { label: 'Tenelo hoy',     color: 'bg-amber-400', pastel: 'bg-amber-50 dark:bg-amber-500/15', iconColor: 'text-amber-500 dark:text-amber-400', Icon: Zap, stripe: true },
+    financiacion:   { label: 'Financiación',   color: 'bg-slate-600', pastel: 'bg-slate-100 dark:bg-white/8',   iconColor: 'text-slate-500 dark:text-slate-400', Icon: CreditCard },
+    combo:          { label: 'Combo especial', color: 'bg-amber-500', pastel: 'bg-slate-100 dark:bg-white/8',   iconColor: 'text-amber-500 dark:text-amber-400', Icon: Gift       },
+  };
 
-    // Set de ids raíz presentes en tiendas
-    const tiendaRootIds = new Set(
-      tiendas.flatMap(t => t.categoryIds || [])
-    );
-    const filtered = tiendas.filter(t => {
-      const q = query.toLowerCase();
-      const matchesSearch = !q ||
-        t.nombre.toLowerCase().includes(q) ||
-        t.rubro.toLowerCase().includes(q);
-      const matchesCategory = !filterCategory || (() => {
-        if (!t.categoryIds?.length) return false;
-        const descendants = getAllDescendants(filterCategory, allCategories);
-        return t.categoryIds.some(id => id === filterCategory || descendants.includes(id));
-      })();
-      return matchesSearch && matchesCategory;
-    });
+  // ─── Global search (usado en HomeScreen y ProductDetailScreen) ────────────
+  const gResults = React.useMemo(() => {
+    const q = gQuery.trim().toLowerCase();
+    if (!q) return [];
+    const matchStr = (s) => s?.toLowerCase().includes(q);
+    const ofResults = visibleOfertas
+      .filter(o => o.activa !== false && (matchStr(o.titulo) || matchStr(o.tiendaNombre)))
+      .slice(0, 4).map(o => ({ _type: 'oferta', ...o }));
+    const dmResults = allDemandas
+      .filter(d => d.estado !== 'resuelto' && (matchStr(d.titulo) || matchStr(d.descripcion)))
+      .slice(0, 3).map(d => ({ _type: 'demanda', ...d }));
+    const tsResults = tiendas
+      .filter(t => matchStr(t.nombre) || matchStr(t.rubro))
+      .slice(0, 3).map(t => ({ _type: 'tienda', ...t }));
+    return [...ofResults, ...dmResults, ...tsResults];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gQuery]);
 
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24">
-        <div className="bg-white dark:bg-slate-900 border-b dark:border-white/10 sticky top-0 z-10">
-          <div className="px-5 py-4">
-            <div className="flex items-center gap-3 mb-4">
-              <button onClick={() => setCurrentScreen('home')} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl lg:hidden">
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-              <div>
-                <h1 className="text-lg font-bold">Tiendas</h1>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{filtered.length} locales cercanos</p>
-              </div>
-            </div>
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input type="text" value={query} onChange={e => setQuery(e.target.value)}
-                placeholder="Buscar tiendas o rubros..."
-                className="w-full pl-12 pr-4 py-3 bg-slate-100 dark:bg-white/5 dark:text-slate-200 dark:placeholder:text-slate-500 rounded-2xl border border-transparent focus:outline-none focus:border-emerald-400 dark:focus:border-emerald-500 text-sm transition-colors" />
-            </div>
-          </div>
-          <CategoryFilterBar filterCategory={filterCategory} setFilterCategory={setFilterCategory} categories={allCategories} presentIds={tiendaRootIds} />
+  const RECENT_SEARCHES_KEY = 'lokal-recent-searches';
+  const getRecentSearches = () => { try { return JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) || '[]'); } catch { return []; } };
+  const [recentSearches, setRecentSearches] = React.useState(getRecentSearches);
+  const addRecentSearch = (label) => {
+    if (!label?.trim()) return;
+    const next = [label, ...getRecentSearches().filter(s => s !== label)].slice(0, 16);
+    localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(next));
+    setRecentSearches(next);
+  };
+  const clearRecentSearches = () => { localStorage.removeItem(RECENT_SEARCHES_KEY); setRecentSearches([]); };
+
+  const handleGSelect = (item) => {
+    addRecentSearch(item._type === 'oferta' ? item.titulo : item._type === 'tienda' ? item.nombre : item.titulo);
+    setGOpen(false);
+    setGQuery('');
+    if (item._type === 'oferta')  { setSelectedProduct(item); navigate('product-detail'); }
+    if (item._type === 'demanda') { setSelectedDemanda(item); navigate('detalle'); }
+    if (item._type === 'tienda')  { setSelectedTienda(item); navigate('tienda-detail'); }
+  };
+  const handleGSearchSubmit = (q) => {
+    if (!q?.trim()) return;
+    addRecentSearch(q.trim());
+    // aplica el filtro en la home si está en home, sino navega
+    setHomeActiveCat(null);
+  };
+
+  const gDropdownContent = gOpen && gAnchorRect && (
+    !gQuery.trim() && recentSearches.length > 0 ? (
+      <div data-gdropdown onMouseDown={e => e.preventDefault()}
+        style={{ position: 'fixed', top: gAnchorRect.bottom + 8, left: gAnchorRect.left, width: gAnchorRect.width, zIndex: 9999 }}
+        className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl shadow-black/20 border border-slate-200 dark:border-white/10 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[11px] font-bold tracking-widest uppercase text-slate-400 flex items-center gap-1.5">
+            <History className="w-3 h-3" /> Búsquedas recientes
+          </p>
+          <button onClick={clearRecentSearches} className="text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+            Limpiar
+          </button>
         </div>
-
-        <div className="max-w-4xl mx-auto px-5 py-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {filtered.map(t => (
-            <div key={t.id} onClick={() => { setSelectedTienda(t); setCurrentScreen('tienda-detail'); }}
-              className="bg-white dark:bg-[#111827] rounded-2xl p-5 hover:shadow-md hover:shadow-black/5 dark:hover:shadow-black/30 cursor-pointer transition-all">
-              <div className="flex gap-3 mb-4">
-                <div className="w-16 h-16 bg-violet-100 rounded-2xl flex items-center justify-center text-2xl shrink-0">{t.foto}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-bold">{t.nombre}</h3>
-                    <div className="flex items-center gap-0.5 shrink-0">
-                      <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                      <span className="text-sm font-bold">{t.rating}</span>
-                    </div>
-                  </div>
-                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{t.rubro}</p>
-                  <p className="text-xs text-slate-400 flex items-center gap-1 mt-1">
-                    <MapPin className="w-3 h-3" />{t.distancia}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-100 dark:border-white/5">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${t.abierto ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                  <span className={`text-sm font-semibold ${t.abierto ? 'text-emerald-600' : 'text-slate-400'}`}>{t.horario}</span>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <button className="py-2.5 bg-slate-900 dark:bg-emerald-500 text-white rounded-xl font-semibold text-sm hover:bg-slate-800 dark:hover:bg-emerald-400 transition-colors">Ver tienda</button>
-                <button onClick={e => { e.stopPropagation(); window.open(`https://www.google.com/maps/search/${encodeURIComponent(t.nombre)}`, '_blank'); }}
-                  className="py-2.5 bg-slate-100 rounded-xl font-semibold text-sm flex items-center justify-center gap-1.5 hover:bg-slate-200 transition-colors">
-                  <Navigation className="w-4 h-4" /> Navegar
-                </button>
-              </div>
-            </div>
+        <div className="flex flex-wrap gap-2">
+          {recentSearches.map((s, i) => (
+            <button key={i} onMouseDown={e => { e.preventDefault(); setGQuery(s); setGQueryTick(t => t + 1); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-white/8 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 dark:hover:bg-white/12 transition-colors">
+              <History className="w-3 h-3 text-slate-400 shrink-0" />
+              {s}
+            </button>
           ))}
         </div>
       </div>
+    ) : gResults.length > 0 ? (
+      <div data-gdropdown onMouseDown={e => e.preventDefault()}
+        style={{ position: 'fixed', top: gAnchorRect.bottom + 8, left: gAnchorRect.left, width: gAnchorRect.width, zIndex: 9999 }}
+        className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl shadow-black/20 border border-slate-200 dark:border-white/10 overflow-hidden max-h-[420px] overflow-y-auto">
+        {gResults.filter(r => r._type === 'oferta').length > 0 && (
+          <div>
+            <p className="px-4 pt-3 pb-1 text-[10px] font-bold tracking-widest uppercase text-slate-400">Productos</p>
+            {gResults.filter(r => r._type === 'oferta').map(item => {
+              const vc = VENTAJA_CONFIG[item.ventaja] || {};
+              return (
+                <button key={item.id} onClick={() => handleGSelect(item)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-left">
+                  <div className="w-10 h-10 rounded-xl bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center">
+                    {item.galeria?.[0] || item.fotos?.[0] ? <img src={item.galeria?.[0] || item.fotos?.[0]} alt="" className="w-full h-full object-cover" /> : <Package className="w-5 h-5 text-slate-300" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate leading-tight">{item.titulo}</p>
+                    <p className="text-xs text-slate-400 truncate">{item.tiendaNombre}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    {item.precio && <p className="text-sm font-bold text-primary">${Number(item.precio).toLocaleString()}</p>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {gResults.filter(r => r._type === 'tienda').length > 0 && (
+          <div>
+            <p className="px-4 pt-3 pb-1 text-[10px] font-bold tracking-widest uppercase text-slate-400">Tiendas</p>
+            {gResults.filter(r => r._type === 'tienda').map(item => (
+              <button key={item.id} onClick={() => handleGSelect(item)}
+                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-left">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 shrink-0 flex items-center justify-center">
+                  <Store className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{item.nombre}</p>
+                  <p className="text-xs text-slate-400 truncate">{item.rubro}</p>
+                </div>
+                <span className={`flex items-center gap-1 text-xs font-semibold ${item.abierto ? 'text-ok' : 'text-slate-400'}`}>
+                  <div className={`w-1.5 h-1.5 rounded-full ${item.abierto ? 'bg-ok' : 'bg-slate-300'}`} />
+                  {item.abierto ? 'Abierto' : 'Cerrado'}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+        {gResults.filter(r => r._type === 'demanda').length > 0 && (
+          <div>
+            <p className="px-4 pt-3 pb-1 text-[10px] font-bold tracking-widest uppercase text-slate-400">Demandas</p>
+            {gResults.filter(r => r._type === 'demanda').map(item => {
+              const foto = item.fotos?.[0] || item.foto;
+              return (
+                <button key={item.id} onClick={() => handleGSelect(item)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-left">
+                  <div className="w-10 h-10 rounded-xl bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center">
+                    {foto ? <img src={foto} alt="" className="w-full h-full object-cover" /> : <Package className="w-5 h-5 text-slate-300" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{item.titulo}</p>
+                    <p className="text-xs text-slate-400">{item.tiempoCreado}</p>
+                  </div>
+                  <span className={`shrink-0 flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full ${item.respuestas > 0 ? 'text-primary bg-primary/10' : 'text-slate-400 bg-slate-100'}`}>
+                    <MessageSquare className="w-2.5 h-2.5" />{item.respuestas}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <div className="h-2" />
+      </div>
+    ) : gQuery.trim() ? (
+      <div data-gdropdown
+        style={{ position: 'fixed', top: gAnchorRect.bottom + 8, left: gAnchorRect.left, width: gAnchorRect.width, zIndex: 9999 }}
+        className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 px-4 py-6 text-center">
+        <Search className="w-6 h-6 text-slate-300 mx-auto mb-2" />
+        <p className="text-sm text-slate-400">Sin resultados para "<span className="font-semibold">{gQuery}</span>"</p>
+      </div>
+    ) : null
+  );
+  const gDropdown = gDropdownContent ? createPortal(gDropdownContent, document.body) : null;
+
+  // ─── Create Sheet helpers ─────────────────────────────────────────────────
+  const closeCreateSheet = () => setCreateSheetClosing(true);
+  const onCreateSheetAnimEnd = () => {
+    if (createSheetClosing) { setCreateSheetClosing(false); setCreateSheetOpen(false); }
+  };
+
+  const CreateSheet = () => {
+    if (!createSheetOpen && !createSheetClosing) return null;
+    const options = [
+      // ─── Solo usuario puede crear demandas ─────────────────────────────────
+      ...(userRole === 'usuario' ? [{
+        icon: Package,
+        color: 'bg-primary/10 text-primary',
+        title: 'Publicar pedido',
+        desc: 'Pedí algo y las tiendas te responden',
+        action: () => { closeCreateSheet(); setEditingDemanda(null); navigate('crear'); },
+      }] : []),
+      // ─── Emprendimiento y empresa pueden vender productos ──────────────────
+      ...(userRole !== 'usuario' ? [{
+        icon: Tag,
+        color: 'bg-brand/10 text-brand',
+        title: 'Vender producto',
+        desc: 'Publicá algo que tenés — nuevo o usado',
+        action: () => {
+          closeCreateSheet(); navigate('vender-producto');
+        },
+      }] : [{
+        icon: Tag,
+        color: 'bg-brand/10 text-brand',
+        title: 'Vender producto',
+        desc: 'Publicá algo que tenés — nuevo o usado',
+        action: () => {
+          closeCreateSheet(); setNudgeModal({ type: 'upgrade-rol' });
+        },
+      }]),
+      // ─── Lógica vieja DEPRECADA ────────────────────────────────────────────
+      // {
+      //   icon: Package,
+      //   color: 'bg-primary/10 text-primary',
+      //   title: 'Publicar pedido',
+      //   desc: 'Pedí algo y las tiendas te responden',
+      //   action: () => { closeCreateSheet(); setEditingDemanda(null); navigate('crear'); },
+      // },
+      // {
+      //   icon: Tag,
+      //   color: 'bg-brand/10 text-brand',
+      //   title: 'Vender producto',
+      //   desc: 'Publicá algo que tenés — nuevo o usado',
+      //   action: () => {
+      //     if (userRole === 'empresa') { closeCreateSheet(); navigate('vender-producto'); }
+      //     else if (userRole === 'usuario') { closeCreateSheet(); setNudgeModal({ type: 'upgrade-rol' }); }
+      //     else { closeCreateSheet(); navigate('vender-producto'); }
+      //   },
+      // },
+    ];
+    return (
+      <>
+        <div
+          className={`fixed inset-0 z-[3900] bg-black/50 ${createSheetClosing ? 'animate-backdrop-out' : 'animate-backdrop-in'}`}
+          onClick={closeCreateSheet}
+        />
+        <div
+          className={`fixed left-0 right-0 z-[4000] bg-white dark:bg-slate-900 rounded-t-3xl shadow-2xl px-5 pt-4 ${createSheetClosing ? 'animate-sheet-down' : 'animate-sheet-up'}`}
+          onAnimationEnd={onCreateSheetAnimEnd}
+          style={{ bottom: 'calc(env(safe-area-inset-bottom) + 4.5rem)', paddingBottom: '1.25rem' }}
+        >
+          <div className="w-10 h-1 bg-slate-200 dark:bg-white/15 rounded-full mx-auto mb-5" />
+          <p className="font-black text-lg mb-4">¿Qué querés crear?</p>
+          <div className="flex flex-col gap-3 mb-4">
+            {options.map((opt) => {
+              const Icon = opt.icon;
+              return (
+                <button
+                  key={opt.title}
+                  onClick={opt.action}
+                  className={`flex items-center gap-4 p-4 rounded-2xl border-2 transition-all text-left active:scale-[0.97] ${opt.locked ? 'border-slate-100 dark:border-white/6 opacity-60' : 'border-slate-100 dark:border-white/8 hover:border-brand/30 hover:bg-brand/3'}`}
+                >
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${opt.color}`}>
+                    <Icon className="w-6 h-6" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm">{opt.title}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{opt.desc}</p>
+                  </div>
+                  {opt.locked && <ShieldCheck className="w-4 h-4 text-slate-300 shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </>
     );
   };
 
-  // ─── Tienda Detail ────────────────────────────────────────────────────────
-  const TiendaDetailScreen = ({ tienda }) => {
-    const ofertasTienda = ofertas.filter(o => o.tiendaId === tienda.id);
-
+  const NudgeModal = () => {
+    if (!nudgeModal) return null;
+    const NUDGES = {
+      'producto-nuevo': {
+        icon: Store,
+        iconColor: 'text-amber-500',
+        iconBg: 'bg-amber-50 dark:bg-amber-500/10',
+        title: 'Para productos nuevos',
+        // ─── hasTienda DEPRECADO ─────────────────────────────────────────────
+        // desc: hasTienda ? 'Publicar productos nuevos se hace desde tu panel de tienda.' : 'Vender productos nuevos es para emprendimientos y empresas. ¡El registro es gratis y te da mucho más alcance!',
+        // actions: hasTienda
+        //   ? [
+        //       { label: 'Ir a mi panel de tienda', style: 'bg-brand hover:bg-brand-light text-white', onClick: () => { setNudgeModal(null); onOpenDashboard?.(); } },
+        //       { label: 'Ahora no', style: 'border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400', onClick: () => setNudgeModal(null) },
+        //     ]
+        //   : [
+        //       { label: 'Ser Emprendimiento — gratis', style: 'bg-slate-900 dark:bg-white text-white dark:text-slate-900', onClick: () => { setNudgeModal(null); onUpgradeRole?.(); } },
+        //       { label: 'Ahora no', style: 'border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400', onClick: () => setNudgeModal(null) },
+        //     ],
+        // ─── Lógica nueva: basada en userRole ────────────────────────────────
+        desc: userRole === 'empresa'
+          ? 'Publicar productos nuevos se hace desde tu panel de empresa.'
+          : 'Vender productos nuevos es para emprendimientos y empresas. ¡El registro es gratis y te da mucho más alcance!',
+        actions: userRole === 'empresa'
+          ? [
+              { label: 'Ir a mi panel', style: 'bg-brand hover:bg-brand-light text-white', onClick: () => { setNudgeModal(null); onOpenDashboard?.(); } },
+              { label: 'Ahora no', style: 'border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400', onClick: () => setNudgeModal(null) },
+            ]
+          : [
+              { label: 'Ser Emprendimiento — gratis', style: 'bg-slate-900 dark:bg-white text-white dark:text-slate-900', onClick: () => { setNudgeModal(null); onUpgradeRole?.(); } },
+              { label: 'Ahora no', style: 'border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400', onClick: () => setNudgeModal(null) },
+            ],
+      },
+      'producto-usado-limite': {
+        icon: Package,
+        iconColor: 'text-purple-500',
+        iconBg: 'bg-purple-50 dark:bg-purple-500/10',
+        title: 'Llegaste al límite',
+        desc: 'Podés tener hasta 3 productos de segunda mano como usuario. Subí a Emprendimiento (gratis) para publicar hasta 10.',
+        actions: [
+          { label: 'Subir a Emprendimiento — gratis', style: 'bg-slate-900 dark:bg-white text-white dark:text-slate-900', onClick: () => { setNudgeModal(null); onUpgradeRole?.(); } },
+          { label: 'Ahora no', style: 'border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400', onClick: () => setNudgeModal(null) },
+        ],
+      },
+      'upgrade-rol': {
+        icon: Zap,
+        iconColor: 'text-brand',
+        iconBg: 'bg-brand-muted dark:bg-brand/10',
+        title: 'Subí de nivel',
+        desc: 'Para vender productos necesitás ser Emprendimiento o Empresa. El cambio es gratis y te da acceso a muchas más funciones.',
+        actions: [
+          { label: 'Ser Emprendimiento — gratis', style: 'bg-slate-900 dark:bg-white text-white dark:text-slate-900', onClick: () => { setNudgeModal(null); onUpgradeRole?.(); } },
+          { label: 'Ahora no', style: 'border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400', onClick: () => setNudgeModal(null) },
+        ],
+      },
+    };
+    const n = NUDGES[nudgeModal.type];
+    if (!n) return null;
+    const Icon = n.icon;
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24">
-        <div className="bg-white border-b px-5 py-4 sticky top-0 z-10">
-          <div className="flex items-center gap-3">
-            <button onClick={() => { setSelectedTienda(null); setCurrentScreen('tiendas'); }} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl">
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div>
-              <h1 className="text-lg font-bold">{tienda.nombre}</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{tienda.rubro}</p>
+      <>
+        <div className="fixed inset-0 z-[6000] bg-black/60 animate-backdrop-in" onClick={() => setNudgeModal(null)} />
+        <div className="fixed inset-0 z-[6001] flex items-center justify-center p-6 pointer-events-none">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 w-full max-w-sm shadow-2xl pointer-events-auto animate-sheet-up">
+            <div className={`w-14 h-14 ${n.iconBg} rounded-2xl flex items-center justify-center mb-4`}>
+              <Icon size={28} className={n.iconColor} />
+            </div>
+            <h3 className="font-black text-lg mb-2">{n.title}</h3>
+            <p className="text-sm text-slate-400 mb-6 leading-relaxed">{n.desc}</p>
+            <div className="flex flex-col gap-2">
+              {n.actions.map((a) => (
+                <button key={a.label} onClick={a.onClick} className={`w-full py-3.5 rounded-2xl text-sm font-bold transition-colors ${a.style}`}>{a.label}</button>
+              ))}
             </div>
           </div>
         </div>
-
-        <div className="max-w-2xl mx-auto p-5 space-y-5">
-          {/* Info principal */}
-          <div className="bg-white rounded-3xl border-2 border-slate-100 p-6">
-            <div className="flex gap-4 mb-5">
-              <div className="w-20 h-20 bg-violet-100 rounded-2xl flex items-center justify-center text-4xl shrink-0">{tienda.foto}</div>
-              <div className="flex-1">
-                <h2 className="font-bold text-xl mb-1">{tienda.nombre}</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">{tienda.rubro}</p>
-                <div className="flex gap-3 text-sm">
-                  <span className="flex items-center gap-1 text-slate-500"><MapPin className="w-3.5 h-3.5" />{tienda.distancia}</span>
-                  <span className="flex items-center gap-1 font-bold"><Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />{tienda.rating}</span>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 mb-5 pb-5 border-b border-slate-100 dark:border-white/5">
-              <div className={`w-2.5 h-2.5 rounded-full ${tienda.abierto ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-              <span className={`text-sm font-bold ${tienda.abierto ? 'text-emerald-600' : 'text-slate-400'}`}>{tienda.horario}</span>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <button onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(tienda.nombre)}`, '_blank')}
-                className="py-3 bg-slate-900 dark:bg-emerald-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-800 dark:hover:bg-emerald-400 transition-colors">
-                <Navigation className="w-4 h-4" /> Navegar
-              </button>
-              <button onClick={() => window.open(`tel:${tienda.telefono}`, '_self')}
-                className="py-3 bg-slate-100 rounded-xl font-bold hover:bg-slate-200 transition-colors">
-                Llamar
-              </button>
-            </div>
-          </div>
-
-          {/* Informacion */}
-          <div className="bg-white rounded-3xl border-2 border-slate-100 p-5">
-            <h3 className="font-bold mb-4">Informacion</h3>
-            <div className="space-y-4 text-sm">
-              <div className="flex gap-3">
-                <MapPin className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold">Direccion</p>
-                  <p className="text-slate-500">Av. Principal 1234, Centro</p>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <Clock className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold">Horarios</p>
-                  <p className="text-slate-500">Lun - Vie: 9:00 - 20:00</p>
-                  <p className="text-slate-500">Sab: 9:00 - 13:00</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Ofertas de esta tienda */}
-          {ofertasTienda.length > 0 && (
-            <div className="bg-white rounded-3xl border-2 border-slate-100 p-5">
-              <h3 className="font-bold mb-4">Productos disponibles</h3>
-              <div className="space-y-3">
-                {ofertasTienda.map(o => (
-                  <div key={o.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl">
-                    <div className="w-12 h-12 bg-violet-100 rounded-xl flex items-center justify-center text-xl shrink-0">{o.foto}</div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm truncate">{o.titulo}</p>
-                      <p className="text-xs text-slate-400 truncate">{o.descripcion}</p>
-                    </div>
-                    {o.precio && <p className="font-bold text-emerald-600 text-sm shrink-0">${o.precio.toLocaleString()}</p>}
-                  </div>
-                ))}
-              </div>
-              <button
-                onClick={() => openChat({ id: tienda.id, tienda: tienda.nombre, foto: tienda.foto, mensaje: 'Hola! En que puedo ayudarte?' })}
-                className="w-full mt-4 py-3 bg-slate-900 dark:bg-emerald-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-800 dark:hover:bg-emerald-400 transition-colors">
-                <MessageSquare className="w-4 h-4" /> Consultar
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+      </>
     );
   };
 
   // ─── Bottom Nav Mobile ────────────────────────────────────────────────────
-  const BottomNav = () => {
-    const navItems = [
-      { icon: Package, label: 'Demandas', action: () => { setCurrentScreen('home'); setActiveTab('demandas'); }, active: currentScreen === 'home' && activeTab === 'demandas' },
-      { icon: Tag,     label: 'Ofertas',  action: () => { setCurrentScreen('home'); setActiveTab('ofertas');  }, active: currentScreen === 'home' && activeTab === 'ofertas'  },
-      { icon: Store,   label: 'Tiendas',  action: () => setCurrentScreen('tiendas'), active: currentScreen === 'tiendas' || currentScreen === 'tienda-detail' },
-    ];
-    return (
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 max-w-md mx-auto z-20">
-        {/* Blur backdrop */}
-        <div className="bg-white/80 dark:bg-[#111827]/90 backdrop-blur-xl border-t border-slate-200/60 dark:border-white/8 px-2 pt-2 pb-safe">
-          <div className="flex items-center">
-            {/* Left items */}
-            {navItems.slice(0, 2).map(item => (
-              <button key={item.label} onClick={item.action}
-                className="flex-1 flex flex-col items-center gap-1 py-1.5 transition-all">
-                <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all ${
-                  item.active ? 'bg-emerald-500 shadow-lg shadow-emerald-500/30' : ''
-                }`}>
-                  <item.icon className={`w-4.5 h-4.5 transition-colors ${item.active ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
-                </div>
-                <span className={`text-[10px] font-semibold transition-colors ${item.active ? 'text-emerald-500' : 'text-slate-400 dark:text-slate-500'}`}>
-                  {item.label}
-                </span>
-              </button>
-            ))}
+  // Siempre cierra el overlay "Más" antes de navegar
+  const navFromTab = (screen) => { setShowMobileMenu(false); setMobileMenuClosing(false); navRoot(screen); };
 
-            {/* Centro — FAB crear */}
-            <div className="flex flex-col items-center px-4">
-              <button onClick={() => { setEditingDemanda(null); setCurrentScreen('crear'); }}
-                className="-mt-7 w-14 h-14 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-2xl flex items-center justify-center shadow-xl shadow-emerald-500/40 active:scale-95 transition-transform border-[3px] border-white dark:border-[#111827]">
-                <Camera className="w-6 h-6 text-white" />
-              </button>
-              <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 mt-1">Crear</span>
-            </div>
-
-            {/* Right item */}
-            {navItems.slice(2).map(item => (
-              <button key={item.label} onClick={item.action}
-                className="flex-1 flex flex-col items-center gap-1 py-1.5 transition-all">
-                <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all ${
-                  item.active ? 'bg-emerald-500 shadow-lg shadow-emerald-500/30' : ''
-                }`}>
-                  <item.icon className={`w-4.5 h-4.5 transition-colors ${item.active ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
-                </div>
-                <span className={`text-[10px] font-semibold transition-colors ${item.active ? 'text-emerald-500' : 'text-slate-400 dark:text-slate-500'}`}>
-                  {item.label}
-                </span>
-              </button>
-            ))}
-            {/* Historial */}
-            <button onClick={() => setCurrentScreen('historial')}
-              className="flex-1 flex flex-col items-center gap-1 py-1.5">
-              <div className={`w-8 h-8 flex items-center justify-center rounded-xl transition-all ${
-                currentScreen === 'historial' ? 'bg-emerald-500 shadow-lg shadow-emerald-500/30' : ''
-              }`}>
-                <History className={`w-4.5 h-4.5 transition-colors ${currentScreen === 'historial' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
-              </div>
-              <span className={`text-[10px] font-semibold transition-colors ${currentScreen === 'historial' ? 'text-emerald-500' : 'text-slate-400 dark:text-slate-500'}`}>
-                Historial
-              </span>
-            </button>
+  const BottomNav = () => (
+    <div className="lg:hidden fixed left-0 right-0 bg-white/80 dark:bg-slate-900/90 backdrop-blur-xl border-t border-slate-200/60 dark:border-white/8 z-[4500]" style={{ bottom: 'env(safe-area-inset-bottom)' }}>
+      <div className="flex items-end px-1 pt-2 pb-3 max-w-md mx-auto">
+        {/* Inicio */}
+        <button onClick={() => navFromTab('home')} className="flex-1 flex flex-col items-center gap-1">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${currentScreen === 'home' ? 'bg-slate-900 dark:bg-brand/15' : 'bg-slate-100 dark:bg-white/5'}`}>
+            <Home className={`w-5 h-5 ${currentScreen === 'home' ? 'text-white dark:text-brand' : 'text-slate-500 dark:text-slate-400'}`} />
           </div>
-        </div>
+          <span className={`text-[10px] font-semibold ${currentScreen === 'home' ? 'text-brand-dark dark:text-brand' : 'text-slate-500'}`}>Inicio</span>
+        </button>
+        {/* Tiendas */}
+        <button onClick={() => navFromTab('tiendas')} className="flex-1 flex flex-col items-center gap-1">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${currentScreen === 'tiendas' || currentScreen === 'tienda-detail' ? 'bg-slate-900 dark:bg-brand/15' : 'bg-slate-100 dark:bg-white/5'}`}>
+            <Store className={`w-5 h-5 ${currentScreen === 'tiendas' || currentScreen === 'tienda-detail' ? 'text-white dark:text-brand' : 'text-slate-500 dark:text-slate-400'}`} />
+          </div>
+          <span className={`text-[10px] font-semibold ${currentScreen === 'tiendas' || currentScreen === 'tienda-detail' ? 'text-brand-dark dark:text-brand' : 'text-slate-500'}`}>Tiendas</span>
+        </button>
+        {/* Crear — central elevado */}
+        <button onClick={() => {
+          if (isGuest) { openLoginSheet('crear'); return; }
+          setShowMobileMenu(false); setMobileMenuClosing(false); setShowNotifications(false); setShowProfile(false); createSheetOpen ? closeCreateSheet() : setCreateSheetOpen(true);
+        }} className="flex-1 flex flex-col items-center" style={{ marginTop: '-14px' }}>
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-brand"
+            style={{ boxShadow: '0 4px 18px rgba(0,184,217,0.45)' }} />
+          <span className="text-[10px] font-semibold mt-1 text-slate-500">Crear</span>
+        </button>
+        {/* Mapa */}
+        {isModuleEnabled('mapa') && (
+        <button onClick={() => navFromTab('mapa')} className="flex-1 flex flex-col items-center gap-1">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${currentScreen === 'mapa' ? 'bg-slate-900 dark:bg-brand/15' : 'bg-slate-100 dark:bg-white/5'}`}>
+            <MapPin className={`w-5 h-5 ${currentScreen === 'mapa' ? 'text-white dark:text-brand' : 'text-slate-500 dark:text-slate-400'}`} />
+          </div>
+          <span className={`text-[10px] font-semibold ${currentScreen === 'mapa' ? 'text-brand-dark dark:text-brand' : 'text-slate-500'}`}>Mapa</span>
+        </button>
+        )}
+        {/* Más — abre overlay full-screen */}
+        {(() => {
+          const masActive = (showMobileMenu && !mobileMenuClosing) ||
+            ['mis-cosas','mis-demandas','historial','mis-productos','vender-producto','chats'].includes(currentScreen);
+          const chatUnread = Object.values(chatConversations).reduce((s, c) => s + (c.unread || 0), 0);
+          return (
+            <button onClick={() => { if (showMobileMenu) { setShowMobileMenu(false); setMobileMenuClosing(false); } else { setShowMobileMenu(true); } }} className="flex-1 flex flex-col items-center gap-1">
+              <div className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${masActive ? 'bg-slate-900 dark:bg-brand/15' : 'bg-slate-100 dark:bg-white/5'}`}>
+                <Menu className={`w-5 h-5 ${masActive ? 'text-white dark:text-brand' : 'text-slate-500 dark:text-slate-400'}`} />
+                {chatUnread > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-brand flex items-center justify-center text-[9px] font-bold text-white">
+                    {chatUnread > 9 ? '9+' : chatUnread}
+                  </span>
+                )}
+              </div>
+              <span className={`text-[10px] font-semibold ${masActive ? 'text-brand-dark dark:text-brand' : 'text-slate-500'}`}>Más</span>
+            </button>
+          );
+        })()}
       </div>
-    );
-  };
+    </div>
+  );
 
   // ─── Render ───────────────────────────────────────────────────────────────
-  const showBottomNav = !['crear'].includes(currentScreen);
+  const showBottomNav = !['crear', 'admin', 'vender-producto'].includes(currentScreen);
 
-  return (
-    <div className="flex bg-[#f7f8fa] dark:bg-[#0a0d16] h-screen overflow-hidden">
+  // Stable screen wrappers: evitan que React desmonte/remonte las screens cuando
+  // UserApp re-renderiza por cambios de estado que no son navegación (ej: createSheetOpen).
+  // La función interna siempre se actualiza vía ref, así que los closures son frescos.
+  const _sw = React.useRef({});
+  const sw = (key, Fn) => {
+    if (!_sw.current[key]) {
+      _sw.current[key] = function S(p) { return _sw.current[key + '$f'](p); };
+    }
+    _sw.current[key + '$f'] = Fn;
+    return _sw.current[key];
+  };
+  // pageHeaderProps bundle — passed to screens that use PageHeader
+  const pageHeaderProps = {
+    firebaseUser,
+    toggleProfileMenu: () => setShowProfile(v => !v),
+    showProfileDropdown: showProfile,
+    openNotifications: () => setShowNotifications(true),
+    unreadCount,
+  };
+
+  const S = {
+    Home:          sw('home',          HomeScreen),
+    MisDemandas:   sw('mis-demandas',  () => <MisDemandas
+      demandasActivas={demandasActivas} allCategories={allCategories}
+      demandaRootIds={demandaRootIds} sortedDemandas={sortedDemandas}
+      sortBy={sortBy} setSortBy={setSortBy}
+      loadingDemandas={loadingDemandas} errorDemandas={errorDemandas} fetchDemandas={fetchDemandas}
+      setSelectedDemanda={setSelectedDemanda} navigate={navigate} goBack={goBack}
+      setEditingDemanda={setEditingDemanda}
+      pageHeaderProps={pageHeaderProps}
+    />),
+    TodasOfertas:  sw('todas-ofertas', () => <TodasOfertasScreen
+      searchQuery={searchResultsQuery || ''}
+      visibleOfertas={visibleOfertas} tiendas={tiendas} allCategories={allCategories}
+      ofertasStoreFilter={ofertasStoreFilter} setOfertasStoreFilter={setOfertasStoreFilter}
+      loadingOfertas={loadingOfertas}
+      goBack={goBack} navigate={navigate}
+      setSelectedProduct={setSelectedProduct} setSelectedTienda={setSelectedTienda}
+      setEditingDemanda={setEditingDemanda}
+      pageHeaderProps={pageHeaderProps}
+    />),
+    Crear:         sw('crear',         () => <CrearDemandaScreen
+      editingDemanda={editingDemanda} setEditingDemanda={setEditingDemanda}
+      navRoot={navRoot} navigate={navigate}
+      setAllDemandas={setAllDemandas}
+      allCategories={allCategories}
+      createCategory={createCategory}
+      addNotif={addNotif}
+    />),
+    Detalle:       sw('detalle',       () => <DetalleDemandaScreen
+      selectedDemanda={selectedDemanda} allDemandas={allDemandas}
+      goBack={goBack} navigate={navigate}
+      setEditingDemanda={setEditingDemanda}
+      openChat={openChat}
+      updateDemandaEstado={updateDemandaEstado}
+      deleteDemanda={deleteDemanda}
+      setShowConfirm={setShowConfirm}
+    />),
+    Tiendas:       sw('tiendas',       () => <TiendasScreen
+      tiendas={tiendas} allCategories={allCategories} visibleOfertas={visibleOfertas}
+      filterCategory={filterCategory} setFilterCategory={setFilterCategory}
+      navigate={navigate} goBack={goBack} setSelectedTienda={setSelectedTienda}
+      pageHeaderProps={pageHeaderProps}
+    />),
+    Categorias:    sw('categorias',    () => {
+      const prevScreen = navStack[navStack.length - 2] || 'home';
+      const fromTiendas = prevScreen === 'tiendas' || prevScreen === 'mis-demandas';
+      return <CategoriasScreen
+        allCategories={allCategories} visibleOfertas={visibleOfertas}
+        navigate={navigate} setHomeActiveCat={setHomeActiveCat}
+        setFilterCategory={fromTiendas ? setFilterCategory : undefined}
+        returnScreen={fromTiendas ? prevScreen : 'home'}
+      />;
+    }),
+    TiendaDetail:  sw('tienda-detail', () => <TiendaDetailScreen
+      tienda={selectedTienda} tiendas={tiendas} visibleOfertas={visibleOfertas}
+      allDemandas={allDemandas} allCategories={allCategories}
+      firebaseUser={firebaseUser} unreadCount={unreadCount}
+      toggleProfileMenu={() => setShowProfile(v => !v)}
+      openNotifications={() => setShowNotifications(true)}
+      goBack={goBack} navigate={navigate} navigateReplace={navigateReplace}
+      openChat={openChat}
+      setSelectedTienda={setSelectedTienda} setSelectedProduct={setSelectedProduct}
+      setSelectedDemanda={setSelectedDemanda}
+      setMapaFocusStore={setMapaFocusStore}
+      setOfertasStoreFilter={setOfertasStoreFilter}
+      mainScrollRef={mainScrollRef}
+      showToast={showToast} isDark={isDark}
+    />),
+    Historial:     sw('historial',     () => <HistorialScreen
+      demandasHistorial={demandasHistorial}
+      goBack={goBack}
+      updateDemandaEstado={updateDemandaEstado}
+      setShowConfirm={setShowConfirm}
+      deleteDemanda={deleteDemanda}
+      pageHeaderProps={pageHeaderProps}
+    />),
+    Mapa:          sw('mapa',          () => <MapaScreen
+      tiendas={tiendas} visibleOfertas={visibleOfertas}
+      allDemandas={allDemandas} allCategories={allCategories}
+      mapaFocusStore={mapaFocusStore} mapaFocusProduct={mapaFocusProduct} mapaAutoRoute={mapaAutoRoute}
+      setMapaFocusStore={setMapaFocusStore} setMapaFocusProduct={setMapaFocusProduct} setMapaAutoRoute={setMapaAutoRoute}
+      goBack={goBack} navigate={navigate}
+      setSelectedProduct={setSelectedProduct} setSelectedTienda={setSelectedTienda}
+      setSelectedDemanda={setSelectedDemanda}
+      isDark={isDark} showToast={showToast}
+    />),
+    ProductDetail: sw('product-detail', () => <ProductDetailScreen
+      oferta={selectedProduct} tiendas={tiendas} visibleOfertas={visibleOfertas}
+      allDemandas={allDemandas}
+      firebaseUser={firebaseUser} unreadCount={unreadCount}
+      toggleProfileMenu={() => setShowProfile(v => !v)}
+      openNotifications={() => setShowNotifications(true)}
+      goBack={goBack} navigate={navigate} openChat={openChat}
+      setSelectedProduct={setSelectedProduct} setSelectedTienda={setSelectedTienda}
+      setSelectedDemanda={setSelectedDemanda}
+      setMapaFocusStore={setMapaFocusStore}
+      setMapaFocusProduct={setMapaFocusProduct}
+      setMapaAutoRoute={setMapaAutoRoute}
+      mainScrollRef={mainScrollRef}
+    />),
+    Vender:        sw('vender-producto', () => <VenderProductoScreen
+      firebaseUser={firebaseUser} userRole={userRole}
+      canPostNewProduct={canPostNewProduct}
+      /* hasTienda={hasTienda} // DEPRECADO: usar userRole === 'empresa' */
+      navRoot={navRoot} navigate={navigate} goBack={goBack}
+      setNudgeModal={setNudgeModal}
+      setSelectedProduct={setSelectedProduct}
+      allCategories={allCategories}
+      createCategory={createCategory}
+    />),
+    MisProductos:  sw('mis-productos', () => <MisProductosScreen
+      firebaseUser={firebaseUser} userRole={userRole}
+      goBack={goBack}
+      setNudgeModal={setNudgeModal}
+      setCreateSheetOpen={setCreateSheetOpen}
+    />),
+    MisCosas:      sw('mis-cosas',     () => <MisCosasScreen
+      firebaseUser={firebaseUser} userRole={userRole}
+      /* hasTienda={hasTienda} // DEPRECADO: usar userRole === 'empresa' */
+      allDemandas={allDemandas}
+      navigate={navigate} navRoot={navRoot}
+      setEditingDemanda={setEditingDemanda}
+      setSelectedDemanda={setSelectedDemanda}
+      setNudgeModal={setNudgeModal}
+    />),
+    Chats:         sw('chats',         () => <ChatsScreen
+      chatConversations={chatConversations}
+      tiendas={tiendas}
+      navRoot={navRoot}
+      openChat={openChat}
+      pageHeaderProps={pageHeaderProps}
+    />),
+  };
+
+    return (
+      <div className="bg-[#f7f8fa] dark:bg-[#0a0d16] h-[100dvh] overflow-hidden relative">
       <DesktopSidebar />
 
-      <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-[#f7f8fa] dark:bg-[#0a0d16] relative">
-        {currentScreen === 'home' && <HomeScreen />}
-        {currentScreen === 'crear' && <CrearDemandaScreen />}
-        {currentScreen === 'detalle' && selectedDemanda && <DetalleDemandaScreen />}
-        {currentScreen === 'tiendas' && <TiendasScreen />}
-        {currentScreen === 'tienda-detail' && selectedTienda && <TiendaDetailScreen tienda={selectedTienda} />}
-        {currentScreen === 'historial' && <HistorialScreen />}
+      <div
+        ref={el => { mainScrollRef.current = el; if (el) { const prev = el._prevScreen; if (prev !== currentScreen) { el.scrollTop = 0; el._prevScreen = currentScreen; } } }}
+        className={`h-[100dvh] overflow-x-hidden bg-[#f7f8fa] dark:bg-[#0a0d16] relative z-0 transition-[padding-left] duration-[380ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${currentScreen === 'home' ? 'lg:pl-0' : sidebarExpanded ? 'lg:pl-[224px]' : 'lg:pl-16'} ${currentScreen === 'admin' ? 'overflow-hidden' : 'overflow-y-auto'}`}
+        style={showBottomNav ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 4.5rem)' } : { paddingBottom: 0 }}
+        data-has-bottom-nav={showBottomNav || undefined}
+      >
+        {currentScreen === 'home' && <S.Home
+          homeActiveCat={homeActiveCat} setHomeActiveCat={setHomeActiveCat}
+          visibleOfertas={visibleOfertas} tiendas={tiendas}
+          allDemandas={allDemandas} allCategories={allCategories}
+          addRecentSearch={addRecentSearch} recentSearches={recentSearches}
+          clearRecentSearches={clearRecentSearches}
+          setSelectedProduct={setSelectedProduct} setSelectedTienda={setSelectedTienda}
+          setSelectedDemanda={setSelectedDemanda}
+          navigate={navigate} navigateSearch={navigateSearch}
+          setEditingDemanda={setEditingDemanda}
+          loadingOfertas={loadingOfertas} loadingDemandas={loadingDemandas}
+          demandasActivas={demandasActivas}
+          openNotifications={(btn) => openNotifications(btn)}
+          unreadCount={unreadCount} isStoreOpen={isStoreOpen}
+          VENTAJA_CONFIG={VENTAJA_CONFIG}
+          firebaseUser={firebaseUser}
+          onOpenProfile={() => { notifAnimClose(); if (showProfileDropdown) profileDropdownAnimClose(); setShowProfile(true); }}
+          toggleProfileMenu={toggleProfileMenu}
+          showProfileDropdown={showProfileDropdown}
+          ProfileDropdown={ProfileDropdown}
+          profileDropdownRef={profileDropdownRef}
+        />}
+        {currentScreen === 'mis-demandas' && <S.MisDemandas />}
+        {currentScreen === 'todas-ofertas' && <S.TodasOfertas />}
+        {currentScreen === 'crear' && <S.Crear />}
+        {currentScreen === 'detalle' && selectedDemanda && <S.Detalle />}
+        {currentScreen === 'tiendas' && <S.Tiendas />}
+        {currentScreen === 'categorias' && <S.Categorias />}
+        {currentScreen === 'tienda-detail' && selectedTienda && <S.TiendaDetail />}
+        {currentScreen === 'historial' && <S.Historial />}
+        {currentScreen === 'mapa' && <S.Mapa />}
+        {currentScreen === 'product-detail' && selectedProduct && <S.ProductDetail />}
+        {currentScreen === 'vender-producto' && <S.Vender />}
+        {currentScreen === 'mis-productos' && <S.MisProductos />}
+        {currentScreen === 'mis-cosas' && <S.MisCosas />}
+        {currentScreen === 'chats' && <S.Chats />}
+        {currentScreen === 'admin' && isAdmin && (
+          <AdminDashboard
+            firebaseUser={firebaseUser}
+            tiendas={tiendas}
+            ofertas={allOfertas}
+            demandas={allDemandas}
+            isDark={isDark}
+            onBack={() => navRoot('home')}
+            suspended={suspended}
+            onSuspend={handleAdminSuspend}
+            onRestore={handleAdminRestore}
+            onDelete={handleAdminDelete}
+            demoMode={demoMode}
+            onDemoModeChange={setDemoMode}
+            setRoleSim={setRoleSim}
+          />
+        )}
 
         {showBottomNav && <BottomNav />}
-        {showNotifications && <NotificationsModal />}
+        {/* Ícono del botón Crear — fuera de BottomNav para que la transition sobreviva re-renders */}
+        {showBottomNav && (
+          <div className="lg:hidden fixed z-[4600] pointer-events-none flex items-center justify-center"
+            style={{ width: 56, height: 56, left: '50%', transform: 'translateX(-50%)', bottom: 'calc(env(safe-area-inset-bottom) + 1.8rem)' }}>
+            <Plus
+              className="w-6 h-6 text-white"
+              style={{
+                transform: (createSheetOpen && !createSheetClosing) ? 'rotate(45deg)' : 'rotate(0deg)',
+                transition: 'transform 180ms cubic-bezier(0.4, 0, 0.2, 1)',
+              }}
+            />
+          </div>
+        )}
+        {CreateSheet()}
+        <NudgeModal />
+        {showMobileMenu && <MobileMenu />}
+        {showNotifications && NotificationsPanel({ anchor: notifAnchor })}
         {showProfile && <ProfileModal />}
         {showChat && (() => {
           const tienda = showChat;
           const messages = chatHistories[tienda.chatKey] || [];
+          const chatUnread = chatConversations[tienda.chatKey]?.unread || 0;
+
+          /* ── Chip colapsado (estilo Messenger/Instagram) ── */
+          if (chatCollapsed) return (
+            <div
+              className="fixed right-4 bottom-24 lg:right-8 lg:bottom-8 z-[5000] flex items-center gap-2.5 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-white/10 rounded-2xl shadow-xl px-3 py-2.5 cursor-pointer hover:shadow-2xl transition-shadow select-none"
+              onClick={() => setChatCollapsed(false)}
+            >
+              <div className="relative shrink-0">
+                <div className="w-8 h-8 rounded-xl overflow-hidden bg-brand/10 dark:bg-brand/15 flex items-center justify-center">
+                  {tienda.foto
+                    ? <img src={tienda.foto} alt={tienda.tienda} className="w-full h-full object-cover" />
+                    : <Store className="w-4 h-4 text-brand" />}
+                </div>
+                {chatUnread > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-4 h-4 bg-rose-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center px-0.5">
+                    {chatUnread > 9 ? '9+' : chatUnread}
+                  </span>
+                )}
+              </div>
+              <span className="font-bold text-sm text-slate-800 dark:text-slate-200 max-w-[110px] truncate">{tienda.tienda}</span>
+              <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" />
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={e => { e.stopPropagation(); setShowChat(null); setChatCollapsed(false); }}
+                className="ml-0.5 w-5 h-5 rounded-full flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 shrink-0"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          );
+
           return (
-            <div className="fixed inset-0 lg:inset-auto lg:right-8 lg:bottom-8 lg:w-96 lg:h-[580px] bg-white dark:bg-slate-900 z-50 flex flex-col lg:rounded-3xl lg:shadow-2xl lg:border-2 border-slate-200 dark:border-white/10">
+            <div className="fixed inset-0 lg:inset-auto lg:right-8 lg:bottom-8 lg:w-96 lg:h-[580px] bg-white dark:bg-slate-900 z-[5000] flex flex-col lg:rounded-3xl lg:shadow-2xl lg:border-2 border-slate-200 dark:border-white/10">
               {/* Header */}
-              <div className="border-b-2 border-slate-200 dark:border-white/10 p-4 lg:rounded-t-3xl shrink-0 flex items-center gap-3">
-                <button onClick={() => setShowChat(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl">
+              <div className="border-b-2 border-slate-200 dark:border-white/10 p-4 lg:rounded-t-3xl shrink-0 flex items-center gap-3"
+                style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}>
+                {/* Móvil: cerrar (X) | Desktop: minimizar (chevron) */}
+                <button onClick={() => setShowChat(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl lg:hidden">
                   <X className="w-5 h-5" />
                 </button>
-                <div className="w-10 h-10 bg-violet-100 dark:bg-violet-500/20 rounded-xl flex items-center justify-center text-xl shrink-0">{tienda.foto}</div>
+                <button onClick={() => setChatCollapsed(true)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl hidden lg:flex items-center justify-center" title="Minimizar">
+                  <ChevronDown className="w-5 h-5" />
+                </button>
+                <div className="w-10 h-10 rounded-xl overflow-hidden bg-brand/10 dark:bg-brand/15 flex items-center justify-center shrink-0">
+                  {tienda.foto
+                    ? <img src={tienda.foto} alt={tienda.tienda} className="w-full h-full object-cover" />
+                    : <Store className="w-5 h-5 text-brand" />}
+                </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-bold truncate">{tienda.tienda}</h3>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 bg-emerald-500 rounded-full" />
-                    <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">En linea</p>
-                  </div>
+                  {(() => {
+                    const isClosed = chatConversations[tienda.chatKey]?.status === 'closed';
+                    return (
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-2 h-2 rounded-full ${isClosed ? 'bg-slate-300 dark:bg-slate-600' : 'bg-ok'}`} />
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                          {isClosed ? 'Resuelto' : 'Responde en Lokal'}
+                        </p>
+                      </div>
+                    );
+                  })()}
                 </div>
-                <button onClick={() => window.open(`https://www.google.com/maps/search/${encodeURIComponent(tienda.tienda)}`, '_blank')}
-                  className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl shrink-0">
-                  <Navigation className="w-4 h-4 text-slate-500" />
+                {tienda.telefono && (
+                  <a href={`https://wa.me/${tienda.telefono.replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer"
+                    className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl shrink-0">
+                    <Phone className="w-4 h-4 text-slate-500" />
+                  </a>
+                )}
+                {/* Cerrar / reabrir chat */}
+                {(() => {
+                  const isClosed = chatConversations[tienda.chatKey]?.status === 'closed';
+                  return (
+                    <button
+                      onClick={() => setChatConversations(prev => ({ ...prev, [tienda.chatKey]: { ...prev[tienda.chatKey], status: isClosed ? 'read' : 'closed' } }))}
+                      title={isClosed ? 'Reabrir' : 'Marcar resuelto'}
+                      className={`p-2 rounded-xl shrink-0 transition-colors ${isClosed ? 'bg-ok/10 hover:bg-ok/15 text-ok' : 'hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400'}`}>
+                      <CheckCircle className="w-4 h-4" />
+                    </button>
+                  );
+                })()}
+                {/* Cerrar completamente (desktop) */}
+                <button onClick={() => setShowChat(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl hidden lg:flex items-center justify-center" title="Cerrar">
+                  <X className="w-4 h-4 text-slate-400" />
                 </button>
               </div>
+              {/* Context card — producto desde el que se abrió el chat */}
+              {tienda.contextProduct && (
+                <button
+                  onClick={() => { setShowChat(null); setSelectedProduct(tienda.contextProduct); navigate('product-detail'); }}
+                  className="mx-3 mt-3 flex items-center gap-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-3 text-left hover:bg-slate-100 dark:hover:bg-white/8 transition-colors shrink-0"
+                >
+                  <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-200 dark:bg-white/10 shrink-0">
+                    {tienda.contextProduct.imagenes?.[0] || tienda.contextProduct.foto
+                      ? <img src={tienda.contextProduct.imagenes?.[0] || tienda.contextProduct.foto} alt="" className="w-full h-full object-cover" />
+                      : <Package className="w-6 h-6 text-slate-400 m-3" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-brand mb-0.5">Preguntando sobre</p>
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">{tienda.contextProduct.titulo}</p>
+                    {tienda.contextProduct.precio && (
+                      <p className="text-xs text-slate-500">${Number(tienda.contextProduct.precio).toLocaleString()}</p>
+                    )}
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                </button>
+              )}
+
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50 dark:bg-slate-950">
+                {messages.length === 0 && !tienda.contextProduct && (
+                  <div className="flex flex-col items-center justify-center h-full text-center gap-2 py-8">
+                    <MessageSquare className="w-10 h-10 text-slate-300 dark:text-slate-700" />
+                    <p className="text-sm font-semibold text-slate-500">Iniciá la conversación</p>
+                    <p className="text-xs text-slate-400">Preguntale a {tienda.tienda} lo que necesitás</p>
+                  </div>
+                )}
                 {messages.map(msg => (
-                  <div key={msg.id} className={`flex ${msg.from === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[75%] rounded-2xl px-4 py-3 ${msg.from === 'user' ? 'bg-emerald-600 text-white' : 'bg-white dark:bg-slate-800 shadow-sm'}`}>
-                      <p className="text-sm">{msg.text}</p>
-                      <p className={`text-xs mt-1 ${msg.from === 'user' ? 'text-emerald-200' : 'text-slate-400'}`}>{msg.time}</p>
-                    </div>
+                  <div key={msg.id} className={`flex flex-col ${msg.from === 'user' ? 'items-end' : 'items-start'} gap-1`}>
+                    {msg.attachment?.type === 'product' && (
+                      <button
+                        onClick={() => { const p = allOfertas.find(o => o.id === msg.attachment.id); if (p) { setShowChat(null); setSelectedProduct(p); navigate('product-detail'); } }}
+                        className={`flex items-center gap-2.5 rounded-2xl p-2.5 border max-w-[75%] text-left transition-colors ${msg.from === 'user' ? 'bg-brand/10 border-brand/25 hover:bg-brand/15' : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm'}`}
+                      >
+                        <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-100 dark:bg-white/10 shrink-0">
+                          {msg.attachment.imagen
+                            ? <img src={msg.attachment.imagen} alt="" className="w-full h-full object-cover" />
+                            : <Package className="w-5 h-5 text-slate-400 m-2.5" />}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs text-brand font-bold mb-0.5">Producto</p>
+                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">{msg.attachment.titulo}</p>
+                          {msg.attachment.precio && <p className="text-xs text-slate-500">${Number(msg.attachment.precio).toLocaleString()}</p>}
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                      </button>
+                    )}
+                    {msg.text && (
+                      <div className={`max-w-[75%] rounded-2xl px-4 py-3 ${msg.from === 'user' ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 shadow-sm'}`}>
+                        <p className="text-sm">{msg.text}</p>
+                        <p className={`text-xs mt-1 ${msg.from === 'user' ? 'text-white/60' : 'text-slate-400'}`}>{msg.time}</p>
+                      </div>
+                    )}
+                    {!msg.text && msg.attachment && (
+                      <p className={`text-xs ${msg.from === 'user' ? 'text-brand/60' : 'text-slate-400'}`}>{msg.time}</p>
+                    )}
                   </div>
                 ))}
                 <div ref={chatEndRef} />
               </div>
-              {/* Input */}
-              <div className="border-t-2 border-slate-200 dark:border-white/10 p-4 lg:rounded-b-3xl shrink-0">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={chatMessage}
-                    onChange={e => setChatMessage(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && sendChatMessage()}
-                    placeholder="Escribi tu mensaje..."
-                    className="flex-1 px-4 py-3 bg-slate-100 dark:bg-white/5 dark:text-slate-200 dark:placeholder:text-slate-500 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                  />
-                  <button onClick={sendChatMessage} disabled={!chatMessage.trim()}
-                    className="w-12 h-12 bg-emerald-600 hover:bg-emerald-500 rounded-2xl flex items-center justify-center disabled:opacity-40 transition-colors shrink-0">
-                    <Send className="w-5 h-5 text-white" />
-                  </button>
+              {/* Barra inferior: picker + input, siempre al fondo */}
+              <div className="shrink-0 lg:rounded-b-3xl overflow-hidden">
+                {/* Product picker — aparece animado justo arriba del input */}
+                {chatProductPicker && (() => {
+                  const storeProdsList = allOfertas.filter(o => String(o.tiendaId) === String(tienda.id) && o.activa !== false).slice(0, 30);
+                  return (
+                    <div className="border-t border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 animate-sheet-up">
+                      <div className="flex items-center justify-between px-4 pt-3 pb-1.5">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Mencionar producto</p>
+                        <button onClick={() => setChatProductPicker(false)}
+                          className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10">
+                          <X className="w-3.5 h-3.5 text-slate-400" />
+                        </button>
+                      </div>
+                      <div className="overflow-y-auto max-h-52 px-3 pb-2 space-y-0.5">
+                        {storeProdsList.length === 0 && (
+                          <div className="text-center py-6">
+                            <Package className="w-7 h-7 text-slate-300 mx-auto mb-1.5" />
+                            <p className="text-xs text-slate-400">Sin productos publicados</p>
+                          </div>
+                        )}
+                        {storeProdsList.map(p => (
+                          <button key={p.id}
+                            onClick={() => { setChatPendingAttach(p); setChatProductPicker(false); }}
+                            className="w-full flex items-center gap-3 px-2 py-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-left">
+                            <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-100 dark:bg-white/10 shrink-0">
+                              {p.imagenes?.[0] || p.foto
+                                ? <img src={p.imagenes?.[0] || p.foto} alt="" className="w-full h-full object-cover" />
+                                : <Package className="w-4 h-4 text-slate-400 m-3" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">{p.titulo}</p>
+                              {p.precio
+                                ? <p className="text-xs text-brand font-semibold">${Number(p.precio).toLocaleString()}</p>
+                                : <p className="text-xs text-slate-400">Sin precio</p>}
+                            </div>
+                            <div className="w-5 h-5 rounded-full bg-brand/10 flex items-center justify-center shrink-0">
+                              <Plus className="w-3 h-3 text-brand" />
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Input */}
+                <div className="relative z-10 border-t-2 border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 px-3 py-3"
+                  style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+                  <div className="flex gap-2 items-end">
+                    <button onClick={() => setChatProductPicker(v => !v)}
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors shrink-0 mb-0.5 ${chatProductPicker ? 'bg-brand/10 text-brand' : 'bg-slate-100 dark:bg-white/8 hover:bg-slate-200 dark:hover:bg-white/12 text-slate-500'}`}>
+                      <Paperclip className="w-4 h-4" />
+                    </button>
+                    <div className="flex-1 min-w-0 bg-slate-100 dark:bg-white/5 rounded-2xl px-3 py-2 flex flex-col gap-1.5 focus-within:ring-2 focus-within:ring-brand transition-shadow">
+                      {chatPendingAttach && (
+                        <div className="flex items-center gap-1.5 bg-brand/10 dark:bg-brand/15 border border-brand/20 rounded-xl px-2 py-1 self-start max-w-full">
+                          <div className="w-5 h-5 rounded overflow-hidden bg-brand/20 shrink-0">
+                            {chatPendingAttach.imagenes?.[0] || chatPendingAttach.foto
+                              ? <img src={chatPendingAttach.imagenes?.[0] || chatPendingAttach.foto} alt="" className="w-full h-full object-cover" />
+                              : <Package className="w-3 h-3 text-brand m-1" />}
+                          </div>
+                          <span className="text-xs font-semibold text-brand truncate max-w-[140px]">{chatPendingAttach.titulo}</span>
+                          <button onClick={() => setChatPendingAttach(null)}
+                            className="shrink-0 rounded-full hover:bg-brand/20 p-0.5 ml-0.5">
+                            <X className="w-3 h-3 text-brand" />
+                          </button>
+                        </div>
+                      )}
+                      <input
+                        type="text"
+                        value={chatMessage}
+                        onChange={e => setChatMessage(e.target.value)}
+                        onFocus={() => setChatProductPicker(false)}
+                        onKeyDown={e => e.key === 'Enter' && sendChatMessage()}
+                        placeholder={chatPendingAttach ? 'Agregá un mensaje (opcional)...' : 'Escribi tu mensaje...'}
+                        className="bg-transparent text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none w-full py-0.5"
+                      />
+                    </div>
+                    <button onClick={() => sendChatMessage()} disabled={!chatMessage.trim() && !chatPendingAttach}
+                      className="w-10 h-10 bg-brand hover:bg-brand-dark rounded-xl flex items-center justify-center disabled:opacity-40 transition-colors shrink-0 mb-0.5">
+                      <Send className="w-4 h-4 text-white" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           );
         })()}
         {showConfirm && <ConfirmModal {...showConfirm} onCancel={() => setShowConfirm(null)} />}
+
+        {/* Login Bottom Sheet — aparece cuando un guest intenta hacer algo que requiere auth */}
+        <LoginBottomSheet
+          open={loginSheet.open}
+          onClose={closeLoginSheet}
+          context={loginSheet.context}
+          onOpenLanding={() => { closeLoginSheet(); window.history.pushState({}, '', '/landing'); window.dispatchEvent(new PopStateEvent('popstate')); }}
+        />
       </div>
     </div>
   );

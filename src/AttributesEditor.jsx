@@ -127,7 +127,7 @@ export default function AttributesEditor({ categoryId, value = {}, onChange, cat
               key={attr.key}
               type="button"
               onClick={() => activateAttr(attr)}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-dashed border-slate-300 dark:border-white/20 text-xs text-slate-500 dark:text-slate-400 hover:border-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-dashed border-slate-300 dark:border-white/20 text-xs text-slate-500 dark:text-slate-400 hover:border-primary hover:text-primary dark:hover:text-primary transition-colors"
             >
               <Plus className="w-3 h-3" />
               {attr.label}
@@ -156,7 +156,7 @@ export default function AttributesEditor({ categoryId, value = {}, onChange, cat
             value={customKey}
             onChange={e => setCustomKey(e.target.value)}
             placeholder="Propiedad"
-            className="w-28 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-white/15 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none focus:border-emerald-500 transition-colors"
+            className="w-28 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-white/15 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none focus:border-primary transition-colors"
           />
           <span className="text-slate-400 text-xs">:</span>
           <input
@@ -165,7 +165,7 @@ export default function AttributesEditor({ categoryId, value = {}, onChange, cat
             onChange={e => setCustomVal(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') addCustom(); if (e.key === 'Escape') setShowCustom(false); }}
             placeholder="Valor"
-            className="flex-1 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-white/15 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none focus:border-emerald-500 transition-colors"
+            className="flex-1 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-white/15 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none focus:border-primary transition-colors"
           />
           <button
             type="button"
@@ -243,8 +243,8 @@ function AttrEditor({ attr, draft, setDraft, inputRef, onConfirm, onCancel }) {
               onClick={() => onConfirm(opt)}
               className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 draft === opt
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-white dark:bg-white/8 border border-slate-200 dark:border-white/15 text-slate-600 dark:text-slate-300 hover:border-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-400'
+                  ? 'bg-primary text-white'
+                  : 'bg-white dark:bg-white/8 border border-slate-200 dark:border-white/15 text-slate-600 dark:text-slate-300 hover:border-primary/50 hover:text-primary'
               }`}
             >
               {opt}
@@ -259,7 +259,7 @@ function AttrEditor({ attr, draft, setDraft, inputRef, onConfirm, onCancel }) {
           onChange={e => setDraft(e.target.value)}
           onKeyDown={handleKey}
           placeholder={`Ingresar ${attr.label.toLowerCase()}...`}
-          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-white/15 bg-white dark:bg-slate-900 text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none focus:border-emerald-500 transition-colors"
+          className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-white/15 bg-white dark:bg-slate-900 text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none focus:border-primary transition-colors"
         />
       )}
 

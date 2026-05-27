@@ -3,7 +3,9 @@ import {
   Store, MapPin, Clock, Phone, Camera, CheckCircle,
   ArrowLeft, ArrowRight, Loader2, AlertCircle, X, Mail
 } from 'lucide-react';
+import { LogoBadge } from './Brand';
 import { signInWithGoogle } from './firebase';
+import { apiFetch } from './api';
 
 const API_BASE = '/.netlify/functions';
 
@@ -23,7 +25,7 @@ function ProgressBar({ step }) {
   const pct = idx <= 0 ? 0 : Math.round((idx / (STEPS.length - 1)) * 100);
   return (
     <div className="w-full bg-slate-100 rounded-full h-1.5 mb-6">
-      <div className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+      <div className="bg-brand h-1.5 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -64,6 +66,7 @@ export default function InviteFlow({ token, firebaseUser, onComplete, onCancel }
   });
   const [fotoFile,    setFotoFile]    = useState(null);
   const [fotoPreview, setFotoPreview] = useState(null);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const fileRef = useRef(null);
 
   // Validar token al montar (y cuando sessionId esté listo)
@@ -135,16 +138,18 @@ export default function InviteFlow({ token, firebaseUser, onComplete, onCancel }
           r.onerror = rej;
           r.readAsDataURL(fotoFile);
         });
-        const up = await fetch(`${API_BASE}/upload`, {
+        const up = await apiFetch(`${API_BASE}/upload`, {
           method: 'POST',
+          authRequired: true,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fileName: fotoFile.name, fileData: base64, contentType: fotoFile.type }),
         });
         if (up.ok) fotoUrl = (await up.json()).url;
       }
 
-      const res = await fetch(`${API_BASE}/tiendas-crud`, {
+      const res = await apiFetch(`${API_BASE}/tiendas-crud`, {
         method: 'POST',
+        authRequired: true,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token,
@@ -163,6 +168,7 @@ export default function InviteFlow({ token, firebaseUser, onComplete, onCancel }
           emailContacto,  // email publico de la tienda (puede diferir del de Google)
           website,
           foto: fotoUrl,
+          termsAccepted: acceptedTerms,
         }),
       });
 
@@ -181,9 +187,7 @@ export default function InviteFlow({ token, firebaseUser, onComplete, onCancel }
   const Header = ({ title }) => (
     <div className="bg-white border-b-2 border-slate-100 p-5">
       <div className="max-w-lg mx-auto flex items-center gap-4">
-        <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shrink-0">
-          <Store className="w-5 h-5 text-white" />
-        </div>
+        <LogoBadge size={40} />
         <div className="flex-1">
           <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Registro de tienda</p>
           <h1 className="font-bold text-slate-900">{title}</h1>
@@ -269,8 +273,8 @@ export default function InviteFlow({ token, firebaseUser, onComplete, onCancel }
         <div className="w-full max-w-sm">
           <ProgressBar step={step} />
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Store className="w-8 h-8 text-emerald-600" />
+            <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Store className="w-8 h-8 text-primary" />
             </div>
             <h2 className="text-xl font-bold mb-2">Registra tu tienda</h2>
             <p className="text-slate-500 text-sm">
@@ -320,10 +324,10 @@ export default function InviteFlow({ token, firebaseUser, onComplete, onCancel }
       nextDisabled={!nombreTienda.trim() || rubros.length === 0}>
       {/* Cuenta Google conectada */}
       {firebaseUser && (
-        <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-2xl">
+        <div className="flex items-center gap-3 p-3 bg-primary/5 border border-primary/20 rounded-2xl">
           {firebaseUser.photoURL
             ? <img src={firebaseUser.photoURL} alt="" className="w-9 h-9 rounded-full" />
-            : <div className="w-9 h-9 bg-emerald-200 rounded-full flex items-center justify-center text-lg">👤</div>
+            : <div className="w-9 h-9 bg-primary/20 rounded-full flex items-center justify-center text-lg">👤</div>
           }
           <div>
             <p className="font-semibold text-sm">{firebaseUser.displayName}</p>
@@ -421,12 +425,12 @@ export default function InviteFlow({ token, firebaseUser, onComplete, onCancel }
 
   // Paso: Contacto + foto
   if (step === 'contact') return (
-    <Layout title="Contacto y foto"
+      <Layout title="Contacto y foto"
       subtitle="Como te contactan los clientes. La foto podes agregarla despues."
       onBack={() => setStep('hours')}
       onNext={handleFinish}
       nextLabel="Finalizar registro"
-      nextDisabled={!telefono.trim()}>
+      nextDisabled={!telefono.trim() || !acceptedTerms}>
       <div>
         <label className="block font-bold text-sm mb-2">Telefono / WhatsApp *</label>
         <input type="tel" value={telefono} onChange={e => setTelefono(e.target.value)}
@@ -463,6 +467,20 @@ export default function InviteFlow({ token, firebaseUser, onComplete, onCancel }
         </div>
         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFotoChange} />
       </div>
+      <label className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+        <input
+          type="checkbox"
+          checked={acceptedTerms}
+          onChange={e => setAcceptedTerms(e.target.checked)}
+          className="mt-1 rounded border-slate-300 text-emerald-500 focus:ring-emerald-400"
+        />
+        <span className="text-sm text-slate-600 leading-relaxed">
+          Confirmo que leí y acepto los{' '}
+          <a href="/terminos-y-condiciones" className="underline">Términos y Condiciones</a>, la{' '}
+          <a href="/politica-de-privacidad" className="underline">Política de Privacidad</a> y las{' '}
+          <a href="/condiciones-para-comercios" className="underline">Condiciones para Comercios</a>.
+        </span>
+      </label>
     </Layout>
   );
 

@@ -1,16 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Fondo verde redondeado -->
-  <rect width="32" height="32" rx="7" fill="#10b981"/>
-
-  <!-- Toldo / marquesina -->
-  <path d="M6 15 L8.5 10 L23.5 10 L26 15 Z" fill="white"/>
-
-  <!-- Cuerpo de la tienda -->
-  <rect x="8.5" y="15" width="15" height="10" fill="white"/>
-
-  <!-- Puerta (recorte en el color del fondo) -->
-  <rect x="13.5" y="19" width="5" height="6" rx="1" fill="#10b981"/>
-
-  <!-- Linea separadora toldo/cuerpo -->
-  <rect x="6" y="14.5" width="20" height="1.5" fill="white" opacity="0.4"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 81.18 81.44">
+  <!-- Fondo turquesa con radio igual al del logo -->
+  <rect width="81.18" height="81.44" rx="18" fill="#00B8D9"/>
+  <!-- Símbolo Lokal en blanco: punto central + marco cuadrado redondeado -->
+  <circle cx="40.72" cy="40.65" r="11.23" fill="white"/>
+  <path fill="white" d="M62.52,7.66c6.08,0,11,4.93,11,11v44.12c0,6.08-4.93,11-11,11H18.66c-6.08,0-11-4.93-11-11V18.66c0-6.08,4.93-11,11-11h43.86M62.52,0H18.66C8.37,0,0,8.37,0,18.66v44.12c0,10.29,8.37,18.66,18.66,18.66h43.86c10.29,0,18.66-8.37,18.66-18.66V18.66c0-10.29-8.37-18.66-18.66-18.66h0Z"/>
 </svg>

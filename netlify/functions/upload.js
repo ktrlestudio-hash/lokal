@@ -1,16 +1,24 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { randomUUID } from 'crypto';
+import { requireAuth } from './_lib/auth.js';
+import { handleError, handleOptions, HttpError, jsonResponse, parseJsonBody } from './_lib/http.js';
+import { sanitizeText } from './_lib/validation.js';
 
-// ─── Subida de imágenes a Cloudflare R2 ──────────────────────────────────────
-// Recibe base64 desde el frontend, sube a R2, devuelve URL pública.
-//
-// Variables de entorno necesarias:
-//   CF_ACCOUNT_ID        → ID de tu cuenta Cloudflare
-//   R2_ACCESS_KEY_ID     → API Token con permisos R2
-//   R2_SECRET_ACCESS_KEY → Secret del token
-//   R2_BUCKET_NAME       → Nombre del bucket
-//   R2_PUBLIC_URL        → URL pública del bucket (si tenés dominio personalizado
-//                          o el bucket tiene acceso público habilitado)
-//                          Ej: https://pub-xxxxx.r2.dev
+const ALLOWED_TYPES = {
+  'image/jpeg': { folder: 'images', ext: 'jpg', maxBytes: 5 * 1024 * 1024, kind: 'image' },
+  'image/png': { folder: 'images', ext: 'png', maxBytes: 5 * 1024 * 1024, kind: 'image' },
+  'image/webp': { folder: 'images', ext: 'webp', maxBytes: 5 * 1024 * 1024, kind: 'image' },
+  'image/gif': { folder: 'images', ext: 'gif', maxBytes: 5 * 1024 * 1024, kind: 'image' },
+  'image/avif': { folder: 'images', ext: 'avif', maxBytes: 5 * 1024 * 1024, kind: 'image' },
+  'video/mp4': { folder: 'videos', ext: 'mp4', maxBytes: 20 * 1024 * 1024, kind: 'video' },
+  'video/webm': { folder: 'videos', ext: 'webm', maxBytes: 20 * 1024 * 1024, kind: 'video' },
+  'video/quicktime': { folder: 'videos', ext: 'mov', maxBytes: 20 * 1024 * 1024, kind: 'video' },
+};
+
+const HTTP_OPTIONS = {
+  allowHeaders: 'Content-Type, Authorization',
+  allowMethods: 'POST, OPTIONS',
+};
 
 function getR2Client() {
   return new S3Client({
@@ -36,83 +44,82 @@ function isR2Configured() {
   );
 }
 
-const headers = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Content-Type': 'application/json',
-};
-
-export const handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers, body: '' };
+function decodeBase64(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized || normalized.length % 4 === 1) {
+    throw new HttpError(400, 'Archivo invalido');
   }
 
+  const buffer = Buffer.from(normalized, 'base64');
+  if (!buffer.length) {
+    throw new HttpError(400, 'Archivo vacio');
+  }
+
+  return buffer;
+}
+
+export const handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') return handleOptions(event, HTTP_OPTIONS);
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Método no permitido' }) };
+    return jsonResponse(event, 405, { error: 'Metodo no permitido' }, HTTP_OPTIONS);
   }
 
   try {
-    const body = JSON.parse(event.body || '{}');
-    const { fileName, fileData, contentType } = body;
+    await requireAuth(event);
+
+    const body = parseJsonBody(event);
+    const contentType = sanitizeText(body.contentType, { max: 80, multiline: false }).toLowerCase();
+    const fileName = sanitizeText(body.fileName, { max: 160, multiline: false });
+    const fileData = body.fileData;
 
     if (!fileName || !fileData || !contentType) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: 'fileName, fileData y contentType son requeridos' }) };
+      throw new HttpError(400, 'fileName, fileData y contentType son requeridos');
     }
 
-    // Validar tipo: imágenes y videos cortos
-    const isImage = contentType.startsWith('image/');
-    const isVideo = contentType.startsWith('video/');
-    if (!isImage && !isVideo) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Solo se permiten imágenes o videos' }) };
+    const typeConfig = ALLOWED_TYPES[contentType];
+    if (!typeConfig) {
+      throw new HttpError(400, 'Tipo de archivo no permitido');
     }
 
-    // Límite: imágenes 5MB, videos 20MB (base64 ~33% más pesado)
-    const maxBytes = isVideo ? 27 * 1024 * 1024 : 7 * 1024 * 1024;
-    if (fileData.length > maxBytes) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: isVideo ? 'Video demasiado grande (máx ~20MB)' : 'Imagen demasiado grande (máx 5MB)' }) };
+    const buffer = decodeBase64(fileData);
+    if (buffer.length > typeConfig.maxBytes) {
+      throw new HttpError(
+        400,
+        typeConfig.kind === 'video'
+          ? 'Video demasiado grande (max 20MB)'
+          : 'Imagen demasiado grande (max 5MB)'
+      );
     }
 
     if (!isR2Configured()) {
-      // Sin R2: devolver como data URL (solo desarrollo local)
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          url: `data:${contentType};base64,${fileData}`,
-          type: isVideo ? 'video' : 'image',
-          warning: 'R2 no configurado: archivo en memoria (solo desarrollo)',
-        }),
-      };
+      if (process.env.CONTEXT === 'production') {
+        throw new HttpError(503, 'Uploads no configurados');
+      }
+
+      return jsonResponse(event, 200, {
+        url: `data:${contentType};base64,${fileData}`,
+        type: typeConfig.kind,
+        warning: 'R2 no configurado: archivo en memoria (solo desarrollo)',
+      }, HTTP_OPTIONS);
     }
 
-    // Generar key única
-    const ext = fileName.split('.').pop()?.toLowerCase() || (isVideo ? 'mp4' : 'jpg');
-    const folder = isVideo ? 'videos' : 'images';
-    const key = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-
-    const buffer = Buffer.from(fileData, 'base64');
-
+    const key = `${typeConfig.folder}/${Date.now()}-${randomUUID()}.${typeConfig.ext}`;
     const client = getR2Client();
-    const cmd = new PutObjectCommand({
+
+    await client.send(new PutObjectCommand({
       Bucket: BUCKET,
       Key: key,
       Body: buffer,
       ContentType: contentType,
-      // Si querés que sea público por defecto:
-      // ACL: 'public-read',
-    });
+      CacheControl: 'public, max-age=31536000, immutable',
+    }));
 
-    await client.send(cmd);
-
-    const url = `${PUBLIC_URL.replace(/\/$/, '')}/${key}`;
-
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({ url, key }),
-    };
-  } catch (err) {
-    console.error('Error en /upload:', err);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    return jsonResponse(event, 200, {
+      url: `${PUBLIC_URL.replace(/\/$/, '')}/${key}`,
+      key,
+      type: typeConfig.kind,
+    }, HTTP_OPTIONS);
+  } catch (error) {
+    return handleError(event, error);
   }
 };

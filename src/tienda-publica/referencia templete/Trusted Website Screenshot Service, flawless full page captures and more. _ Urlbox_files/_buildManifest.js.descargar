@@ -1,0 +1,280 @@
+self.__BUILD_MANIFEST = {
+  "/": [
+    "static/chunks/08l~4xxsh7x6h.js"
+  ],
+  "/404": [
+    "static/chunks/04_k0ylktwkar.js"
+  ],
+  "/[...slug]": [
+    "static/chunks/0.lan8s1u.xm2.js"
+  ],
+  "/_error": [
+    "static/chunks/16g35abgkv53x.js"
+  ],
+  "/about": [
+    "static/chunks/0buygwu13jve5.js"
+  ],
+  "/alternative-to": [
+    "static/chunks/07~._m-oiuk_r.js"
+  ],
+  "/alternative-to/phantomjs": [
+    "static/chunks/07fqjqtg869td.js"
+  ],
+  "/alternative-to/puppeteer": [
+    "static/chunks/175y69awmw4aq.js"
+  ],
+  "/alternative-to/screenshotlayer": [
+    "static/chunks/00op306uf0289.js"
+  ],
+  "/alternative-to/url2png": [
+    "static/chunks/05lb72c_rq34b.js"
+  ],
+  "/author/[slug]": [
+    "static/chunks/0u2zkz5~nnqd0.js"
+  ],
+  "/automated-screenshots": [
+    "static/chunks/03e.rhu9dm~9b.js"
+  ],
+  "/confirm/[confirmToken]": [
+    "static/chunks/10d3dfuate1mp.js"
+  ],
+  "/customers": [
+    "static/chunks/0n3n8sl.v5u40.js"
+  ],
+  "/customers/[slug]": [
+    "static/chunks/0_qzhw.nwqh70.js"
+  ],
+  "/dashboard/api": [
+    "static/chunks/0unqe~9149j82.js"
+  ],
+  "/dashboard/billing": [
+    "static/chunks/02z3e.78g.8p3.js"
+  ],
+  "/dashboard/bulk": [
+    "static/chunks/01iomhi6.t5~2.js"
+  ],
+  "/dashboard/company": [
+    "static/chunks/02b-69cpcxsez.js"
+  ],
+  "/dashboard/history": [
+    "static/chunks/0tq0wwzr1sd9~.js"
+  ],
+  "/dashboard/integrations": [
+    "static/chunks/0za8dstf3wb8m.js"
+  ],
+  "/dashboard/new": [
+    "static/chunks/0btvoz0n0qwqc.js"
+  ],
+  "/dashboard/profile": [
+    "static/chunks/0aa9q2wy06_kz.js"
+  ],
+  "/dashboard/projects": [
+    "static/chunks/05edzoxu4388v.js"
+  ],
+  "/dashboard/projects/[projectId]": [
+    "static/chunks/0bfj9r8.1zh3i.js"
+  ],
+  "/dashboard/projects/new": [
+    "static/chunks/0qyr5hjcnm3~a.js"
+  ],
+  "/dashboard/sandbox": [
+    "static/chunks/187yrngefcb-3.js"
+  ],
+  "/dashboard/screenshot": [
+    "static/chunks/0~fk~dx9q40yo.js"
+  ],
+  "/dashboard/usage": [
+    "static/chunks/0rtpauywaeejs.js"
+  ],
+  "/dashboard/webhooks": [
+    "static/chunks/0hfgf20zai_sq.js"
+  ],
+  "/demo": [
+    "static/chunks/02hv328zk1wlk.js"
+  ],
+  "/docs/[[...slug]]": [
+    "static/chunks/0cii1a-isyae~.js"
+  ],
+  "/features": [
+    "static/chunks/16l~kqqnes5_p.js"
+  ],
+  "/gallery/[slug]": [
+    "static/chunks/15rxr2w~hwyfv.js"
+  ],
+  "/gdpr": [
+    "static/chunks/10uaj2jc8y7ty.js"
+  ],
+  "/hero": [
+    "static/chunks/01-~nyurx_15d.js"
+  ],
+  "/login": [
+    "static/chunks/0v.ne5.byygui.js"
+  ],
+  "/policies": [
+    "static/chunks/12ta6~y3xbr2u.js"
+  ],
+  "/policies/[slug]": [
+    "static/chunks/0aennn0~lcmni.js"
+  ],
+  "/pricing": [
+    "static/chunks/0o4krdagw247h.js"
+  ],
+  "/pricing-old": [
+    "static/chunks/0ywt4b9qw6430.js"
+  ],
+  "/pricing/capturedeck": [
+    "static/chunks/0k5p96kwzxafi.js"
+  ],
+  "/products/capturedeck": [
+    "static/chunks/10~d3z79yz85-.js"
+  ],
+  "/products/screenshot-api": [
+    "static/chunks/09i4~f3v~3jyg.js"
+  ],
+  "/renderlink-playground": [
+    "static/chunks/05d6rwnn2vi~7.js"
+  ],
+  "/reset": [
+    "static/chunks/0shi4ix6wsxoh.js"
+  ],
+  "/reset/[resetToken]": [
+    "static/chunks/0w6zxkgkrpfxm.js"
+  ],
+  "/screenshot-api": [
+    "static/chunks/0c-f5-1l27q.l.js"
+  ],
+  "/screenshot-api/javascript": [
+    "static/chunks/0k1jtaf-qp8sd.js"
+  ],
+  "/screenshot-api/php": [
+    "static/chunks/0~3-w9gvk.594.js"
+  ],
+  "/screenshot-api/python": [
+    "static/chunks/0z~93pt18z0vx.js"
+  ],
+  "/screenshot-api/ruby": [
+    "static/chunks/0ypgq~e27xzf4.js"
+  ],
+  "/security": [
+    "static/chunks/09rhdmo20jkww.js"
+  ],
+  "/signup": [
+    "static/chunks/17d9rtnluu16g.js"
+  ],
+  "/signup/[chosenPlan]": [
+    "static/chunks/0htmybwvmqk~3.js"
+  ],
+  "/support": [
+    "static/chunks/0aawc_d43_7_p.js"
+  ],
+  "/urlbox-alternatives-old": [
+    "static/chunks/0l_bh_ty1z6lv.js"
+  ],
+  "/welcome": [
+    "static/chunks/0ki15h4uwczw4.js"
+  ],
+  "__rewrites": {
+    "afterFiles": [
+      {
+        "source": "/about",
+        "destination": "/"
+      },
+      {
+        "source": "/dashboard",
+        "destination": "/dashboard/screenshot"
+      },
+      {
+        "source": "/feed.xml",
+        "destination": "/_next/static/feed.xml"
+      },
+      {
+        "source": "/docs/tag/:tag{/}?",
+        "destination": "/docs/tag/:tag/overview"
+      },
+      {
+        "source": "/v1/:key/:format",
+        "destination": "/renderlink-playground"
+      },
+      {
+        "source": "/v1/:key/:token/:format",
+        "destination": "/renderlink-playground"
+      }
+    ],
+    "beforeFiles": [
+      {
+        "source": "/api/auth/:path*"
+      }
+    ],
+    "fallback": []
+  },
+  "sortedPages": [
+    "/",
+    "/404",
+    "/_app",
+    "/_error",
+    "/about",
+    "/alternative-to",
+    "/alternative-to/phantomjs",
+    "/alternative-to/puppeteer",
+    "/alternative-to/screenshotlayer",
+    "/alternative-to/url2png",
+    "/api/confirm",
+    "/api/full-page-screenshot",
+    "/api/preview",
+    "/api/proxy/[[...path]]",
+    "/api/render",
+    "/api/unpreview",
+    "/api/user",
+    "/api/v1/organisation/me",
+    "/api/v1/organisation/[organisationId]",
+    "/author/[slug]",
+    "/automated-screenshots",
+    "/confirm/[confirmToken]",
+    "/customers",
+    "/customers/[slug]",
+    "/dashboard/api",
+    "/dashboard/billing",
+    "/dashboard/bulk",
+    "/dashboard/company",
+    "/dashboard/history",
+    "/dashboard/integrations",
+    "/dashboard/new",
+    "/dashboard/profile",
+    "/dashboard/projects",
+    "/dashboard/projects/new",
+    "/dashboard/projects/[projectId]",
+    "/dashboard/sandbox",
+    "/dashboard/screenshot",
+    "/dashboard/usage",
+    "/dashboard/webhooks",
+    "/demo",
+    "/docs/[[...slug]]",
+    "/features",
+    "/gallery/[slug]",
+    "/gdpr",
+    "/hero",
+    "/login",
+    "/policies",
+    "/policies/[slug]",
+    "/pricing",
+    "/pricing/capturedeck",
+    "/pricing-old",
+    "/products/capturedeck",
+    "/products/screenshot-api",
+    "/renderlink-playground",
+    "/reset",
+    "/reset/[resetToken]",
+    "/screenshot-api",
+    "/screenshot-api/javascript",
+    "/screenshot-api/php",
+    "/screenshot-api/python",
+    "/screenshot-api/ruby",
+    "/security",
+    "/signup",
+    "/signup/[chosenPlan]",
+    "/support",
+    "/urlbox-alternatives-old",
+    "/welcome",
+    "/[...slug]"
+  ]
+};self.__BUILD_MANIFEST_CB && self.__BUILD_MANIFEST_CB()

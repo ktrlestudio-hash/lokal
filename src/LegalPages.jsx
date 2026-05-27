@@ -1,16 +1,6 @@
 import React, { useEffect } from 'react';
 import { ArrowLeft, Store, Shield, FileText, ShoppingBag } from 'lucide-react';
-
-// ─── KtrlLogo (inline para no depender de imports externos) ──────────────────
-const KtrlLogo = ({ className = '' }) => (
-  <svg className={className} viewBox="0 0 1629.2 404.35" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
-    <path d="M838.15,41.28v74.06c0,20.45-16.58,37.03-37.03,37.03h-55.55c-10.23,0-18.52,8.29-18.52,18.52v191.9c0,20.6-16.7,37.3-37.3,37.3h-73.53c-20.6,0-37.3-16.7-37.3-37.3v-191.86c0-10.24-8.31-18.54-18.56-18.52l-55.43.15c-20.48.04-37.11-16.55-37.11-37.03V41.28c0-20.45,16.58-37.03,37.03-37.03h296.26c20.45,0,37.03,16.58,37.03,37.03Z"/>
-    <path d="M1629.2,289.56v74.06c0,20.45-16.58,37.03-37.03,37.03h-222.19c-20.45,0-37.03-16.58-37.03-37.03V41.84c0-20.45,16.58-37.03,37.03-37.03h74.06c20.45,0,37.03,16.58,37.03,37.03v192.17c0,10.23,8.29,18.52,18.52,18.52h92.58c20.45,0,37.03,16.58,37.03,37.03Z"/>
-    <path d="M1098.1,152.38h-56.26c-10.23,0-18.52,8.29-18.52,18.52v191.97c0,20.45-16.58,37.03-37.03,37.03h-74.08c-20.45,0-37.03-16.58-37.03-37.03V78.31c0-40.9,33.16-74.06,74.06-74.06h247.71c40.9,0,74.06,33.16,74.06,74.06v100.72c0,9.82-3.9,19.24-10.85,26.19l-52.61,52.6c-6.78,6.72-8.03,18.46-.12,26.36l52.77,52.75c23.34,23.34,6.8,63.25-26.21,63.22l-95.66-.07c-9.82,0-19.24-3.9-26.19-10.85l-40.95-40.95c-6.94-6.94-10.85-16.36-10.85-26.19v-71.94c0-9.82,3.9-19.24,10.85-26.19l39.99-39.99c11.66-11.66,3.4-31.61-13.09-31.61Z"/>
-    <path d="M83.04,14.06L10.79,86.32C3.88,93.22,0,102.59,0,112.36v179.62c0,9.77,3.88,19.14,10.79,26.05l72.26,72.26c23.21,23.21,62.88,6.77,62.88-26.05V40.11c0-32.82-39.68-49.25-62.88-26.05Z"/>
-    <path d="M416.11,340.58l-52.97,52.97c-14.39,14.39-37.71,14.39-52.09,0l-117.4-117.4c-6.97-6.97-10.88-16.41-10.88-26.27v-95.43c0-9.85,3.91-19.3,10.88-26.27L311.04,10.79c14.39-14.39,37.71-14.39,52.09,0l52.97,52.97c14.39,14.39,14.39,37.71,0,52.09l-73.29,73.29c-7.19,7.19-7.19,18.85,0,26.05l73.29,73.29c14.39,14.39,14.39,37.71,0,52.09Z"/>
-  </svg>
-);
+import { LogoFull, KtrlMark } from './Brand';
 
 // ─── LegalLayout — wrapper reutilizable para todas las páginas legales ────────
 function LegalLayout({ title, subtitle, icon: Icon, iconBg, children, onBack }) {
@@ -29,19 +19,14 @@ function LegalLayout({ title, subtitle, icon: Icon, iconBg, children, onBack }) 
           <ArrowLeft className="w-4 h-4" />
           Volver
         </button>
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-emerald-500 rounded-lg flex items-center justify-center">
-            <Store className="w-4 h-4 text-white" />
-          </div>
-          <span className="font-black">Lokal</span>
-        </div>
+        <LogoFull size={20} light />
         <div className="w-16" /> {/* spacer */}
       </nav>
 
       {/* Hero del documento */}
-      <div className="border-b border-white/5 px-6 py-14 text-center bg-[radial-gradient(ellipse_60%_40%_at_50%_0%,rgba(16,185,129,0.08),transparent)]">
-        <div className={`w-14 h-14 ${iconBg || 'bg-emerald-500/20'} rounded-2xl flex items-center justify-center mx-auto mb-5`}>
-          {Icon && <Icon className="w-7 h-7 text-emerald-400" />}
+      <div className="border-b border-white/5 px-6 py-14 text-center bg-[radial-gradient(ellipse_60%_40%_at_50%_0%,rgba(0,184,217,0.08),transparent)]">
+        <div className={`w-14 h-14 ${iconBg || 'bg-brand/20'} rounded-2xl flex items-center justify-center mx-auto mb-5`}>
+          {Icon && <Icon className="w-7 h-7 text-brand" />}
         </div>
         <h1 className="text-3xl sm:text-4xl font-black mb-3">{title}</h1>
         {subtitle && <p className="text-slate-400 text-base max-w-xl mx-auto">{subtitle}</p>}
@@ -55,13 +40,14 @@ function LegalLayout({ title, subtitle, icon: Icon, iconBg, children, onBack }) 
 
       {/* Footer legal */}
       <footer className="border-t border-white/5 px-6 py-8 text-center">
-        <div className="flex items-center justify-center gap-2 mb-3">
-          <div className="w-6 h-6 bg-emerald-500 rounded-md flex items-center justify-center">
-            <Store className="w-3.5 h-3.5 text-white" />
-          </div>
-          <span className="font-black text-sm">Lokal</span>
+        <div className="flex items-center justify-center mb-3">
+          <LogoFull size={18} light />
         </div>
         <p className="text-slate-600 text-xs mb-2">© 2026 Lokal. Todos los derechos reservados.</p>
+        <div className="flex items-center justify-center gap-1.5 mt-3 opacity-30">
+          <span className="text-[10px] text-slate-500">por</span>
+          <KtrlMark className="h-2.5 text-slate-500" />
+        </div>
         <div className="flex items-center justify-center gap-4 text-xs text-slate-600">
           <button onClick={() => navigateLegal('terminos')} className="hover:text-slate-300 transition-colors">Términos</button>
           <span>·</span>
@@ -91,7 +77,7 @@ function Section({ title, children }) {
 
 function Highlight({ children }) {
   return (
-    <div className="bg-emerald-500/8 border border-emerald-500/20 rounded-2xl px-5 py-4 text-emerald-200 text-sm leading-relaxed">
+    <div className="bg-primary/8 border border-primary/20 rounded-2xl px-5 py-4 text-primary-light dark:text-primary text-sm leading-relaxed">
       {children}
     </div>
   );
@@ -234,6 +220,8 @@ function PrivacidadPage({ onBack }) {
         <p><strong className="text-white">Datos de cuenta (vía Google):</strong> nombre, dirección de email y foto de perfil. No almacenamos contraseñas.</p>
         <p><strong className="text-white">Datos de uso:</strong> demandas que publicás, respuestas que recibís, historial de interacciones dentro de la plataforma.</p>
         <p><strong className="text-white">Datos técnicos:</strong> dirección IP, tipo de dispositivo y navegador, para seguridad y funcionamiento del servicio.</p>
+        <p><strong className="text-white">Preferencias locales:</strong> guardamos en tu dispositivo datos como tema visual, vista elegida del mapa y ubicaciones guardadas para mejorar tu experiencia. Esa información no se comparte automáticamente con terceros.</p>
+        <p><strong className="text-white">Ubicación:</strong> si usás funciones de mapa o geolocalización, pedimos permiso al navegador y usamos esa información para mostrarte comercios o resultados cercanos.</p>
         <p><strong className="text-white">Imágenes y archivos:</strong> fotos o videos que subís voluntariamente a tus demandas o respuestas.</p>
       </Section>
 
@@ -255,7 +243,7 @@ function PrivacidadPage({ onBack }) {
           No compartimos datos personales identificables con terceros, salvo en los siguientes casos:
         </p>
         <List items={[
-          'Proveedores de infraestructura técnica necesarios para el funcionamiento (Firebase de Google para autenticación, Cloudflare para almacenamiento de archivos). Estos servicios tienen sus propias políticas de privacidad.',
+           'Proveedores de infraestructura técnica necesarios para el funcionamiento (Firebase de Google para autenticación, Cloudflare para almacenamiento de archivos y Mercado Pago para procesar pagos de suscripciones de comercios). Estos servicios tienen sus propias políticas de privacidad.',
           'Cuando la ley lo requiera expresamente, por orden judicial u obligación legal.',
           'En caso de fusión o adquisición de Lokal, con aviso previo a los usuarios.',
         ]} />
@@ -279,7 +267,7 @@ function PrivacidadPage({ onBack }) {
 
       <Section title="5. Cookies y tecnologías similares">
         <p>
-          Usamos cookies estrictamente necesarias para el funcionamiento de la sesión y preferencias de usuario (como el modo oscuro/claro). No usamos cookies de seguimiento ni publicidad.
+          Usamos cookies estrictamente necesarias para el funcionamiento de la sesión. También usamos almacenamiento local del navegador para preferencias de usuario, como el modo oscuro/claro y configuraciones del mapa. No usamos cookies de seguimiento ni publicidad.
         </p>
         <p>
           Firebase Authentication (Google) puede usar cookies propias para mantener tu sesión. Podés consultar la política de privacidad de Google para más detalle.
@@ -305,6 +293,9 @@ function PrivacidadPage({ onBack }) {
         <p>
           Responsable del tratamiento de datos: <strong className="text-white">Lokal</strong><br />
           Correo de contacto: <strong className="text-white">hola@lokal.com.ar</strong>
+        </p>
+        <p>
+          Si operás pagos con una integración activa, Mercado Pago actúa como proveedor independiente de servicios de pago y procesa los datos estrictamente necesarios para cobrar la suscripción correspondiente.
         </p>
       </Section>
     </LegalLayout>

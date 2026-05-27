@@ -1,0 +1,31 @@
+{
+  "name": "Lokal",
+  "short_name": "Lokal",
+  "description": "Publica lo que necesitas y que las tiendas locales te respondan.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "background_color": "#ffffff",
+  "theme_color": "#00B8D9",
+  "icons": [
+    {
+      "src": "/icon-favicon.png",
+      "sizes": "64x64",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-light.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-light.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "maskable"
+    }
+  ]
+}
