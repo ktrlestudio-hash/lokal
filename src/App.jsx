@@ -1,4 +1,8 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
+import { cacheGet, cacheSet } from './lokCache';
+import { haptic } from './haptic';
+import { useSwipeBack } from './useSwipeBack';
+import { SkeletonDemandas, SkeletonOfertas, SkeletonInbox } from './Skeletons';
 import { createPortal } from 'react-dom';
 import {
   Camera, MapPin, Search, Store, Package, MessageSquare, MessageCircle, Bell, User, Menu,
@@ -90,17 +94,28 @@ const UserApp = ({
 
   const closeOverlaysRef = useRef(null);
 
-  const navigate        = (screen) => { closeOverlaysRef.current?.(); pushUrl(screen);    setNavStack(prev => [...prev, screen]); };
-  const navigateReplace = (screen) => { closeOverlaysRef.current?.(); replaceUrl(screen); setNavStack(prev => [...prev.slice(0, -1), screen]); };
+  // Marcar tipo cliente al montar — corrige localStorage si venía de sesión de tienda
+  useEffect(() => {
+    try {
+      const existing = JSON.parse(localStorage.getItem('lokal-shell') || '{}');
+      localStorage.setItem('lokal-shell', JSON.stringify({ ...existing, type: 'client' }));
+      localStorage.setItem('lokal-user-type', 'client');
+    } catch { /* silencioso */ }
+  }, []);
+
+  const navigate        = (screen) => { haptic('select'); closeOverlaysRef.current?.(); pushUrl(screen);    setNavStack(prev => [...prev, screen]); localStorage.setItem('lokal-shell', JSON.stringify({ type: 'client', screen })); };
+  const navigateReplace = (screen) => { haptic('select'); closeOverlaysRef.current?.(); replaceUrl(screen); setNavStack(prev => [...prev.slice(0, -1), screen]); };
   const navigateSearch  = (q) => { setSearchResultsQuery(q); navigate('todas-ofertas'); };
-  const navRoot         = (screen) => { closeOverlaysRef.current?.(); replaceUrl(screen); setNavStack([screen]); };
+  const navRoot         = (screen) => { haptic('select'); closeOverlaysRef.current?.(); replaceUrl(screen); setNavStack([screen]); localStorage.setItem('lokal-shell', JSON.stringify({ type: 'client', screen })); };
   const goBack          = () => {
+    haptic('light');
     setNavStack(prev => {
       const next = prev.length > 1 ? prev.slice(0, -1) : ['home'];
       replaceUrl(next[next.length - 1]);
       return next;
     });
   };
+  useSwipeBack(goBack, navStack.length > 1);
 
   // Sincronizar URL inicial
   useEffect(() => { replaceUrl(navStack[0]); }, []);
@@ -205,7 +220,7 @@ const UserApp = ({
 
   // ─── Datos ────────────────────────────────────────────────────────────────
   const [allCategories, setAllCategories] = useState(CATEGORIES);
-  const [allDemandas,   setAllDemandas]   = useState([]);
+  const [allDemandas,   setAllDemandas]   = useState(() => cacheGet('demandas') || []);
   const [loadingDemandas,setLoadingDemandas]= useState(true);
   const [errorDemandas, setErrorDemandas] = useState(null);
   const [allOfertas,    setAllOfertas]    = useState(MOCK_OFERTAS);
@@ -364,7 +379,9 @@ const UserApp = ({
     try {
       const res = await apiFetch(`${API_BASE}/demandas?mine=1`, { authRequired: true });
       if (!res.ok) throw new Error('Error al cargar');
-      setAllDemandas(await res.json());
+      const data = await res.json();
+      cacheSet('demandas', data, 10 * 60 * 1000);
+      setAllDemandas(data);
     } catch (err) {
       setErrorDemandas(err.message);
     } finally {
@@ -1887,7 +1904,7 @@ const UserApp = ({
 
       <div
         ref={el => { mainScrollRef.current = el; if (el) { const prev = el._prevScreen; if (prev !== currentScreen) { el.scrollTop = 0; el._prevScreen = currentScreen; } } }}
-        className={`h-[100dvh] overflow-x-hidden bg-[#f7f8fa] dark:bg-[#0a0d16] relative z-0 transition-[padding-left] duration-[380ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${currentScreen === 'home' ? 'lg:pl-0' : sidebarExpanded ? 'lg:pl-[224px]' : 'lg:pl-16'} ${currentScreen === 'admin' ? 'overflow-hidden' : 'overflow-y-auto'}`}
+        className={`h-[100dvh] overflow-x-hidden no-scrollbar bg-[#f7f8fa] dark:bg-[#0a0d16] relative z-0 transition-[padding-left] duration-[380ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${currentScreen === 'home' ? 'lg:pl-0' : sidebarExpanded ? 'lg:pl-[224px]' : 'lg:pl-16'} ${currentScreen === 'admin' ? 'overflow-hidden' : 'overflow-y-auto'}`}
         style={showBottomNav ? { paddingBottom: 'calc(env(safe-area-inset-bottom) + 4.5rem)' } : { paddingBottom: 0 }}
         data-has-bottom-nav={showBottomNav || undefined}
       >
@@ -2102,6 +2119,26 @@ const UserApp = ({
                           {msg.attachment.precio && <p className="text-xs text-slate-500">${Number(msg.attachment.precio).toLocaleString()}</p>}
                         </div>
                         <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                      </button>
+                    )}
+                    {msg.attachment?.type === 'ubicacion' && (
+                      <button
+                        onClick={() => { setMapaFocusStore(showChat?.id || null); setShowChat(null); navigate('mapa'); }}
+                        className="block w-52 rounded-2xl border overflow-hidden text-left transition-opacity hover:opacity-80 active:opacity-60 bg-white dark:bg-slate-800 border-slate-100 dark:border-white/10 shadow-sm"
+                      >
+                        <div className="h-24 rounded-t-2xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 flex items-center justify-center relative overflow-hidden">
+                          <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 20px,#94a3b8 20px,#94a3b8 21px),repeating-linear-gradient(90deg,transparent,transparent 20px,#94a3b8 20px,#94a3b8 21px)' }} />
+                          <div className="w-11 h-11 rounded-2xl overflow-hidden shadow-xl ring-4 ring-white/40 relative bg-slate-200 dark:bg-slate-600 flex items-center justify-center">
+                            {showChat?.foto
+                              ? <img src={showChat.foto} alt="" className="w-full h-full object-cover" />
+                              : <MapPin className="w-4 h-4 text-slate-400" />}
+                          </div>
+                        </div>
+                        <div className="px-3 py-2.5 bg-white dark:bg-slate-800 rounded-b-2xl">
+                          <p className="text-[10px] text-slate-500 font-bold mb-0.5">Ver en mapa</p>
+                          {msg.attachment.nombre && <p className="text-xs font-semibold truncate">{msg.attachment.nombre}</p>}
+                          {msg.attachment.direccion && <p className="text-[11px] text-slate-500 truncate">{msg.attachment.direccion}{msg.attachment.ciudad ? `, ${msg.attachment.ciudad}` : ''}</p>}
+                        </div>
                       </button>
                     )}
                     {msg.text && (

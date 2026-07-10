@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Sun, Moon } from 'lucide-react';
 import { deriveColorPalette, resolvePagina, getSeccionesActivas } from './utils.js';
 import { buildPreviewTienda } from './mockData.js';
 import { LogoSymbol, KtrlMark } from '../Brand.jsx';
@@ -22,7 +23,7 @@ function buildTemplateMaps() {
 const { components: TEMPLATES, meta: TEMPLATES_META } = buildTemplateMaps();
 export { TEMPLATES_META };
 
-export function TiendaPublicaRenderer({ tienda, paginaOverride = null, previewMode = false }) {
+export function TiendaPublicaRenderer({ tienda, paginaOverride = null, previewMode = false, isDark: isDarkApp, onToggleTheme }) {
   const pagina = useMemo(() => resolvePagina(paginaOverride ?? tienda.pagina), [tienda, paginaOverride]);
   const secciones = useMemo(() => getSeccionesActivas(pagina.secciones), [pagina]);
 
@@ -35,14 +36,14 @@ export function TiendaPublicaRenderer({ tienda, paginaOverride = null, previewMo
   const [cart, setCart] = useState([]);
   const [note, setNote] = useState('');
 
-  const onAdd = (producto) => setCart(prev => {
+  const onAdd = (producto, qty = 1) => setCart(prev => {
     const ex = prev.find(i => i.id === producto.id);
-    if (ex) return prev.map(i => i.id === producto.id ? { ...i, qty: i.qty + 1 } : i);
+    if (ex) return prev.map(i => i.id === producto.id ? { ...i, qty: i.qty + qty } : i);
     const item = {
       ...producto,
       nombre: producto.nombre || producto.titulo || '',
       foto:   producto.foto || producto.fotos?.[0] || producto.galeria?.[0] || null,
-      qty: 1,
+      qty,
     };
     return [...prev, item];
   });
@@ -52,17 +53,38 @@ export function TiendaPublicaRenderer({ tienda, paginaOverride = null, previewMo
     if (ex.qty === 1) return prev.filter(i => i.id !== id);
     return prev.map(i => i.id === id ? { ...i, qty: i.qty - 1 } : i);
   });
+  const onClear = () => setCart([]);
+
+  // El modo claro/oscuro es UNO SOLO para toda la interfaz de LOKAL — no un
+  // sub-modo aislado por tienda. Cuando se navega logueado desde dentro de
+  // la app, Root.jsx pasa isDark/onToggleTheme (su estado real, compartido
+  // por todas las pantallas, con su propia clase .dark en <html>) y este
+  // renderer lo usa tal cual. Solo cuando se entra standalone por el link
+  // público (/t/:slug, sin sesión) no existe ese theme del que colgarse —
+  // ahí el renderer TAMBIÉN pone/saca la clase .dark en <html> (el mismo
+  // mecanismo real que usa toda la app, no una variable nueva), sembrada con
+  // pagina.modoOscuro. Así --surface-solid/--text-primary de index.css (que
+  // solo cambian según esa clase real) se actualizan de verdad en los dos
+  // casos, sin un segundo sistema de tokens paralelo.
+  const standalone = isDarkApp === undefined;
+  const [darkLocal, setDarkLocal] = useState(pagina.modoOscuro);
+  const dark = standalone ? darkLocal : isDarkApp;
+  const toggleDark = standalone ? () => setDarkLocal(d => !d) : onToggleTheme;
 
   useEffect(() => {
-    const vars = deriveColorPalette(pagina.color, pagina.modoOscuro);
+    if (!standalone) return undefined; // Root.jsx ya maneja su propia clase .dark
+    document.documentElement.classList.toggle('dark', dark);
+    return () => { if (!pagina.modoOscuro) document.documentElement.classList.remove('dark'); };
+  }, [standalone, dark]);
+
+  useEffect(() => {
+    const vars = deriveColorPalette(pagina.color, dark);
     const el = document.documentElement;
     Object.entries(vars).forEach(([k, v]) => el.style.setProperty(k, v));
     return () => Object.keys(vars).forEach(k => el.style.removeProperty(k));
-  }, [pagina.color, pagina.modoOscuro]);
+  }, [pagina.color, dark]);
 
   const Template = TEMPLATES[pagina.template] ?? TEMPLATES['detail'];
-
-  const dark = pagina.modoOscuro;
 
   return (
     <div style={{ minHeight: '100dvh', background: 'var(--tp-bg)', fontFamily: 'inherit' }}>
@@ -72,13 +94,15 @@ export function TiendaPublicaRenderer({ tienda, paginaOverride = null, previewMo
         cart={cart}
         onAdd={onAdd}
         onRemove={onRemove}
+        onClear={onClear}
         note={note}
+        setNote={setNote}
         isDark={dark}
       />
 
       {/* Footer de marca — aparece en todas las plantillas */}
       {!previewMode && (
-        <footer style={{
+        <footer id="tp-footer" style={{
           borderTop: `1px solid ${dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)'}`,
           padding: '20px 24px 32px',
           display: 'flex',
@@ -95,12 +119,31 @@ export function TiendaPublicaRenderer({ tienda, paginaOverride = null, previewMo
             <span style={{ fontSize:13, fontWeight:800, letterSpacing:'0.01em', fontFamily:"'Inter', system-ui, sans-serif" }}>lokal</span>
           </a>
 
-          {/* Creado por KTRL */}
-          <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
-            style={{ display:'inline-flex', alignItems:'center', gap:6, textDecoration:'none', color: dark ? 'rgba(255,255,255,.2)' : '#cbd5e1' }}>
-            <span style={{ fontSize:10, fontWeight:600, fontFamily:"'Inter', system-ui, sans-serif" }}>Creado por</span>
-            <KtrlMark style={{ height:11, color:'currentColor' }} />
-          </a>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            {/* Toggle claro/oscuro — el MISMO modo de toda la app cuando se
+                navega logueado (afecta cualquier pantalla, no solo esta
+                tienda); solo queda aislado a esta visita en el caso
+                standalone del link público sin sesión. */}
+            <button
+              onClick={toggleDark}
+              aria-label={dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+              title={dark ? 'Modo claro' : 'Modo oscuro'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: 30, height: 30, borderRadius: 999, border: 'none', cursor: 'pointer',
+                background: dark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.05)',
+                color: dark ? 'rgba(255,255,255,.5)' : '#64748b',
+              }}>
+              {dark ? <Sun size={15} /> : <Moon size={15} />}
+            </button>
+
+            {/* Creado por KTRL */}
+            <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
+              style={{ display:'inline-flex', alignItems:'center', gap:6, textDecoration:'none', color: dark ? 'rgba(255,255,255,.2)' : '#cbd5e1' }}>
+              <span style={{ fontSize:10, fontWeight:600, fontFamily:"'Inter', system-ui, sans-serif" }}>Creado por</span>
+              <KtrlMark style={{ height:11, color:'currentColor' }} />
+            </a>
+          </div>
         </footer>
       )}
     </div>

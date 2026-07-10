@@ -1,8 +1,11 @@
 import { PAGINA_DEFAULT, SECCIONES_DEFAULT } from './tokens.js';
 
 /**
- * Deriva toda la paleta de colores a partir de 1 color primario.
- * Los templates usan estas variables CSS — nunca el color crudo.
+ * Deriva el color de MARCA de la tienda (lo único que realmente varía por
+ * comercio) a partir de 1 hex. Superficie/texto/borde NO se recalculan acá:
+ * son alias fijos de los tokens reales de LOKAL (--surface-solid, etc.,
+ * definidos una sola vez en src/index.css) — un solo lugar de verdad para
+ * toda la app, sin una segunda paleta paralela por tienda.
  */
 export function deriveColorPalette(hex, dark = false) {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -13,29 +16,22 @@ export function deriveColorPalette(hex, dark = false) {
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   const onPrimary = luminance > 0.55 ? '#0f172a' : '#ffffff';
 
-  if (dark) {
-    return {
-      '--tp-bg':           '#0a0d16',
-      '--tp-surface':      '#111827',
-      '--tp-surface2':     '#1e293b',
-      '--tp-border':       'rgba(255,255,255,.08)',
-      '--tp-text':         '#f1f5f9',
-      '--tp-text-muted':   '#64748b',
-      '--tp-primary':      hex,
-      '--tp-primary-soft': `rgba(${r},${g},${b},.15)`,
-      '--tp-on-primary':   onPrimary,
-    };
-  }
-
   return {
-    '--tp-bg':           '#f8fafc',
-    '--tp-surface':      '#ffffff',
-    '--tp-surface2':     '#f1f5f9',
-    '--tp-border':       'rgba(0,0,0,.07)',
-    '--tp-text':         '#0f172a',
-    '--tp-text-muted':   '#64748b',
+    // --surface-dim vive en index.css como "R G B" (formato RGB-sin-función,
+    // pensado para Tailwind vía rgb(var(--surface-dim))) — usarla directo acá
+    // como background rompía: un string "248 250 252" no es un color CSS
+    // válido, y el navegador NO cae al fallback declarado con var(x, fallback)
+    // en ese caso (solo cae si la variable no existe, no si su valor es
+    // inválido) — por eso el fondo quedaba mal solo en un modo. Envuelta en
+    // rgb() queda un color real y válido en ambos temas.
+    '--tp-bg':           'rgb(var(--surface-dim))',
+    '--tp-surface':      'var(--surface-solid)',
+    '--tp-surface2':     'var(--surface-solid-2)',
+    '--tp-border':       'var(--border-solid)',
+    '--tp-text':         'var(--text-primary)',
+    '--tp-text-muted':   'var(--text-secondary)',
     '--tp-primary':      hex,
-    '--tp-primary-soft': `rgba(${r},${g},${b},.1)`,
+    '--tp-primary-soft': `rgba(${r},${g},${b},${dark ? '.15' : '.1'})`,
     '--tp-on-primary':   onPrimary,
   };
 }
@@ -98,15 +94,23 @@ export function formatPrice(n) {
   return `$${Number(n).toLocaleString('es-AR')}`;
 }
 
-export function buildWhatsAppUrl(tienda, items = [], note = '') {
+export function buildWhatsAppUrl(tienda, items = [], note = '', entrega = null) {
   const phone = (tienda.whatsapp || tienda.telefono || '').replace(/\D/g, '');
   if (!phone) return null;
-  const lines = [`¡Hola ${tienda.nombre}!`];
+  const lines = [`¡Hola ${tienda.nombre}! Quiero hacer un pedido:`];
   if (items.length) {
     lines.push('');
-    items.forEach(it => lines.push(`• ${it.qty}× ${it.nombre} → ${formatPrice(it.precio * it.qty)}`));
-    const total = items.reduce((a, b) => a + b.precio * b.qty, 0);
+    items.forEach(it => lines.push(`• ${it.qty}× ${it.nombre} → ${formatPrice((it.precio || 0) * it.qty)}`));
+    const total = items.reduce((a, b) => a + (b.precio || 0) * b.qty, 0);
     lines.push('', `Total estimado: ${formatPrice(total)}`);
+  }
+  // Modo de entrega (retiro / delivery + dirección + link de ubicación)
+  if (entrega?.modo === 'delivery') {
+    lines.push('', '🛵 *Envío a domicilio*');
+    if (entrega.direccion?.trim()) lines.push(`Dirección: ${entrega.direccion.trim()}`);
+    if (entrega.mapUrl) lines.push(`Ubicación: ${entrega.mapUrl}`);
+  } else if (entrega?.modo === 'retiro') {
+    lines.push('', '🏪 *Retiro en el local*');
   }
   if (note.trim()) lines.push('', `Nota: ${note.trim()}`);
   return `https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}`;

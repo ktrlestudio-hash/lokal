@@ -165,7 +165,33 @@
 }
 .dark {
   --surface:     18  24  38;       /* equiv .dark .bg-white    (rgb 18 24 38)  */
-  --surface-dim:  2   6  23;       /* equiv .dark .bg-slate-950 (rgb 2 6 23)   */
+  --surface-dim:  8  13  26;       /* fondo de página — MISMO matiz azulado que --surface-solid (#141b2e), no gris neutro; antes (5 7 13) quedaba desentonado */
+}
+
+/* ── 4.bis TOKENS DE SUPERFICIE/TEXTO CONSUMIBLES CON var() ───────────────────
+   LOKAL resuelve claro/oscuro con clases Tailwind condicionales
+   (bg-white dark:bg-slate-900, text-slate-900 dark:text-white), no con
+   variables CSS — pero módulos que necesitan pintar dinámicamente (como el
+   microsite de tienda-publica) sí necesitan var(). Estos tokens usan los
+   MISMOS valores hex que ya pinta el resto de la app (ver .dark .bg-white /
+   .dark .bg-slate-900 más abajo), para que no exista una segunda paleta
+   paralela — un solo lugar de verdad. Consumido por src/tienda-publica/. */
+:root {
+  --surface-solid:       #ffffff;   /* bg-white */
+  --surface-solid-2:     #f1f5f9;   /* slate-100, superficie secundaria/inputs */
+  --border-solid:        rgba(0,0,0,.07);
+  --text-primary:        #0f172a;   /* slate-900 */
+  --text-secondary:      #64748b;   /* slate-500 */
+}
+.dark {
+  /* Escalera de elevación con salto de luminosidad perceptible (antes
+     #0d1526/#16213a quedaban casi pegados entre sí y con --surface-dim del
+     fondo — 1.1:1 de contraste, prácticamente indistinguibles). */
+  --surface-solid:       #141b2e;   /* card — un escalón sobre --surface-dim */
+  --surface-solid-2:     #263252;   /* input/superficie secundaria — más claro para que se note bien como "control", antes (#212a42) apenas se distinguía del fondo (1.36:1) */
+  --border-solid:        rgba(255,255,255,.10);
+  --text-primary:        #f1f5f9;   /* slate-100 */
+  --text-secondary:      #94a3b8;   /* slate-400 — más claro que slate-500, mejor AA sobre fondos oscuros */
 }
 
 /* ── Utilidades de degradado adaptativas al tema ─────────────────────────────
@@ -347,6 +373,16 @@ button[disabled] {
   0%, 100% { transform: scale(1); opacity: 0.5; }
   60%       { transform: scale(2.8); opacity: 0; }
 }
+@keyframes lokal-ring {
+  0%   { width: 14px; height: 14px; opacity: 0.7; }
+  100% { width: 60px; height: 60px; opacity: 0; }
+}
+.lokal-user-ring1 {
+  animation: lokal-ring 2.8s cubic-bezier(0.2,0.6,0.4,1) infinite;
+}
+.lokal-user-ring2 {
+  animation: lokal-ring 2.8s cubic-bezier(0.2,0.6,0.4,1) 1.2s infinite;
+}
 @keyframes radar-ring {
   0%   { transform: translate(-50%, -50%) scale(0.05); opacity: 0; }
   8%   { opacity: 0.65; }
@@ -405,14 +441,14 @@ html.theme-transitioning *::after {
 }
 
 /* Fondos */
-.dark .bg-white        { background-color: rgb(18 24 38)          !important; }
-.dark .bg-slate-50     { background-color: rgb(10 13 22)           !important; }
-.dark .bg-slate-100    { background-color: rgba(255,255,255,0.07)  !important; }
-.dark .bg-slate-200    { background-color: rgba(255,255,255,0.11)  !important; }
-.dark .bg-slate-300    { background-color: rgba(255,255,255,0.16)  !important; }
-.dark .bg-gray-50      { background-color: rgb(10 13 22)           !important; }
-.dark .bg-gray-100     { background-color: rgba(255,255,255,0.07)  !important; }
-.dark .bg-gray-200     { background-color: rgba(255,255,255,0.11)  !important; }
+.dark .bg-white:not(button):not([role="button"]):not(a) { background-color: rgb(18 24 38) !important; }
+.dark .bg-slate-50:not(button):not([role="button"]):not(a)  { background-color: rgb(10 13 22)          !important; }
+.dark .bg-slate-100:not(button):not([role="button"]):not(a) { background-color: rgba(255,255,255,0.07) !important; }
+.dark .bg-slate-200:not(button):not([role="button"]):not(a) { background-color: rgba(255,255,255,0.11) !important; }
+.dark .bg-slate-300:not(button):not([role="button"]):not(a) { background-color: rgba(255,255,255,0.16) !important; }
+.dark .bg-gray-50:not(button):not([role="button"]):not(a)   { background-color: rgb(10 13 22)          !important; }
+.dark .bg-gray-100:not(button):not([role="button"]):not(a)  { background-color: rgba(255,255,255,0.07) !important; }
+.dark .bg-gray-200:not(button):not([role="button"]):not(a)  { background-color: rgba(255,255,255,0.11) !important; }
 
 /* Fondos de colores tintados */
 .dark .bg-amber-50     { background-color: rgba(245,158,11,0.12)   !important; }
@@ -426,17 +462,17 @@ html.theme-transitioning *::after {
 .dark .bg-blue-50      { background-color: rgba(59,130,246,0.10)   !important; }
 .dark .bg-blue-100     { background-color: rgba(59,130,246,0.16)   !important; }
 
-/* Textos */
-.dark .text-slate-900  { color: rgb(241 245 249) !important; }
-.dark .text-slate-800  { color: rgb(226 232 240) !important; }
-.dark .text-slate-700  { color: rgb(203 213 225) !important; }
-.dark .text-slate-600  { color: rgb(148 163 184) !important; }
-.dark .text-slate-500  { color: rgb(100 116 139) !important; }
-.dark .text-slate-400  { color: rgb(71  85 105)  !important; }
-.dark .text-slate-300  { color: rgb(51  65  85)  !important; }
-.dark .text-gray-900   { color: rgb(241 245 249) !important; }
-.dark .text-gray-700   { color: rgb(203 213 225) !important; }
-.dark .text-gray-500   { color: rgb(100 116 139) !important; }
+/* Textos — ratios WCAG sobre bg rgb(10 13 22) */
+.dark .text-slate-900  { color: rgb(241 245 249) !important; } /* 17:1 ✓ */
+.dark .text-slate-800  { color: rgb(226 232 240) !important; } /* 14:1 ✓ */
+.dark .text-slate-700  { color: rgb(203 213 225) !important; } /* 11:1 ✓ */
+.dark .text-slate-600  { color: rgb(148 163 184) !important; } /*  7:1 ✓ */
+.dark .text-slate-500  { color: rgb(100 116 139) !important; } /*  4.3:1 ✓ */
+.dark .text-slate-400  { color: rgb(126 143 163) !important; } /*  5.5:1 ✓ muted */
+.dark .text-slate-300  { color: rgb(148 163 184) !important; } /*  7.0:1 ✓ visible */
+.dark .text-gray-900   { color: rgb(241 245 249) !important; } /* 17:1 ✓ */
+.dark .text-gray-700   { color: rgb(203 213 225) !important; } /* 11:1 ✓ */
+.dark .text-gray-500   { color: rgb(100 116 139) !important; } /*  4.3:1 ✓ */
 
 /* Bordes */
 .dark .border-slate-100 { border-color: rgba(255,255,255,0.07) !important; }
@@ -540,3 +576,197 @@ html.theme-transitioning *::after {
 @import './styles/themes.css';
 
 @media (min-width: 1024px) { [data-has-bottom-nav] { padding-bottom: 0 !important; } }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   LOKAL 2026 — NEXT LEVEL UX/UI
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Safe area insets (notch, home bar, dynamic island) ─────────────────────── */
+:root {
+  --safe-top:    env(safe-area-inset-top,    0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left:   env(safe-area-inset-left,   0px);
+  --safe-right:  env(safe-area-inset-right,  0px);
+}
+.safe-top    { padding-top:    var(--safe-top); }
+.safe-bottom { padding-bottom: var(--safe-bottom); }
+
+/* Bottom nav siempre por encima del home bar */
+[data-bottom-nav] {
+  padding-bottom: calc(0.5rem + var(--safe-bottom));
+}
+
+/* ── Fluid typography — escala fluida entre 375px y 1440px ─────────────────── */
+:root {
+  --text-xs:   clamp(0.65rem,  1.2vw, 0.75rem);
+  --text-sm:   clamp(0.78rem,  1.4vw, 0.875rem);
+  --text-base: clamp(0.875rem, 1.6vw, 1rem);
+  --text-lg:   clamp(1rem,     1.9vw, 1.125rem);
+  --text-xl:   clamp(1.1rem,   2.2vw, 1.25rem);
+  --text-2xl:  clamp(1.25rem,  2.8vw, 1.5rem);
+  --text-3xl:  clamp(1.5rem,   3.5vw, 1.875rem);
+}
+
+/* View Transitions desactivadas — usamos fade manual por control total */
+
+/* ── Touch targets mínimo 36px — solo botones con clase explícita ───────────── */
+button.no-min-size { min-height: unset; min-width: unset; }
+
+/* ── Dark mode refinado — profundidad y contraste mejorado ─────────────────── */
+.dark body {
+  background-color: #060d1a;
+  color-scheme: dark;
+}
+.dark .bg-white:not(button):not([role="button"]):not(a) {
+  background-color: #0d1526 !important;
+}
+.dark .bg-slate-900:not(button):not([role="button"]):not(a) {
+  background-color: #0a1020 !important;
+}
+/* Micro-textura sutil en fondos oscuros — profundidad sin ruido */
+.dark [class*="bg-slate-50"],
+.dark [class*="bg-gray-50"] {
+  background-color: #080f1e !important;
+}
+
+/* Glassmorphism refinado para modales y sheets */
+.glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.dark .glass {
+  background: rgba(13, 21, 38, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ── Micro-interacciones ────────────────────────────────────────────────────── */
+/* Card press feedback más natural */
+.card-press {
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.15s ease;
+}
+.card-press:active {
+  transform: scale(0.975);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+/* Nav item active indicator — línea superior */
+.nav-active-dot {
+  position: relative;
+}
+.nav-active-dot::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 2.5px;
+  border-radius: 0 0 4px 4px;
+  background: var(--brand-hex);
+  opacity: 0;
+  transition: opacity 0.2s ease, width 0.2s ease;
+}
+.nav-active-dot.active::before {
+  opacity: 1;
+  width: 24px;
+}
+
+/* ── Gradient mesh backgrounds (tendencia 2026) ─────────────────────────────── */
+.mesh-brand {
+  background:
+    radial-gradient(ellipse 60% 50% at 20% 0%,  rgba(0,184,217,0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 40% at 80% 100%, rgba(0,184,217,0.08) 0%, transparent 60%);
+}
+.dark .mesh-brand {
+  background:
+    radial-gradient(ellipse 60% 50% at 20% 0%,  rgba(34,211,238,0.10) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 40% at 80% 100%, rgba(34,211,238,0.06) 0%, transparent 60%);
+}
+
+/* ── Scroll snap en carruseles ──────────────────────────────────────────────── */
+.snap-x-mandatory {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.snap-start { scroll-snap-align: start; }
+.snap-center { scroll-snap-align: center; }
+
+/* ── Focus visible accesible ────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2.5px solid var(--brand-hex);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+:focus:not(:focus-visible) { outline: none; }
+
+/* ── Selección de texto con color brand ─────────────────────────────────────── */
+::selection {
+  background: rgba(0, 184, 217, 0.25);
+  color: inherit;
+}
+
+/* ── Overscroll behavior — evita bounce en iOS en áreas internas ─────────────── */
+.overscroll-none { overscroll-behavior: none; }
+.overscroll-y-contain { overscroll-behavior-y: contain; }
+
+/* ── Image rendering optimizado ─────────────────────────────────────────────── */
+img {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+img[loading="lazy"] {
+  will-change: filter, opacity;
+}
+
+/* ── Animación de entrada para listas (stagger) ─────────────────────────────── */
+@keyframes item-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.stagger-in > * {
+  animation: item-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger-in > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-in > *:nth-child(2) { animation-delay: 40ms; }
+.stagger-in > *:nth-child(3) { animation-delay: 80ms; }
+.stagger-in > *:nth-child(4) { animation-delay: 120ms; }
+.stagger-in > *:nth-child(5) { animation-delay: 160ms; }
+.stagger-in > *:nth-child(n+6) { animation-delay: 200ms; }
+
+/* ── Badge animado (notificaciones) ─────────────────────────────────────────── */
+@keyframes badge-pop {
+  0%   { transform: scale(0); }
+  60%  { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+.badge-pop { animation: badge-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+/* ── Animación scroll infinito (Aceternity UI inspired) ─────────────────────── */
+@keyframes scroll-infinite {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.animate-scroll-infinite {
+  animation: scroll-infinite var(--animation-duration, 25s) linear infinite;
+  animation-direction: var(--animation-direction, forwards);
+}
+
+/* ── Línea de progreso top (loading indicator estilo YouTube/GitHub) ─────────── */
+@keyframes progress-bar {
+  0%   { width: 0%;   opacity: 1; }
+  70%  { width: 85%;  opacity: 1; }
+  100% { width: 100%; opacity: 0; }
+}
+.top-progress {
+  position: fixed;
+  top: 0; left: 0;
+  height: 2.5px;
+  background: var(--brand-hex);
+  border-radius: 0 2px 2px 0;
+  z-index: 99999;
+  animation: progress-bar 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  box-shadow: 0 0 8px rgba(0,184,217,0.6);
+}

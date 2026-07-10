@@ -1,5 +1,6 @@
 import React from 'react';
 import { Search, Package, MessageSquare, ChevronRight, AlertCircle, Loader2, ArrowUpDown, LayoutGrid, LayoutList } from 'lucide-react';
+import { SkeletonDemandas } from '../Skeletons';
 import PageHeader from '../components/layout/PageHeader';
 import CategoryFilterBar from '../components/ui/CategoryFilterBar';
 import CustomSelect from '../components/ui/CustomSelect';
@@ -85,16 +86,7 @@ export default function MisDemandas({
           </div>
         )}
         <div className={viewMode === 'grid' ? 'grid grid-cols-2 lg:grid-cols-4 gap-3' : 'grid grid-cols-1 lg:grid-cols-2 gap-3'}>
-          {loadingDemandas ? Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl p-4 flex gap-4 animate-pulse">
-              <div className="w-16 h-16 rounded-xl bg-slate-200 dark:bg-white/8 shrink-0" />
-              <div className="flex-1 space-y-2.5 py-1">
-                <div className="h-3 bg-slate-200 dark:bg-white/8 rounded w-1/3" />
-                <div className="h-4 bg-slate-200 dark:bg-white/8 rounded w-3/4" />
-                <div className="h-3 bg-slate-100 dark:bg-white/5 rounded w-2/3" />
-              </div>
-            </div>
-          )) : localSorted.map((d, i) => {
+          {loadingDemandas && localSorted.length === 0 ? <SkeletonDemandas count={4} /> : localSorted.map((d, i) => {
             const foto = d.fotos?.[0] || d.foto;
             const catPath = getCategoryPath(d.categoryId, allCategories);
             const catLabel = catPath.length > 0 ? catPath[catPath.length - 1].name : (typeof d.categoryId === 'string' && d.categoryId ? d.categoryId : null);

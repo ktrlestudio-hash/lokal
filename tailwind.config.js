@@ -1,10 +1,14 @@
+import { sync } from 'fast-glob';
+
+const content = sync(
+  ['./src/**/*.{js,ts,jsx,tsx}', './index.html'],
+  { ignore: ['**/node_modules/**'] }
+);
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: 'class',
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  content,
   theme: {
     extend: {
       borderRadius: {

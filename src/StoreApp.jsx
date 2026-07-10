@@ -1,4 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { cacheGet, cacheSet } from './lokCache';
+import { PaywallModal as PaywallModalUI, PremiumModal as PremiumModalUI, SuscripcionContent } from './store/PricingUI';
+import { haptic } from './haptic';
+import LazyImg from './LazyImg';
+import { SkeletonProductosGrid, SkeletonProductosList, SkeletonInbox, SkeletonFeed, SkeletonPerfil, SkeletonStats } from './Skeletons';
 import { MOCK_PRODUCTOS, MOCK_INBOX, MOCK_DEMANDAS, MOCK_RESPUESTAS, MOCK_HISTORIAL_PAGOS, MOCK_STATS } from './mockStoreData';
 import { TiendaPublicaRenderer, TEMPLATES_META } from './tienda-publica/TiendaPublicaRenderer.jsx';
 import { SECCIONES_DEFAULT } from './tienda-publica/tokens.js';
@@ -12,7 +17,9 @@ import {
   Plus, ToggleLeft, ToggleRight, Trash2,
   ExternalLink, Link2, Instagram, Save, Sparkles, Award, Lightbulb,
   Tag, Gift, Wrench, Copy, Menu, Info, Infinity, FlaskConical, Clock, Palette,
-  PanelLeft, Archive, Paperclip, ShoppingBag, Building2
+  PanelLeft, Archive, Paperclip, ShoppingBag, Building2,
+  User, Hash, CalendarClock, MessageCircle, ChevronLeft,
+  LayoutGrid, LayoutList, ArrowUpDown, SlidersHorizontal, ListFilter
 } from 'lucide-react';
 
 // ─── Precios suscripción (deben coincidir con mp-checkout.js) ─────────────────
@@ -129,11 +136,16 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const canViewAI = isPremium;
   const galleryLimit = isEmprendimiento ? 3 : (isBasico ? 6 : 10);
 
-  const [screen, setScreen] = useState('perfil');
+  const STORE_SCREENS = ['perfil', 'feed', 'mensajes', 'productos', 'inicio', 'stats', 'suscripcion'];
+  const savedScreen = localStorage.getItem('lokal-store-screen');
+  const [screen, setScreen] = useState(STORE_SCREENS.includes(savedScreen) ? savedScreen : 'perfil');
   const [selectedDemanda, setSelectedDemanda] = useState(null);
 
   // Mock test mode (solo admins)
   const [mockMode, setMockMode] = useState(false);
+
+  // Transición suave entre screens
+  const [screenVisible, setScreenVisible] = useState(true);
 
   // Sidebar collapse
   const [sidebarExpanded, setSidebarExpanded] = React.useState(() => localStorage.getItem('lokal-store-sidebar-pinned') !== 'false');
@@ -150,9 +162,16 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [inboxLoading,     setInboxLoading]      = useState(false);
   const [inboxSelectedKey, setInboxSelectedKey]  = useState(null);
   const [inboxReply,       setInboxReply]        = useState('');
+  const [inboxInfoOpen,    setInboxInfoOpen]     = useState(false);
+  const [editingMsg,       setEditingMsg]        = useState(null); // {id, text}
+  const [swipedMsgId,      setSwipedMsgId]       = useState(null); // long-press mobile
+  const [deletingMsgId,    setDeletingMsgId]     = useState(null); // animación borrado
+  const [storeTyping,      setStoreTyping]       = useState(false); // "escribiendo..." simulado
   const [inboxSending,     setInboxSending]      = useState(false);
   const [attachOpen,       setAttachOpen]        = useState(false);
   const [chatAttachment,   setChatAttachment]    = useState(null); // { type, ...data }
+  const [chatImagePreview, setChatImagePreview]  = useState(null); // base64 data URL
+  const chatImageInputRef = useRef(null);
   const [inboxSearch,      setInboxSearch]       = useState('');
   const [inboxMobileView,  setInboxMobileView]   = useState('list'); // 'list' | 'chat'
   const [inboxTab,         setInboxTab]          = useState('chats'); // 'chats' | 'respuestas'
@@ -172,10 +191,18 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [recentSearches,        setRecentSearches]        = useState([]);
 
   // ── Chat flotante (persiste entre pantallas) ──────────────────────────────
-  const [floatingChatKey,       setFloatingChatKey]       = useState(null);
-  const [floatingChatCollapsed, setFloatingChatCollapsed] = useState(false);
-  const [floatingChatMsg,       setFloatingChatMsg]       = useState('');
-  const [floatingChatSending,   setFloatingChatSending]   = useState(false);
+  const [floatingChats,   setFloatingChats]   = useState([]); // [{key, collapsed, msg, sending}]
+  // legacy alias usado en botones de lista/panel
+  const floatingChatKey = floatingChats.find(c => !c.collapsed)?.key ?? floatingChats[0]?.key ?? null;
+  const openFloatingChat  = (key) => setFloatingChats(prev => {
+    if (prev.find(c => c.key === key)) return prev.map(c => c.key === key ? { ...c, collapsed: false } : c);
+    const next = [{ key, collapsed: true, msg: '', sending: false }, ...prev].slice(0, 5);
+    return next;
+  });
+  const closeFloatingChat = (key) => setFloatingChats(prev => prev.filter(c => c.key !== key));
+  const toggleFloatingCollapse = (key) => setFloatingChats(prev => prev.map(c => c.key === key ? { ...c, collapsed: !c.collapsed } : c));
+  const setFloatingMsg = (key, msg) => setFloatingChats(prev => prev.map(c => c.key === key ? { ...c, msg } : c));
+  const setFloatingSending = (key, sending) => setFloatingChats(prev => prev.map(c => c.key === key ? { ...c, sending } : c));
 
   // Categorías unificadas (base + custom)
   const [allCategories, setAllCategories] = useState(BASE_CATEGORIES);
@@ -216,7 +243,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const LAST_FEED_KEY = `lokal-lastfeed-${tiendaData?.id || 'store'}`;
 
   // Productos
-  const [misProductos, setMisProductos] = useState([]);
+  const PROD_CACHE_KEY = `productos-${tiendaData?.id || 'store'}`;
+  const [misProductos, setMisProductos] = useState(() => cacheGet(PROD_CACHE_KEY) || []);
   const [loadingProductos, setLoadingProductos] = useState(false);
 
   // Página pública — edición inline
@@ -254,7 +282,9 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [locationError, setLocationError] = useState(null);
 
   // FeedScreen
-  const [feedTab, setFeedTab] = useState('feed');
+  const [feedTab,    setFeedTab]    = useState('feed');
+  const [feedSort,   setFeedSort]   = useState('recientes'); // 'recientes' | 'presupuesto' | 'urgentes'
+  const [feedEstado, setFeedEstado] = useState('todas');     // 'todas' | 'nuevas' | 'respondidas'
 
   // MatchTypeSelector
   const [matchTypeStep, setMatchTypeStep] = useState('root');
@@ -264,6 +294,9 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [chatTexto, setChatTexto] = useState('');
   const [chatSending, setChatSending] = useState(false);
   const chatBottomRef = useRef(null);
+  const inboxBottomRef      = useRef(null);
+  const inboxScrollRef      = useRef(null); // desktop
+  const inboxMobileScrollRef = useRef(null); // mobile
 
   // StatsScreen
   const [aiLoading, setAiLoading] = useState(false);
@@ -279,6 +312,21 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [editModalRubros, setEditModalRubros] = useState([]);
 
   // ProductosScreen
+  const [prodSearch,    setProdSearch]    = useState('');
+  const [prodFilter,    setProdFilter]    = useState('todos');
+  const [prodSort,      setProdSort]      = useState('recientes');
+  const [prodView,      setProdView]      = useState('grid'); // 'grid' | 'lista'
+  const [prodCondicion, setProdCondicion] = useState(null);  // 'nuevo' | 'usado' | null
+  const [prodSinStock,  setProdSinStock]  = useState(false);
+  const [prodDescuento, setProdDescuento] = useState(false);
+  const [confirmDelete,         setConfirmDelete]         = useState(null);
+  const [prodFilterSheet,       setProdFilterSheet]       = useState(false);
+  const [prodDetail,            setProdDetail]            = useState(null);
+  const [prodDetailPhotoIdx,    setProdDetailPhotoIdx]    = useState(0);
+  const [prodDetailEditField,   setProdDetailEditField]   = useState(null);
+  const [prodDetailDraft,       setProdDetailDraft]       = useState('');
+  const [prodDetailSaving,      setProdDetailSaving]      = useState(false);
+  const [prodDetailPhotoConfirm,setProdDetailPhotoConfirm]= useState(null);
   const [productoShowForm, setProductoShowForm] = useState(false);
   const [productoEditing, setProductoEditing] = useState(null);
   const [productoForm, setProductoForm] = useState({ titulo: '', descripcion: '', precio: '', precioOriginal: '', ventaja: [], financiacion: '', stock: '1', condicion: 'nuevo', categoryId: null, contactoWhatsapp: '' });
@@ -290,6 +338,65 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [productoSaveErr, setProductoSaveErr] = useState(null);
   const [productoSuccess, setProductoSuccess] = useState(null); // producto guardado para mostrar modal
   const productoFotoInputRef = useRef(null);
+
+  // Persiste screen en localStorage + sincroniza hash en desktop
+  const navigateTo = (s) => {
+    if (s === screen && !moreSheetOpen) return;
+    haptic('select');
+
+    const commit = () => {
+      // Fade out contenido
+      setScreenVisible(false);
+      setTimeout(() => {
+        // Swap de screen en el valle del fade
+        setScreen(s);
+        localStorage.setItem('lokal-store-screen', s);
+        if (window.matchMedia('(min-width: 1024px)').matches) {
+          window.history.replaceState(null, '', `#store/${s}`);
+        }
+        // Fade in suave
+        requestAnimationFrame(() => setScreenVisible(true));
+      }, 120);
+    };
+
+    if (moreSheetOpen) {
+      // Cerrar sheet → esperar que su animación termine → transicionar
+      setMoreSheetOpen(false);
+      setTimeout(commit, 180);
+    } else {
+      commit();
+    }
+  };
+
+  // Guardar datos mínimos del shell para recarga sin Firebase
+  // Marcar tipo tienda al montar
+  useEffect(() => {
+    localStorage.setItem('lokal-user-type', 'store');
+  }, []);
+
+  useEffect(() => {
+    if (!tiendaData) return;
+    localStorage.setItem('lokal-shell', JSON.stringify({
+      type: 'store',
+      nombre: tiendaData.nombre || '',
+      foto: tiendaData.foto || null,
+    }));
+  }, [tiendaData?.nombre, tiendaData?.foto]);
+
+  useEffect(() => {
+    // Popstate: botón atrás del browser en desktop
+    const onPop = () => {
+      const hash = window.location.hash.replace('#store/', '');
+      if (STORE_SCREENS.includes(hash)) { setScreen(hash); localStorage.setItem('lokal-store-screen', hash); }
+    };
+    window.addEventListener('popstate', onPop);
+    // Escribir hash inicial en desktop
+    if (window.matchMedia('(min-width: 1024px)').matches) {
+      window.history.replaceState(null, '', `#store/${screen}`);
+    }
+    return () => window.removeEventListener('popstate', onPop);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     fetchTienda();
@@ -643,10 +750,12 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     if (mockMode) return;
     setLoadingProductos(true);
     try {
-      const res = await apiFetch(`${API_BASE}/ofertas?tiendaId=${tiendaData.id}`, {
-        authRequired: true,
-      });
-      if (res.ok) setMisProductos(await res.json());
+      const res = await apiFetch(`${API_BASE}/ofertas?tiendaId=${tiendaData.id}`, { authRequired: true });
+      if (res.ok) {
+        const data = await res.json();
+        cacheSet(PROD_CACHE_KEY, data, 10 * 60 * 1000);
+        setMisProductos(data);
+      }
     } catch { /* silencioso */ } finally {
       setLoadingProductos(false);
     }
@@ -884,7 +993,18 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         const descendants = getAllDescendants(filterRubro, allCategories);
         return d.categoryId === filterRubro || descendants.includes(d.categoryId);
       })();
-      return matchSearch && matchRubro;
+      const matchEstado = feedEstado === 'todas' ||
+        (feedEstado === 'nuevas' && !yaRespondio(d.id)) ||
+        (feedEstado === 'respondidas' && yaRespondio(d.id));
+      return matchSearch && matchRubro && matchEstado;
+    })
+    .sort((a, b) => {
+      if (feedSort === 'presupuesto') return (b.presupuesto?.max || 0) - (a.presupuesto?.max || 0);
+      if (feedSort === 'urgentes') {
+        const uA = a.urgente ? 1 : 0, uB = b.urgente ? 1 : 0;
+        return uB - uA || (b.ts || 0) - (a.ts || 0);
+      }
+      return (b.ts || 0) - (a.ts || 0);
     });
 
   const tiendaInfo = tienda || {
@@ -947,18 +1067,57 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     </>
   );
 
-  const StorePageHeader = ({ title, onBack, actionSlot = null, secondarySlot = null }) => (
-    <div className="bg-white dark:bg-slate-900 sticky top-0 z-20">
-      <div className="px-4 lg:px-8 h-14 flex items-center gap-2 border-b border-slate-100 dark:border-white/8">
-        {onBack && (
-          <button onClick={onBack} className="ui-icon-btn hover:bg-slate-100 dark:hover:bg-white/8 shrink-0">
+  const StorePageHeader = ({
+    title,
+    subtitle,
+    onBack,
+    actionSlot = null,
+    secondarySlot = null,
+    hideActionsOnMobile = false,
+  }) => (
+    <div className="bg-white dark:bg-slate-900 sticky top-0 z-20 shrink-0">
+      <div className="px-4 lg:px-8 h-14 lg:h-16 flex items-center gap-3 border-b border-slate-100 dark:border-white/8">
+
+        {/* Back o logo en mobile */}
+        {onBack ? (
+          <button onClick={onBack} className="ui-icon-btn hover:bg-slate-100 dark:hover:bg-white/8 text-slate-500 shrink-0 -ml-1">
             <ArrowLeft className="w-5 h-5" />
           </button>
+        ) : (
+          /* Avatar de tienda — solo mobile, desktop lo tiene el sidebar */
+          <div className="lg:hidden w-8 h-8 rounded-xl overflow-hidden shrink-0 bg-brand/10 flex items-center justify-center">
+            {tiendaInfo?.foto
+              ? <img src={tiendaInfo.foto} alt="" className="w-full h-full object-cover" />
+              : <Store className="w-4 h-4 text-brand" />}
+          </div>
         )}
-        <h1 className="font-bold text-base truncate shrink-0">{title}</h1>
-        <div className="flex-1" />
-        <StoreHeaderActions actionSlot={actionSlot} />
+
+        {/* Título + subtítulo */}
+        <div className="flex-1 min-w-0">
+          <h1 className="font-black text-[15px] lg:text-lg leading-tight truncate">{title}</h1>
+          {subtitle && <p className="text-[11px] text-slate-400 font-medium leading-none mt-0.5 truncate hidden lg:block">{subtitle}</p>}
+        </div>
+
+        {/* Acciones */}
+        <div className={`flex items-center gap-1 shrink-0 ${hideActionsOnMobile ? 'hidden lg:flex' : 'flex'}`}>
+          {actionSlot}
+          <button
+            onClick={toggleTheme}
+            className="ui-icon-btn hover:bg-slate-100 dark:hover:bg-white/8 text-slate-400 transition-colors hidden lg:inline-flex"
+            title={isDark ? 'Modo claro' : 'Modo oscuro'}
+          >
+            {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={() => setMoreSheetOpen(v => !v)}
+            className="ui-avatar-btn ring-2 ring-transparent hover:ring-brand transition-all shrink-0"
+            title="Mi cuenta"
+          >
+            {renderAccountAvatar()}
+          </button>
+        </div>
       </div>
+
       {secondarySlot && (
         <div className="border-b border-slate-100 dark:border-white/8">
           {secondarySlot}
@@ -1143,6 +1302,16 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
   // ── PaywallModal ──────────────────────────────────────────────────────────
   const PaywallModal = () => (
+    <PaywallModalUI
+      onClose={() => setShowPaywall(false)}
+      onPagar={handleRenovar}
+      onTransferencia={(plan) => { setTransferenciaPlan(plan); setShowTransferenciaModal(true); setShowPaywall(false); }}
+      vencioEl={tiendaData?.suscripcion?.vence ? new Date(tiendaData.suscripcion.vence).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }) : null}
+      renovando={renovando}
+      renovError={renovError}
+    />
+  );
+  const _PaywallModalOld = () => (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-[#111827] rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
         {/* Header */}
@@ -1215,8 +1384,15 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     </div>
   );
 
-  // ── PremiumModal ───────────────────────────────────────────────────────────
+  // ── PremiumModal ──────────────────────────────────────────────────────────
   const PremiumModal = () => (
+    <PremiumModalUI
+      onClose={() => setShowPremiumModal(false)}
+      onUpgrade={() => { setShowPremiumModal(false); handleRenovar('premium'); }}
+      renovando={renovando}
+    />
+  );
+  const _PremiumModalOld = () => (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-[#111827] rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
         {/* Header */}
@@ -1363,7 +1539,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             return (
               <button
                 key={id}
-                onClick={() => { setScreen(id); setTooltip(null); }}
+                onClick={() => { navigateTo(id); setTooltip(null); }}
                 onMouseEnter={e => {
                   if (!expanded) {
                     const rect = e.currentTarget.getBoundingClientRect();
@@ -1448,6 +1624,20 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
               {isDark ? 'Modo claro' : 'Modo oscuro'}
             </span>
           </button>
+          {isAdmin && (
+            <button
+              onClick={toggleMockMode}
+              onMouseEnter={e => { if (!expanded) { const r = e.currentTarget.getBoundingClientRect(); setTooltip({ label: mockMode ? 'Mock ON' : 'Mock', y: r.top + r.height / 2 }); } }}
+              onMouseLeave={() => setTooltip(null)}
+              className={`w-full flex items-center ui-chip transition-colors overflow-hidden ${mockMode ? 'text-violet-600 bg-violet-50 dark:bg-violet-500/10 hover:bg-violet-100 dark:hover:bg-violet-500/20' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300'}`}
+              style={{ height: 42 }}
+            >
+              <div className="ui-icon-btn shrink-0"><FlaskConical className="w-4.5 h-4.5" /></div>
+              <span className="text-sm font-semibold whitespace-nowrap" style={{ opacity: expanded ? 1 : 0, transition: 'opacity 160ms ease', transitionDelay: expanded ? '80ms' : '0ms' }}>
+                {mockMode ? 'Mock ON' : 'Datos mock'}
+              </span>
+            </button>
+          )}
           <button
             onClick={onLogout}
             onMouseEnter={e => { if (!expanded) { const r = e.currentTarget.getBoundingClientRect(); setTooltip({ label: 'Salir', y: r.top + r.height / 2 }); } }}
@@ -1485,19 +1675,23 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   };
 
   // ── Bottom Nav Mobile ──────────────────────────────────────────────────────
-  const BottomNav = () => screen === 'mi-pagina' ? null : (
-    <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-white/8 z-[4500]" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+  const BottomNav = () => (screen === 'mi-pagina' || (screen === 'mensajes' && inboxMobileView === 'chat')) ? null : (
+    <div style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-white/8 z-[4500]">
       <div className="flex items-end justify-around px-2 pt-2 pb-3 max-w-md mx-auto">
-        {/* Demandas: visible para todos, pero emprendimiento solo lectura */}
-        <button onClick={() => { setScreen('feed'); setCreateSheetOpen(false); setCreateSheetClosing(false); }} className="flex flex-col items-center gap-1 min-w-[56px]">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${screen === 'feed' ? 'bg-primary/10 dark:bg-primary/15' : 'hover:bg-slate-100 dark:hover:bg-white/8'}`}>
-            <Package className={`w-5 h-5 ${screen === 'feed' ? 'text-primary' : 'text-slate-500 dark:text-slate-400'}`} />
+        <button onClick={() => { navigateTo('productos'); setCreateSheetOpen(false); setCreateSheetClosing(false); }} className="flex flex-col items-center gap-1 min-w-[56px]">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${screen === 'productos' ? 'bg-primary/10 dark:bg-primary/15' : 'hover:bg-slate-100 dark:hover:bg-white/8'}`}>
+            <Tag className={`w-5 h-5 ${screen === 'productos' ? 'text-primary' : 'text-slate-500 dark:text-slate-400'}`} />
           </div>
-          <span className={`text-[10px] font-semibold ${screen === 'feed' ? 'text-primary' : 'text-slate-400'}`}>Demandas</span>
+          <span className={`text-[10px] font-semibold ${screen === 'productos' ? 'text-primary' : 'text-slate-400'}`}>Productos</span>
         </button>
-        <button onClick={() => { setScreen('mensajes'); setCreateSheetOpen(false); setCreateSheetClosing(false); }} className="flex flex-col items-center gap-1 min-w-[56px]">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${screen === 'mensajes' ? 'bg-primary/10 dark:bg-primary/15' : 'hover:bg-slate-100 dark:hover:bg-white/8'}`}>
+        <button onClick={() => { navigateTo('mensajes'); setCreateSheetOpen(false); setCreateSheetClosing(false); }} className="flex flex-col items-center gap-1 min-w-[56px]">
+          <div className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${screen === 'mensajes' ? 'bg-primary/10 dark:bg-primary/15' : 'hover:bg-slate-100 dark:hover:bg-white/8'}`}>
             <MessageSquare className={`w-5 h-5 ${screen === 'mensajes' ? 'text-primary' : 'text-slate-500 dark:text-slate-400'}`} />
+            {unreadTotal > 0 && screen !== 'mensajes' && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-brand text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none">
+                {unreadTotal > 99 ? '99+' : unreadTotal}
+              </span>
+            )}
           </div>
           <span className={`text-[10px] font-semibold ${screen === 'mensajes' ? 'text-primary' : 'text-slate-400'}`}>Mensajes</span>
         </button>
@@ -1507,13 +1701,13 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           </div>
           <span className="text-[10px] font-semibold text-slate-400">Crear</span>
         </button>
-        <button onClick={() => { setScreen('perfil'); setCreateSheetOpen(false); setCreateSheetClosing(false); }} className="flex flex-col items-center gap-1 min-w-[56px]">
+        <button onClick={() => { navigateTo('perfil'); setCreateSheetOpen(false); setCreateSheetClosing(false); }} className="flex flex-col items-center gap-1 min-w-[56px]">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${screen === 'perfil' ? 'bg-primary/10 dark:bg-primary/15' : 'hover:bg-slate-100 dark:hover:bg-white/8'}`}>
             <Store className={`w-5 h-5 ${screen === 'perfil' ? 'text-primary' : 'text-slate-500 dark:text-slate-400'}`} />
           </div>
           <span className={`text-[10px] font-semibold ${screen === 'perfil' ? 'text-primary' : 'text-slate-400'}`}>{isEmprendimiento ? 'Mi perfil' : 'Mi tienda'}</span>
         </button>
-        <button onClick={() => setMoreSheetOpen(true)} className="flex flex-col items-center gap-1 min-w-[56px]">
+        <button onClick={() => setMoreSheetOpen(v => !v)} className="flex flex-col items-center gap-1 min-w-[56px]">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/8 transition-colors">
             <Menu className="w-5 h-5 text-slate-500 dark:text-slate-400" />
           </div>
@@ -1531,189 +1725,374 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
   // ── Feed de demandas + Respuestas (fusionado) ─────────────────────────────
   const FeedScreen = () => {
-    const tab = feedTab;
-    const setTab = setFeedTab;
     useEffect(() => { markFeedSeen(); }, []);
 
-    const searchInput = (
-      <>
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          placeholder="Buscar demandas..."
-          className="w-full pl-11 pr-4 py-3 bg-slate-100 dark:bg-white/5 dark:text-slate-200 dark:placeholder:text-slate-500 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-brand"
-        />
-      </>
-    );
+    const nuevasCount     = demandas.filter(d => !yaRespondio(d.id)).length;
+    const respondídasCount = demandas.filter(d =>  yaRespondio(d.id)).length;
+    const activeFilters   = (feedEstado !== 'todas' ? 1 : 0) + (filterRubro !== 'todas' ? 1 : 0) + (feedSort !== 'recientes' ? 1 : 0);
 
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-28 lg:pb-8">
-        <StorePageHeader
-          title="Demandas"
-          actionSlot={(
-            <button
-              onClick={fetchDemandas}
-              className="ui-icon-btn hover:bg-slate-100 dark:hover:bg-white/8 text-slate-500 dark:text-slate-400 transition-colors shrink-0"
-              aria-label="Actualizar demandas"
-            >
-              <RotateCcw className="w-4.5 h-4.5" />
-            </button>
-          )}
-          secondarySlot={(
-            <div className="px-4 lg:px-8 py-3 space-y-3">
-              <div className="flex bg-slate-100 dark:bg-white/5 rounded-2xl p-1">
+    const SORT_OPTIONS = [
+      { value: 'recientes',   label: 'Más recientes' },
+      { value: 'presupuesto', label: 'Mayor presupuesto' },
+      { value: 'urgentes',    label: 'Urgentes primero' },
+    ];
+
+    // ── Sidebar Filtros (desktop) ─────────────────────────────────────────
+    const FilterSidebar = () => (
+      <aside className="hidden lg:flex flex-col w-56 xl:w-64 shrink-0 border-r border-slate-200 dark:border-white/8 bg-white dark:bg-slate-900 overflow-y-auto">
+        <div className="p-4 space-y-5">
+
+          {/* Tab demandas / mis respuestas */}
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Vista</p>
+            <div className="flex flex-col gap-1">
+              {[
+                { value: 'feed',       label: 'Demandas',      icon: <Package className="w-3.5 h-3.5" />, count: demandas.length },
+                { value: 'respuestas', label: 'Mis respuestas', icon: <MessageSquare className="w-3.5 h-3.5" />, count: misRespuestas.length },
+              ].map(opt => (
                 <button
-                  onClick={() => setTab('feed')}
-                  className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${tab === 'feed' ? 'bg-white dark:bg-slate-800 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500'}`}
+                  key={opt.value}
+                  onClick={() => setFeedTab(opt.value)}
+                  className={`flex items-center justify-between gap-2 w-full px-3 py-2 rounded-xl text-sm font-semibold transition-all text-left ${feedTab === opt.value ? 'bg-brand/10 text-brand dark:text-brand' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'}`}
                 >
-                  <Package className="w-3.5 h-3.5" />
-                  Demandas
-                  {newDemandasCount > 0 && (
-                    <span className="w-4 h-4 bg-brand text-white text-[9px] font-black rounded-full flex items-center justify-center">
-                      {newDemandasCount > 9 ? '9+' : newDemandasCount}
-                    </span>
-                  )}
+                  <span className="flex items-center gap-2">{opt.icon}{opt.label}</span>
+                  {opt.count > 0 && <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-lg ${feedTab === opt.value ? 'bg-brand/15 text-brand' : 'bg-slate-100 dark:bg-white/10 text-slate-500'}`}>{opt.count}</span>}
                 </button>
-                <button
-                  onClick={() => setTab('respuestas')}
-                  className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${tab === 'respuestas' ? 'bg-white dark:bg-slate-800 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500'}`}
-                >
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  Mis respuestas
-                </button>
+              ))}
+            </div>
+          </div>
+
+          {feedTab === 'feed' && (
+            <>
+              {/* Estado */}
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Estado</p>
+                <div className="flex flex-col gap-0.5">
+                  {[
+                    { value: 'todas',       label: 'Todas',       count: demandas.length },
+                    { value: 'nuevas',      label: 'Sin responder', count: nuevasCount },
+                    { value: 'respondidas', label: 'Respondidas',  count: respondídasCount },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setFeedEstado(opt.value)}
+                      className={`flex items-center justify-between gap-2 w-full px-3 py-2 rounded-xl text-sm font-semibold transition-all text-left ${feedEstado === opt.value ? 'bg-brand/10 text-brand' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${opt.value === 'nuevas' ? 'bg-amber-400' : opt.value === 'respondidas' ? 'bg-brand' : 'bg-slate-300 dark:bg-slate-600'}`} />
+                        {opt.label}
+                      </span>
+                      <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-lg ${feedEstado === opt.value ? 'bg-brand/15 text-brand' : 'bg-slate-100 dark:bg-white/10 text-slate-500'}`}>{opt.count}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-              {tab === 'feed' && (
-                <div className="relative max-w-md">
-                  {searchInput}
+
+              {/* Ordenar */}
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Ordenar</p>
+                <div className="flex flex-col gap-0.5">
+                  {SORT_OPTIONS.map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setFeedSort(opt.value)}
+                      className={`flex items-center gap-2 w-full px-3 py-2 rounded-xl text-sm font-semibold transition-all text-left ${feedSort === opt.value ? 'bg-brand/10 text-brand' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                    >
+                      <ArrowUpDown className="w-3.5 h-3.5 opacity-60" />
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Categorías */}
+              {categoriasFeed.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Categoría</p>
+                  <div className="flex flex-col gap-0.5">
+                    <button
+                      onClick={() => setFilterRubro('todas')}
+                      className={`w-full px-3 py-2 rounded-xl text-sm font-semibold transition-all text-left ${filterRubro === 'todas' ? 'bg-brand/10 text-brand' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                    >Todas</button>
+                    {categoriasFeed.map(cat => (
+                      <button
+                        key={cat.id}
+                        onClick={() => setFilterRubro(filterRubro === cat.id ? 'todas' : cat.id)}
+                        className={`flex items-center gap-2 w-full px-3 py-2 rounded-xl text-sm font-semibold transition-all text-left ${filterRubro === cat.id ? 'bg-brand/10 text-brand' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                      >
+                        <CategoryIcon name={cat.icon} className="w-3.5 h-3.5" />
+                        {cat.name.split(' ')[0]}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
-            </div>
+
+              {/* Clear */}
+              {activeFilters > 0 && (
+                <button
+                  onClick={() => { setFeedEstado('todas'); setFilterRubro('todas'); setFeedSort('recientes'); }}
+                  className="w-full text-center text-xs font-bold text-slate-400 hover:text-danger transition-colors py-1"
+                >
+                  Limpiar filtros
+                </button>
+              )}
+            </>
           )}
+        </div>
+      </aside>
+    );
+
+    // ── Card demanda ──────────────────────────────────────────────────────
+    const DemandaCard = ({ d }) => {
+      const respondida = yaRespondio(d.id);
+      return (
+        <div
+          onClick={() => { setSelectedDemanda(d); setMatchTypeStep('root'); setChatMsgs([]); setChatTexto(''); setScreen('demanda-detail'); }}
+          className={`bg-white dark:bg-slate-900 rounded-3xl border-2 p-5 cursor-pointer hover:shadow-md transition-all active:scale-[0.99] group ${d.urgente ? 'border-danger/20 dark:border-danger/20' : respondida ? 'border-brand/15 dark:border-brand/20' : 'border-slate-100 dark:border-white/10'}`}
+        >
+          <div className="flex gap-4">
+            <div className="relative w-16 h-16 shrink-0">
+              <div className="w-16 h-16 bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 rounded-2xl flex items-center justify-center overflow-hidden">
+                {(d.fotos?.[0] || d.foto)
+                  ? <img src={d.fotos?.[0] || d.foto} alt="" className="w-full h-full object-cover" />
+                  : <Package className="w-7 h-7 text-amber-400" />}
+              </div>
+              {d.urgente && (
+                <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-danger rounded-full flex items-center justify-center shadow-sm">
+                  <Zap className="w-3 h-3 text-white fill-white" />
+                </span>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <h3 className="font-bold leading-tight">{d.titulo}</h3>
+                {respondida
+                  ? <span className="flex items-center gap-1 text-xs font-bold text-brand-dark dark:text-brand bg-brand/8 px-2.5 py-1 rounded-xl shrink-0"><CheckCircle className="w-3 h-3" /> Respondida</span>
+                  : d.urgente
+                    ? <span className="flex items-center gap-1 text-xs font-bold text-danger bg-danger/8 px-2.5 py-1 rounded-xl shrink-0"><Zap className="w-3 h-3" /> Urgente</span>
+                    : <span className="text-xs font-bold text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2.5 py-1 rounded-xl shrink-0">Nueva</span>
+                }
+              </div>
+              {d.descripcion && <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2 mb-2">{d.descripcion}</p>}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-slate-400">{d.tiempoCreado}</span>
+                {d.presupuesto?.max && (
+                  <span className="flex items-center gap-1 text-xs font-semibold text-brand-dark dark:text-brand bg-brand/8 px-2 py-0.5 rounded-lg">
+                    <span className="text-[10px]">hasta</span> ${d.presupuesto.max.toLocaleString()}
+                  </span>
+                )}
+                {(d.categorias || []).slice(0, 2).map(c => (
+                  <span key={c} className="text-xs bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-lg">{c}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
+            <span className="flex items-center gap-1 text-xs font-bold text-brand">
+              {respondida ? 'Ver respuesta' : 'Responder'} <ChevronRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+        </div>
+      );
+    };
+
+    // ── Card mis respuestas ───────────────────────────────────────────────
+    const RespuestaCard = ({ r }) => {
+      const demandaObj = demandas.find(d => String(d.id) === String(r.demandaId));
+      const hasChat    = r.mensajes?.length > 0;
+      const aceptada   = r.estado === 'aceptada';
+      return (
+        <div className={`bg-white dark:bg-slate-900 rounded-3xl border-2 p-5 transition-all ${aceptada ? 'border-ok/20' : 'border-slate-100 dark:border-white/10'}`}>
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div className="flex-1 min-w-0">
+              <h3 className="font-bold leading-tight truncate">{r.demandaTitulo || 'Demanda'}</h3>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {aceptada && (
+                <span className="flex items-center gap-1 text-xs font-bold text-ok bg-ok/8 px-2.5 py-1 rounded-xl">
+                  <CheckCircle className="w-3 h-3" /> Aceptada
+                </span>
+              )}
+              <span className="text-xs text-slate-400">{r.tiempoRespuesta || 'Reciente'}</span>
+            </div>
+          </div>
+          {r.matchType && <MatchTypeBadge type={r.matchType} className="mb-2" />}
+          <p className="text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-white/5 rounded-2xl px-4 py-3 mb-3 leading-relaxed line-clamp-3">{r.mensaje}</p>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {r.precio && (
+                <p className="font-bold text-brand-dark dark:text-brand text-sm">$ {r.precio.toLocaleString()}</p>
+              )}
+              {hasChat && (
+                <span className="flex items-center gap-1 text-xs text-brand font-semibold bg-brand/8 px-2.5 py-1 rounded-xl">
+                  <MessageSquare className="w-3.5 h-3.5" /> {r.mensajes.length} mensajes
+                </span>
+              )}
+            </div>
+            {demandaObj && (
+              <button
+                onClick={() => { setSelectedDemanda(demandaObj); setMatchTypeStep('root'); setScreen('demanda-detail'); }}
+                className="flex items-center gap-1 text-xs font-bold bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 hover:bg-brand/10 hover:text-brand transition-colors px-3 py-1.5 rounded-xl"
+              >
+                Ver demanda <ChevronRight className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <div className="h-[100dvh] flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden">
+        {/* Header */}
+        <StorePageHeader
+          title="Demandas"
+          subtitle={`${demandas.length} solicitud${demandas.length !== 1 ? 'es' : ''} · ${nuevasCount} sin responder`}
+          actionSlot={(
+            <>
+              {newDemandasCount > 0 && (
+                <span className="hidden sm:flex items-center gap-1 text-xs font-bold text-warn bg-warn/10 px-2.5 py-1.5 rounded-xl">
+                  <Zap className="w-3 h-3" /> {newDemandasCount} nuevas
+                </span>
+              )}
+              <button onClick={fetchDemandas} className="ui-icon-btn hover:bg-slate-100 dark:hover:bg-white/8 text-slate-400 transition-colors" title="Actualizar">
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            </>
+          )}
+          secondarySlot={
+            <div className="lg:hidden flex gap-1 px-4 py-2">
+              {[
+                { value: 'feed',       label: 'Demandas',       count: demandas.length },
+                { value: 'respuestas', label: 'Mis respuestas',  count: misRespuestas.length },
+              ].map(t => (
+                <button
+                  key={t.value}
+                  onClick={() => setFeedTab(t.value)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-bold transition-all ${feedTab === t.value ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-white/5 text-slate-500'}`}
+                >
+                  {t.label}
+                  {t.count > 0 && <span className={`text-[10px] font-black px-1.5 rounded-lg ${feedTab === t.value ? 'bg-white/20' : 'bg-slate-200 dark:bg-white/10'}`}>{t.count}</span>}
+                </button>
+              ))}
+            </div>
+          }
         />
 
-        {tab === 'feed' ? (
-          <div className="max-w-4xl mx-auto px-5 lg:px-8 py-5">
-            {categoriasFeed.length > 0 && (
-              <div className="flex gap-2 mb-5 overflow-x-auto pb-2 scrollbar-hide">
+        {/* Body */}
+        <div className="flex-1 flex min-h-0">
+          <FilterSidebar />
+          <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            {/* Toolbar */}
+            <div className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-white/8 px-4 lg:px-5 py-3 flex items-center gap-3">
+              <div className="relative flex-1 max-w-xs">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Buscar..."
+                  className="w-full pl-9 pr-3 py-2 bg-slate-100 dark:bg-white/5 dark:text-slate-200 dark:placeholder:text-slate-500 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+                />
+              </div>
+              {/* Sort (mobile) */}
+              {feedTab === 'feed' && (
+                <div className="lg:hidden relative group">
+                  <button className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all border ${feedSort !== 'recientes' ? 'border-brand bg-brand/5 text-brand' : 'border-slate-200 dark:border-white/10 text-slate-500'}`}>
+                    <ArrowUpDown className="w-4 h-4" />
+                    <span className="hidden sm:inline">{SORT_OPTIONS.find(o => o.value === feedSort)?.label}</span>
+                  </button>
+                  <div className="hidden group-focus-within:block absolute right-0 top-full mt-1 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-white/10 z-30 w-48 py-1 animate-dropdown-in">
+                    {SORT_OPTIONS.map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setFeedSort(opt.value)}
+                        className={`w-full text-left px-4 py-2.5 text-sm font-semibold transition-colors ${feedSort === opt.value ? 'text-brand bg-brand/5' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                      >{opt.label}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Estado chips mobile */}
+              {feedTab === 'feed' && (
+                <div className="lg:hidden flex gap-1.5 overflow-x-auto scrollbar-hide">
+                  {[
+                    { value: 'todas', label: 'Todas' },
+                    { value: 'nuevas', label: 'Sin responder' },
+                    { value: 'respondidas', label: 'Respondidas' },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setFeedEstado(opt.value)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 ${feedEstado === opt.value ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-white/5 text-slate-500'}`}
+                    >{opt.label}</button>
+                  ))}
+                </div>
+              )}
+              <span className="ml-auto text-xs text-slate-400 font-semibold shrink-0">
+                {feedTab === 'feed' ? demandasFiltradas.length : misRespuestas.length}
+              </span>
+            </div>
+
+            {/* Category chips (feed tab) */}
+            {feedTab === 'feed' && categoriasFeed.length > 0 && (
+              <div className="shrink-0 flex gap-2 px-4 lg:px-5 py-2.5 overflow-x-auto scrollbar-hide border-b border-slate-100 dark:border-white/5 bg-white dark:bg-slate-900">
                 <button
                   onClick={() => setFilterRubro('todas')}
-                  className={`px-3 py-1.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all shrink-0 ${filterRubro === 'todas' ? 'bg-brand text-white' : 'bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:border-slate-300'}`}
-                >
-                  Todas
-                </button>
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 ${filterRubro === 'todas' ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-white/5 text-slate-500 hover:bg-slate-200'}`}
+                >Todas</button>
                 {categoriasFeed.map(cat => (
                   <button
                     key={cat.id}
                     onClick={() => setFilterRubro(filterRubro === cat.id ? 'todas' : cat.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all shrink-0 ${filterRubro === cat.id ? 'bg-brand text-white' : 'bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:border-slate-300'}`}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 ${filterRubro === cat.id ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-white/5 text-slate-500 hover:bg-slate-200'}`}
                   >
-                    <CategoryIcon name={cat.icon} className="w-3.5 h-3.5" />
-                    <span>{cat.name.split(' ')[0]}</span>
+                    <CategoryIcon name={cat.icon} className="w-3 h-3" />
+                    {cat.name.split(' ')[0]}
                   </button>
                 ))}
               </div>
             )}
-            {loading ? (
-              <div className="space-y-4">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="bg-white dark:bg-slate-900 rounded-3xl border dark:border-white/10 p-5 animate-pulse">
-                    <div className="flex gap-4">
-                      <div className="w-16 h-16 bg-slate-200 rounded-2xl shrink-0" />
-                      <div className="flex-1 space-y-2 pt-1">
-                        <div className="h-4 bg-slate-200 rounded w-2/3" />
-                        <div className="h-3 bg-slate-200 rounded" />
-                        <div className="h-3 bg-slate-200 rounded w-1/2" />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : demandasFiltradas.length === 0 ? (
-              <div className="text-center py-16">
-                <Package className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-                <p className="font-semibold text-slate-400">{searchQuery ? 'Sin resultados' : 'No hay demandas activas'}</p>
-                <button onClick={fetchDemandas} className="mt-4 px-5 py-2.5 bg-slate-100 rounded-xl font-semibold text-sm">Actualizar</button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {demandasFiltradas.map(d => {
-                  const respondida = yaRespondio(d.id);
-                  return (
-                    <div
-                      key={d.id}
-                      onClick={() => { setSelectedDemanda(d); setMatchTypeStep('root'); setChatMsgs([]); setChatTexto(''); setScreen('demanda-detail'); }}
-                      className={`bg-white dark:bg-slate-900 rounded-3xl border-2 p-5 cursor-pointer hover:shadow-md transition-all active:scale-[0.99] ${respondida ? 'border-brand/15 dark:border-brand/20' : 'border-slate-100 dark:border-white/10'}`}
-                    >
-                      <div className="flex gap-4">
-                        <div className="w-16 h-16 bg-gradient-to-br from-amber-100 to-orange-100 rounded-2xl flex items-center justify-center shrink-0 overflow-hidden">
-                          {(d.fotos?.[0] || d.foto) ? <img src={d.fotos?.[0] || d.foto} alt="" className="w-full h-full object-cover" /> : <Package className="w-7 h-7 text-amber-400" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2 mb-1">
-                            <h3 className="font-bold truncate">{d.titulo}</h3>
-                            {respondida
-                              ? <span className="flex items-center gap-1 text-xs font-bold text-brand-dark bg-brand/8 px-2.5 py-1 rounded-xl shrink-0"><CheckCircle className="w-3 h-3" /> Respondida</span>
-                              : <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-xl shrink-0">Nueva</span>}
-                          </div>
-                          {d.descripcion && <p className="text-sm text-slate-500 line-clamp-2 mb-2">{d.descripcion}</p>}
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <span className="text-xs text-slate-400">{d.tiempoCreado}</span>
-                            {d.presupuesto?.max && <span className="text-xs font-semibold text-brand-dark bg-brand/8 px-2 py-0.5 rounded-lg">Hasta ${d.presupuesto.max.toLocaleString()}</span>}
-                            {(d.categorias || []).map(c => <span key={c} className="text-xs bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-lg">{c}</span>)}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="max-w-3xl mx-auto px-5 py-6 space-y-4">
-            {misRespuestas.length === 0 ? (
-              <div className="text-center py-16">
-                <MessageSquare className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-                <p className="font-semibold text-slate-400">Todavía no respondiste ninguna demanda</p>
-              </div>
-            ) : misRespuestas.map(r => {
-              const demandaObj = demandas.find(d => String(d.id) === String(r.demandaId));
-              const hasChat = r.mensajes?.length > 0;
-              return (
-                <div key={r.id} className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-slate-100 dark:border-white/10 p-5">
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <h3 className="font-bold leading-tight">{r.demandaTitulo || 'Demanda'}</h3>
-                    <span className="text-xs text-slate-400 shrink-0">{r.tiempoRespuesta || 'Reciente'}</span>
-                  </div>
-                  {r.matchType && <MatchTypeBadge type={r.matchType} className="mb-2" />}
-                  <p className="text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-white/5 rounded-2xl p-3 mb-3 leading-relaxed">{r.mensaje}</p>
-                  <div className="flex items-center justify-between gap-3">
-                    {r.precio ? (
-                      <p className="font-bold text-brand-dark dark:text-brand text-sm">$ {r.precio.toLocaleString()}</p>
-                    ) : <span />}
-                    <div className="flex items-center gap-2">
-                      {hasChat && (
-                        <span className="flex items-center gap-1 text-xs text-brand font-semibold">
-                          <MessageSquare className="w-3.5 h-3.5" /> {r.mensajes.length}
-                        </span>
-                      )}
-                      {demandaObj && (
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto pb-24 lg:pb-8">
+              {feedTab === 'feed' ? (
+                <div className="max-w-3xl mx-auto px-4 lg:px-6 py-5 space-y-3">
+                  {loading ? (
+                    <SkeletonFeed count={4} />
+                  ) : demandasFiltradas.length === 0 ? (
+                    <div className="text-center py-16">
+                      <Package className="w-12 h-12 text-slate-200 dark:text-slate-700 mx-auto mb-3" />
+                      <p className="font-semibold text-slate-400">{searchQuery ? 'Sin resultados para tu búsqueda' : 'No hay demandas activas'}</p>
+                      {activeFilters > 0 && (
                         <button
-                          onClick={() => { setSelectedDemanda(demandaObj); setMatchTypeStep('root'); setScreen('demanda-detail'); }}
-                          className="flex items-center gap-1 text-xs font-bold bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 hover:bg-brand/10 hover:text-brand transition-colors px-3 py-1.5 rounded-xl"
-                        >
-                          Ver demanda <ChevronRight className="w-3 h-3" />
-                        </button>
+                          onClick={() => { setFeedEstado('todas'); setFilterRubro('todas'); setFeedSort('recientes'); setSearchQuery(''); }}
+                          className="mt-3 text-sm font-bold text-brand hover:underline"
+                        >Limpiar filtros</button>
                       )}
+                      <button onClick={fetchDemandas} className="mt-4 px-5 py-2.5 bg-slate-100 dark:bg-white/5 rounded-xl font-semibold text-sm block mx-auto">Actualizar</button>
                     </div>
-                  </div>
+                  ) : (
+                    demandasFiltradas.map(d => <DemandaCard key={d.id} d={d} />)
+                  )}
                 </div>
-              );
-            })}
-          </div>
-        )}
+              ) : (
+                <div className="max-w-3xl mx-auto px-4 lg:px-6 py-5 space-y-3">
+                  {misRespuestas.length === 0 ? (
+                    <div className="text-center py-16">
+                      <MessageSquare className="w-12 h-12 text-slate-200 dark:text-slate-700 mx-auto mb-3" />
+                      <p className="font-semibold text-slate-400">Todavía no respondiste ninguna demanda</p>
+                      <button onClick={() => setFeedTab('feed')} className="mt-4 px-5 py-2.5 bg-brand text-white rounded-xl font-semibold text-sm">Ver demandas activas</button>
+                    </div>
+                  ) : (
+                    misRespuestas.map(r => <RespuestaCard key={r.id} r={r} />)
+                  )}
+                </div>
+              )}
+            </div>
+          </main>
+        </div>
       </div>
     );
   };
@@ -1806,7 +2185,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24 lg:pb-8">
-        <StorePageHeader title="Demanda" onBack={() => setScreen('feed')} />
+        <StorePageHeader title="Detalle de demanda" subtitle="Respondé para conectar con el cliente" onBack={() => setScreen('feed')} />
 
         <div className="max-w-2xl mx-auto p-5 space-y-5">
           {/* Info demanda */}
@@ -2006,15 +2385,27 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     const convo = inboxConvos.find(c => c.key === inboxSelectedKey);
     if (!text && !chatAttachment) return;
     if (!storeId || !convo) return;
+    // Modo edición: actualiza el mensaje localmente
+    if (editingMsg) {
+      setInboxConvos(prev => prev.map(c => c.key === inboxSelectedKey
+        ? { ...c, messages: c.messages.map(m => (m.id || m.ts) === editingMsg.id ? { ...m, text } : m) }
+        : c
+      ));
+      setInboxReply('');
+      setEditingMsg(null);
+      return;
+    }
     setInboxSending(true);
     const attachment = chatAttachment;
-    const optimistic = { id: `opt-${Date.now()}`, from: String(storeId), text: text || '', ...(attachment ? { attachment } : {}), ts: new Date().toISOString() };
+    const imageUrl = chatImagePreview;
+    const optimistic = { id: `opt-${Date.now()}`, from: String(storeId), text: text || '', ...(attachment ? { attachment } : {}), ...(imageUrl ? { imageUrl } : {}), ts: new Date().toISOString() };
     setInboxConvos(prev => prev.map(c => c.key === inboxSelectedKey
       ? { ...c, messages: [...c.messages, optimistic], lastMessage: optimistic }
       : c
     ));
     setInboxReply('');
     setChatAttachment(null);
+    setChatImagePreview(null);
     setAttachOpen(false);
     try {
       await apiFetch(`${API_BASE}/messages`, {
@@ -2026,6 +2417,19 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       setInboxSending(false);
     }
   };
+
+  // Auto-scroll al fondo del chat cuando cambia la convo o llegan/envían mensajes
+  const _selectedMsgs = inboxConvos.find(c => c.key === inboxSelectedKey)?.messages;
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const isMobile = window.innerWidth < 1024;
+        const el = isMobile ? inboxMobileScrollRef.current : inboxScrollRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inboxSelectedKey, _selectedMsgs]);
 
   const AVATAR_COLORS = ['bg-violet-500','bg-brand','bg-emerald-500','bg-amber-500','bg-rose-500','bg-sky-500'];
   const avatarColor = (uid) => AVATAR_COLORS[(uid?.charCodeAt(0) || 0) % AVATAR_COLORS.length];
@@ -2090,6 +2494,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     }).sort((a, b) => new Date(b.lastTs || 0) - new Date(a.lastTs || 0));
   }, [inboxConvos, closedConvos, _storeId]);
 
+  const unreadTotal = allThreads.filter(t => !t.closed && t.unread > 0).length;
+
   const MensajesScreen = () => {
     const storeId = _storeId;
 
@@ -2118,8 +2524,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     const visibleThreads  = allThreads.filter(t => !t.closed && matchesFilter(t));
     const archivedThreads = allThreads.filter(t =>  t.closed && matchesFilter(t));
 
-    const unreadTotal = allThreads.filter(t => !t.closed && t.unread > 0).length;
-
     const toggleClose = (key) => {
       setClosedConvos(prev => {
         const next = new Set(prev);
@@ -2135,9 +2539,9 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     // ── Panel izquierdo ────────────────────────────────────────────────────
     const ThreadList = () => (
       <div className="flex flex-col h-full bg-white dark:bg-slate-900">
-        {/* Header */}
+        {/* Header — solo visible en desktop (mobile usa StorePageHeader) */}
         <div className="px-4 pt-4 pb-3 border-b border-slate-100 dark:border-white/8 shrink-0">
-          <div className="flex items-center justify-between mb-3">
+          <div className="hidden lg:flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <h2 className="font-bold text-base">Comunicaciones</h2>
               {unreadTotal > 0 && (
@@ -2151,36 +2555,49 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             </button>
           </div>
 
-          {/* Filtros */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-            {FILTERS.map(f => {
-              const count = allThreads.filter(t => !t.closed && t.unread > 0 && (!f.types || f.types.includes(t.type))).length;
-              return (
-                <button key={f.id} onClick={() => setMsgFilter(f.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors shrink-0 ${msgFilter === f.id ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900' : 'bg-slate-100 dark:bg-white/8 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
-                  {f.label}
-                  {count > 0 && <span className={`text-[9px] font-black px-1 py-0.5 rounded-full leading-none ${msgFilter === f.id ? 'bg-white/25' : 'bg-brand text-white'}`}>{count}</span>}
-                </button>
-              );
-            })}
-          </div>
+          {/* Toolbar: búsqueda + filtro tipo */}
+          <div className="flex items-center gap-2 mt-1">
+            {/* Búsqueda */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input value={inboxSearch} onChange={e => setInboxSearch(e.target.value)}
+                placeholder="Buscar conversación..."
+                className="w-full pl-8 pr-8 py-2 bg-slate-50 dark:bg-white/5 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand transition-all border border-transparent focus:border-brand/20" />
+              {inboxSearch && <button onClick={() => setInboxSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-3 h-3" /></button>}
+            </div>
 
-          {/* Búsqueda */}
-          <div className="relative mt-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-            <input value={inboxSearch} onChange={e => setInboxSearch(e.target.value)}
-              placeholder="Buscar..."
-              className="w-full pl-8 pr-3 py-2 bg-slate-100 dark:bg-white/8 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand transition-all" />
+            {/* Filtro tipo — dropdown igual que sort de productos */}
+            <div className="relative group shrink-0">
+              <button className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${msgFilter !== 'todos' ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-white/8 text-slate-500'}`}
+                title="Filtrar por tipo">
+                <ListFilter className="w-3.5 h-3.5" />
+              </button>
+              <div className="absolute right-0 top-full mt-1.5 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-100 dark:border-white/10 overflow-hidden z-50 min-w-[170px] hidden group-focus-within:block animate-dropdown-in">
+                {FILTERS.map(f => {
+                  const count = allThreads.filter(t => !t.closed && t.unread > 0 && (!f.types || f.types.includes(t.type))).length;
+                  return (
+                    <button key={f.id} onClick={() => setMsgFilter(f.id)}
+                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-xs transition-colors text-left ${msgFilter === f.id ? 'bg-slate-50 dark:bg-white/5 font-bold text-brand' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'}`}>
+                      {msgFilter === f.id && <CheckCircle className="w-3 h-3 text-brand shrink-0" />}
+                      <span className={msgFilter === f.id ? '' : 'pl-4'}>{f.label}</span>
+                      {count > 0 && <span className="ml-auto text-[9px] font-black bg-brand/10 text-brand px-1.5 py-0.5 rounded-full">{count}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Lista */}
         <div className="flex-1 overflow-y-auto flex flex-col">
+          {/* Barra de progreso top cuando recarga con datos ya visibles */}
+          {inboxLoading && visibleThreads.length > 0 && (
+            <div className="top-progress" style={{ position: 'absolute', top: 0, left: 0, right: 0 }} />
+          )}
           <div className="flex-1 divide-y divide-slate-50 dark:divide-white/5">
           {inboxLoading && visibleThreads.length === 0 ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 text-slate-300 animate-spin" />
-            </div>
+            <div className="px-3 pt-3"><SkeletonInbox count={6} /></div>
           ) : visibleThreads.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 px-6 text-center gap-3">
               <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-white/8 flex items-center justify-center">
@@ -2193,87 +2610,69 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 {inboxSearch ? 'Probá con otro término.' : 'Los chats de clientes y respuestas a demandas aparecerán acá.'}
               </p>
             </div>
-          ) : visibleThreads.map(t => {
+          ) : <div className="stagger-in">{visibleThreads.map((t, idx) => {
             const meta = TYPE_META[t.type] || TYPE_META.chat;
             const isSelected = t.key === inboxSelectedKey;
             const TypeIcon = meta.Icon;
 
             return (
               <div key={t.key}
-                className={`group flex items-center gap-3 px-4 py-3 transition-colors cursor-pointer ${isSelected ? 'bg-brand/8 dark:bg-brand/12' : t.closed ? 'opacity-50 hover:opacity-80 hover:bg-slate-50 dark:hover:bg-white/4' : 'hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                className={`group relative flex items-start gap-3 px-4 py-3.5 lg:px-5 lg:py-4 transition-colors cursor-pointer border-l-2 ${isSelected ? 'bg-brand/8 dark:bg-brand/12 border-brand' : t.unread > 0 ? 'border-brand/60' : 'border-transparent hover:bg-slate-50 dark:hover:bg-white/5'}`}
                 onClick={() => { setInboxSelectedKey(t.key); setInboxMobileView('chat'); }}>
 
                 {/* Avatar */}
-                <div className="relative shrink-0">
-                  <div className={`w-11 h-11 rounded-2xl ${t.partnerUid ? avatarColor(t.partnerUid) : meta.bg} flex items-center justify-center text-white font-bold text-sm`}>
-                    {t.partnerUid
-                      ? (t.partnerUid || 'C').slice(-2).toUpperCase()
-                      : <TypeIcon className={`w-5 h-5 ${meta.textColor}`} />
-                    }
+                <div className="relative shrink-0 mt-0.5">
+                  <div className={`w-12 h-12 rounded-2xl ${t.partnerUid ? avatarColor(t.partnerUid) : meta.bg} flex items-center justify-center font-bold text-sm text-white`}>
+                    {t.partnerUid ? (t.partnerUid || 'C').slice(-2).toUpperCase() : <TypeIcon className="w-5 h-5 text-white" />}
                   </div>
-                  {/* Tipo badge */}
-                  <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full ${meta.color} border-2 border-white dark:border-slate-900 flex items-center justify-center`}>
-                    <TypeIcon className="w-2 h-2 text-white" />
+                  <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full ${meta.color} border-2 border-white dark:border-slate-900 flex items-center justify-center shadow-sm`}>
+                    <TypeIcon className="w-2.5 h-2.5 text-white" />
                   </div>
                 </div>
 
                 {/* Contenido */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2 mb-0.5">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <p className={`text-sm truncate ${t.unread > 0 ? 'font-bold text-slate-900 dark:text-white' : 'font-semibold text-slate-700 dark:text-slate-300'}`}>
-                        {t.title}
-                      </p>
-                      {t.closed && (
-                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-slate-200 dark:bg-white/10 text-slate-500 shrink-0">CERRADA</span>
-                      )}
-                    </div>
-                    <span className="text-[11px] text-slate-400 shrink-0">{fmtTime(t.lastTs)}</span>
-                  </div>
-
-                  <p className="text-[11px] text-slate-400 truncate mb-1">{t.subtitle}</p>
-
-                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                    {t.repliedByStore && <span className="text-slate-400">Tú: </span>}
-                    {t.lastText || <span className="italic">Sin mensajes</span>}
+                  {/* Fila 1: título */}
+                  <p className={`text-sm leading-tight truncate mb-1 ${t.unread > 0 ? 'font-bold text-slate-900 dark:text-white' : 'font-semibold text-slate-700 dark:text-slate-200'}`}>
+                    {t.title}
                   </p>
 
-                  {/* Precio en demandas */}
-                  {t.price > 0 && (
-                    <p className="text-xs font-bold text-brand mt-1">$ {t.price.toLocaleString()}</p>
-                  )}
+                  {/* Fila 2: chip tipo + subtítulo */}
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${meta.bg} ${meta.textColor}`}>{meta.label}</span>
+                    {t.subtitle && <p className="text-[11px] text-slate-400 truncate">{t.subtitle}</p>}
+                    {t.price > 0 && <p className="text-[11px] font-bold text-brand shrink-0">${t.price.toLocaleString('es')}</p>}
+                  </div>
+
+                  {/* Fila 3: último mensaje */}
+                  <p className={`text-xs truncate ${t.unread > 0 ? 'text-slate-700 dark:text-slate-300 font-medium' : 'text-slate-400'}`}>
+                    {t.repliedByStore && !t.unread ? <span className="text-slate-400">Tú: </span> : null}
+                    {t.lastText || <span className="italic">Sin mensajes aún</span>}
+                  </p>
                 </div>
 
-                {/* Indicadores y acciones */}
-                <div className="flex flex-col items-end gap-1.5 shrink-0">
+                {/* Columna derecha: hora arriba, badge/acciones abajo */}
+                <div className="flex flex-col items-end shrink-0 self-stretch justify-between pt-0.5">
+                  <span className="text-[11px] text-slate-400">{fmtTime(t.lastTs)}</span>
                   {t.unread > 0 && (
-                    <span className="w-5 h-5 bg-brand rounded-full text-white text-[10px] font-black flex items-center justify-center leading-none">
-                      {t.unread > 9 ? '9+' : t.unread}
-                    </span>
+                    <span className="w-5 h-5 bg-brand rounded-full text-white text-[10px] font-black flex items-center justify-center">{t.unread > 9 ? '9+' : t.unread}</span>
                   )}
-                  {t.repliedByStore && t.unread === 0 && !t.closed && (
-                    <CheckCircle className="w-3.5 h-3.5 text-emerald-500" title="Respondiste" />
-                  )}
-
-                  {/* Acciones al hover — opacity baja para no robar protagonismo */}
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {t.type === 'chat' && (
-                      <button title="Chat flotante"
-                        onClick={e => { e.stopPropagation(); setFloatingChatKey(t.key); setFloatingChatCollapsed(false); }}
-                        className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${floatingChatKey === t.key ? 'bg-brand/15 text-brand' : 'text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8'}`}>
-                        <ExternalLink className="w-3 h-3" />
-                      </button>
-                    )}
-                    <button title="Archivar"
+                  <div className="flex flex-col items-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button title="Chat flotante"
+                      onClick={e => { e.stopPropagation(); if (floatingChats.find(c => c.key === t.key)) { closeFloatingChat(t.key); } else { openFloatingChat(t.key); } }}
+                      className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${floatingChats.find(c => c.key === t.key) ? 'bg-brand/15 text-brand' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/8'}`}>
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                    <button title={t.closed ? 'Desarchivar' : 'Archivar'}
                       onClick={e => { e.stopPropagation(); toggleClose(t.key); }}
-                      className="w-6 h-6 rounded-lg flex items-center justify-center text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8 transition-colors">
+                      className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${t.closed ? 'text-amber-500' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/8'}`}>
                       <Archive className="w-3 h-3" />
                     </button>
                   </div>
                 </div>
               </div>
             );
-          })}
+          })}</div>}
           </div>
 
           {/* ── Barra archivados estilo WhatsApp ── */}
@@ -2338,7 +2737,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     );
 
     // ── Panel derecho ──────────────────────────────────────────────────────
-    const ChatPanel = () => {
+    const ChatPanel = ({ scrollRef } = {}) => {
       const meta = selectedThread ? (TYPE_META[selectedThread.type] || TYPE_META.chat) : null;
       const TypeIcon = meta?.Icon || MessageSquare;
 
@@ -2368,11 +2767,15 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 <div className="flex items-center gap-1 shrink-0">
                   {selectedThread.type === 'chat' && (
                     <button title="Chat flotante"
-                      onClick={() => { setFloatingChatKey(selectedThread.key); setFloatingChatCollapsed(false); }}
-                      className={`ui-icon-btn transition-colors ${floatingChatKey === selectedThread.key ? 'text-brand bg-brand/10' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8'}`}>
+                      onClick={() => { if (floatingChats.find(c => c.key === selectedThread.key)) { closeFloatingChat(selectedThread.key); } else { openFloatingChat(selectedThread.key); } }}
+                      className={`ui-icon-btn transition-colors ${floatingChats.find(c => c.key === selectedThread.key) ? 'text-brand bg-brand/10' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8'}`}>
                       <ExternalLink className="w-4 h-4" />
                     </button>
                   )}
+                  <button title="Info del cliente" onClick={() => setInboxInfoOpen(v => !v)}
+                    className={`ui-icon-btn transition-colors ${inboxInfoOpen ? 'text-brand bg-brand/10' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8'}`}>
+                    <User className="w-4 h-4" />
+                  </button>
                 </div>
               </>
             ) : (
@@ -2381,7 +2784,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           </div>
 
           {/* Cuerpo */}
-          <div className="flex-1 overflow-y-auto p-4 bg-slate-50 dark:bg-slate-950">
+          <div ref={scrollRef || null} className="flex-1 overflow-y-auto p-4 bg-slate-50 dark:bg-slate-950" onClick={() => setSwipedMsgId(null)}>
             {!selectedThread ? (
               <div className="flex flex-col items-center justify-center h-full text-center gap-4">
                 <div className="w-20 h-20 rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-white/8 flex items-center justify-center shadow-sm">
@@ -2429,97 +2832,369 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 ) : messages.filter(m => m.attachment?.type !== 'context').map(msg => {
                   const isStore = msg.from === storeId;
                   return (
-                    <div key={msg.id || msg.ts} className={`flex flex-col ${isStore ? 'items-end' : 'items-start'} gap-1`}>
-                      {(msg.attachment?.type === 'product' || msg.attachment?.type === 'producto') && (() => {
+                    <div key={msg.id || msg.ts} className={`group/msg flex flex-col ${isStore ? 'items-end' : 'items-start'} gap-1`}>
+                      {msg.attachment && isStore && (() => {
                         const att = msg.attachment;
-                        const fullProd = misProductos.find(p => String(p.id) === String(att.productoId));
-                        const foto = att.foto || fullProd?.fotos?.[0] || fullProd?.foto || null;
-                        const nombre = att.nombre || fullProd?.titulo || fullProd?.nombre || 'Producto';
-                        const precio = att.precio ?? fullProd?.precio ?? null;
-                        const precioOrig = fullProd?.precioOriginal ?? null;
-                        const descripcion = fullProd?.descripcion || null;
-                        const stock = fullProd?.stock ?? null;
-                        return (
-                          <button
-                            onClick={() => { if (fullProd) { setProductoEditing(fullProd); setProductoShowForm(true); setScreen('productos'); } }}
-                            className={`w-52 rounded-2xl border overflow-hidden text-left transition-opacity hover:opacity-80 active:opacity-60 ${isStore ? 'bg-white/10 border-white/20' : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-white/10 shadow-sm'}`}>
-                            {/* Foto cuadrada */}
-                            <div className="aspect-square w-full bg-slate-100 dark:bg-white/8 flex items-center justify-center overflow-hidden">
-                              {foto
-                                ? <img src={foto} alt={nombre} className="w-full h-full object-cover" />
-                                : <ShoppingBag className="w-10 h-10 text-slate-300 dark:text-slate-600" />}
-                            </div>
-                            {/* Info */}
-                            <div className="px-3 py-2.5">
-                              <p className="text-[10px] font-bold text-emerald-600 mb-0.5">Producto</p>
-                              <p className="text-sm font-bold line-clamp-2 text-slate-800 dark:text-slate-100">{nombre}</p>
-                              {descripcion && <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">{descripcion}</p>}
-                              <div className="flex items-center gap-2 mt-1.5">
-                                {precio != null && <span className="text-sm font-black text-brand-dark dark:text-brand">${Number(precio).toLocaleString('es')}</span>}
-                                {precioOrig && precio && Number(precioOrig) > Number(precio) && <span className="text-xs text-slate-400 line-through">${Number(precioOrig).toLocaleString('es')}</span>}
-                                {stock != null && <span className="text-[10px] text-slate-400 ml-auto">Stock: {stock}</span>}
+                        const attKey = `att-${msg.id || msg.ts}`;
+                        const delAtt = () => setInboxConvos(prev => prev.map(c => c.key === inboxSelectedKey
+                          ? { ...c, messages: c.messages.map(m => (m.id || m.ts) === (msg.id || msg.ts) ? { ...m, attachment: undefined } : m) }
+                          : c));
+
+                        let attContent = null;
+                        if (att.type === 'product' || att.type === 'producto') {
+                          const fullProd = misProductos.find(p => String(p.id) === String(att.productoId));
+                          const foto = att.foto || fullProd?.fotos?.[0] || fullProd?.foto || null;
+                          const nombre = att.nombre || fullProd?.titulo || fullProd?.nombre || 'Producto';
+                          const precio = att.precio ?? fullProd?.precio ?? null;
+                          const precioOrig = fullProd?.precioOriginal ?? null;
+                          const descripcion = fullProd?.descripcion || null;
+                          const stock = fullProd?.stock ?? null;
+                          attContent = (
+                            <button onClick={() => { if (fullProd) { setProductoEditing(fullProd); setProductoShowForm(true); setScreen('productos'); } }}
+                              className="w-52 rounded-2xl border overflow-hidden text-left transition-opacity hover:opacity-80 active:opacity-60 bg-white dark:bg-slate-800 border-slate-100 dark:border-white/10 shadow-sm">
+                              <div className="aspect-square w-full bg-slate-100 dark:bg-white/8 flex items-center justify-center overflow-hidden">
+                                {foto ? <img src={foto} alt={nombre} className="w-full h-full object-cover" /> : <ShoppingBag className="w-10 h-10 text-slate-300 dark:text-slate-600" />}
                               </div>
-                            </div>
-                          </button>
-                        );
-                      })()}
-                      {msg.attachment?.type === 'ubicacion' && (() => {
-                        const att = msg.attachment;
-                        const mapsUrl = att.lat && att.lng
-                          ? `https://www.google.com/maps?q=${att.lat},${att.lng}`
-                          : att.direccion
-                            ? `https://www.google.com/maps/search/${encodeURIComponent(`${att.direccion}${att.ciudad ? ` ${att.ciudad}` : ''}`)}`
-                            : null;
-                        return (
-                          <a href={mapsUrl || '#'} target={mapsUrl ? '_blank' : undefined} rel="noopener noreferrer"
-                            className={`w-52 rounded-2xl border overflow-hidden text-left transition-opacity hover:opacity-80 ${isStore ? 'bg-rose-500/10 border-rose-500/20' : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-white/10 shadow-sm'}`}>
-                            {/* Mapa estático */}
-                            <div className="h-28 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 flex items-center justify-center relative overflow-hidden">
-                              <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 20px,#94a3b8 20px,#94a3b8 21px),repeating-linear-gradient(90deg,transparent,transparent 20px,#94a3b8 20px,#94a3b8 21px)' }} />
-                              <div className="relative flex items-center justify-center">
-                                <div className="w-10 h-10 rounded-full bg-rose-500 flex items-center justify-center shadow-xl ring-4 ring-white/40">
-                                  <MapPin className="w-5 h-5 text-white" />
+                              <div className="px-3 py-2.5">
+                                <p className="text-[10px] font-bold text-emerald-600 mb-0.5">Producto</p>
+                                <p className="text-sm font-bold line-clamp-2 text-slate-800 dark:text-slate-100">{nombre}</p>
+                                {descripcion && <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">{descripcion}</p>}
+                                <div className="flex items-center gap-2 mt-1.5">
+                                  {precio != null && <span className="text-sm font-black text-brand-dark dark:text-brand">${Number(precio).toLocaleString('es')}</span>}
+                                  {precioOrig && precio && Number(precioOrig) > Number(precio) && <span className="text-xs text-slate-400 line-through">${Number(precioOrig).toLocaleString('es')}</span>}
+                                  {stock != null && <span className="text-[10px] text-slate-400 ml-auto">Stock: {stock}</span>}
                                 </div>
                               </div>
+                            </button>
+                          );
+                        } else if (att.type === 'ubicacion') {
+                          const mapsUrl = att.lat && att.lng
+                            ? `https://www.google.com/maps?q=${att.lat},${att.lng}`
+                            : att.direccion ? `https://www.google.com/maps/search/${encodeURIComponent(`${att.direccion}${att.ciudad ? ` ${att.ciudad}` : ''}`)}` : null;
+                          const storeFoto = tiendaInfo?.foto || null;
+                          attContent = (
+                            <a href={mapsUrl || '#'} target={mapsUrl ? '_blank' : undefined} rel="noopener noreferrer"
+                              className="block w-52 rounded-2xl border overflow-hidden text-left transition-opacity hover:opacity-80 bg-white dark:bg-slate-800 border-slate-100 dark:border-white/10 shadow-sm">
+                              <div className="h-28 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 flex items-center justify-center relative overflow-hidden">
+                                <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 20px,#94a3b8 20px,#94a3b8 21px),repeating-linear-gradient(90deg,transparent,transparent 20px,#94a3b8 20px,#94a3b8 21px)' }} />
+                                <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-xl ring-4 ring-white/40 relative bg-slate-200 dark:bg-slate-600 flex items-center justify-center">
+                                  {storeFoto
+                                    ? <img src={storeFoto} alt="" className="w-full h-full object-cover" />
+                                    : <MapPin className="w-5 h-5 text-slate-400" />}
+                                </div>
+                              </div>
+                              <div className="px-3 py-2.5">
+                                <p className="text-[10px] text-slate-500 font-bold mb-0.5 flex items-center gap-1">Ubicación <ExternalLink className="w-2.5 h-2.5" /></p>
+                                {att.nombre && <p className="text-xs font-semibold truncate">{att.nombre}</p>}
+                                {att.direccion && <p className="text-[11px] text-slate-500 truncate">{att.direccion}{att.ciudad ? `, ${att.ciudad}` : ''}</p>}
+                              </div>
+                            </a>
+                          );
+                        } else if (att.type === 'tienda-info') {
+                          const waNum = att.telefono ? att.telefono.replace(/\D/g, '').replace(/^0/, '54') : null;
+                          const waUrl = waNum ? `https://wa.me/${waNum}` : null;
+                          attContent = (
+                            <a href={waUrl || '#'} target={waUrl ? '_blank' : undefined} rel="noopener noreferrer"
+                              className="block w-52 rounded-2xl border overflow-hidden shadow-sm border-slate-100 dark:border-white/10 transition-opacity hover:opacity-80">
+                              {/* Header verde WhatsApp */}
+                              <div className="bg-[#25D366] px-3 py-3 flex items-center gap-2.5">
+                                <svg viewBox="0 0 24 24" className="w-8 h-8 text-white shrink-0" fill="currentColor">
+                                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+                                  <path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.554 4.118 1.528 5.855L.057 23.215a.75.75 0 0 0 .928.928l5.36-1.471A11.943 11.943 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.718 9.718 0 0 1-4.953-1.352l-.355-.211-3.683 1.01 1.01-3.684-.211-.355A9.718 9.718 0 0 1 2.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z"/>
+                                </svg>
+                                <div className="min-w-0">
+                                  <p className="text-[10px] text-white/80 font-semibold">WhatsApp</p>
+                                  <p className="text-sm font-bold text-white truncate">{att.nombre || 'Contactar'}</p>
+                                </div>
+                              </div>
+                              {/* Footer */}
+                              <div className="bg-white dark:bg-slate-800 px-3 py-2 flex items-center justify-between">
+                                <p className="text-[11px] text-slate-500">{att.telefono || 'Ver contacto'}</p>
+                                <ExternalLink className="w-3 h-3 text-[#25D366] shrink-0" />
+                              </div>
+                            </a>
+                          );
+                        } else if (att.type === 'tienda-publica') {
+                          attContent = (
+                            <a href={att.url} target="_blank" rel="noopener noreferrer"
+                              className="block w-52 rounded-2xl border overflow-hidden shadow-sm border-slate-100 dark:border-white/10 transition-opacity hover:opacity-80">
+                              <div className="bg-brand px-3 py-3 flex items-center gap-2.5">
+                                <Globe className="w-8 h-8 text-white shrink-0" />
+                                <div className="min-w-0">
+                                  <p className="text-[10px] text-white/80 font-semibold">Página pública</p>
+                                  <p className="text-sm font-bold text-white truncate">{att.nombre}</p>
+                                </div>
+                              </div>
+                              <div className="bg-white dark:bg-slate-800 px-3 py-2 flex items-center justify-between">
+                                <p className="text-[11px] text-slate-500 truncate">{att.url?.replace(/^https?:\/\//, '')}</p>
+                                <ExternalLink className="w-3 h-3 text-brand shrink-0" />
+                              </div>
+                            </a>
+                          );
+                        } else if (att.type === 'horarios') {
+                          const rows = (() => {
+                            if (!att.horarios) return [];
+                            if (typeof att.horarios === 'string') return att.horarios.split('\n').filter(Boolean).map(l => ({ label: l, value: '' }));
+                            if (Array.isArray(att.horarios)) return att.horarios;
+                            if (typeof att.horarios === 'object') return Object.entries(att.horarios).map(([k, v]) => ({ label: k, value: v }));
+                            return [];
+                          })();
+                          attContent = (
+                            <div className="w-52 rounded-2xl border overflow-hidden shadow-sm border-slate-100 dark:border-white/10">
+                              <div className="bg-amber-500 px-3 py-2.5 flex items-center gap-2">
+                                <Clock className="w-4 h-4 text-white shrink-0" />
+                                <div>
+                                  <p className="text-[10px] text-white/80 font-semibold">Horarios</p>
+                                  {att.nombre && <p className="text-xs font-bold text-white truncate">{att.nombre}</p>}
+                                </div>
+                              </div>
+                              <div className="bg-white dark:bg-slate-800 px-3 py-2.5 flex flex-col gap-1">
+                                {rows.length > 0 ? rows.map((r, i) => (
+                                  <div key={i} className="flex justify-between gap-2 text-[11px]">
+                                    <span className="text-slate-500 capitalize">{r.label}</span>
+                                    {r.value && <span className="font-semibold text-slate-700 dark:text-slate-200 shrink-0">{r.value}</span>}
+                                  </div>
+                                )) : (
+                                  <p className="text-[11px] text-slate-400">Sin horarios configurados</p>
+                                )}
+                              </div>
                             </div>
-                            <div className="px-3 py-2.5">
-                              <p className="text-[10px] text-rose-600 font-bold mb-0.5 flex items-center gap-1">Ubicación <ExternalLink className="w-2.5 h-2.5" /></p>
-                              {att.nombre && <p className="text-xs font-semibold truncate">{att.nombre}</p>}
-                              {att.direccion && <p className="text-[11px] text-slate-500 truncate">{att.direccion}{att.ciudad ? `, ${att.ciudad}` : ''}</p>}
+                          );
+                        }
+
+                        if (!attContent) return null;
+                        return (
+                          <div className="relative w-fit">
+                            <div className={`absolute right-full top-1/2 -translate-y-1/2 mr-1.5 transition-opacity duration-150
+                              opacity-0 pointer-events-none group-hover/msg:opacity-100 group-hover/msg:pointer-events-auto`}>
+                              <button onClick={delAtt}
+                                className="w-7 h-7 rounded-xl flex items-center justify-center bg-slate-100 dark:bg-white/8 text-slate-400 hover:text-rose-500 transition-colors"
+                                title="Quitar adjunto">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            {attContent}
+                          </div>
+                        );
+                      })()}
+                      {msg.attachment && !isStore && (() => {
+                        const att = msg.attachment;
+                        if (att.type === 'product' || att.type === 'producto') {
+                          const fullProd = misProductos.find(p => String(p.id) === String(att.productoId));
+                          const foto = att.foto || fullProd?.fotos?.[0] || fullProd?.foto || null;
+                          const nombre = att.nombre || fullProd?.titulo || fullProd?.nombre || 'Producto';
+                          const precio = att.precio ?? fullProd?.precio ?? null;
+                          const precioOrig = fullProd?.precioOriginal ?? null;
+                          const descripcion = fullProd?.descripcion || null;
+                          const stock = fullProd?.stock ?? null;
+                          return (
+                            <button onClick={() => { if (fullProd) { setProductoEditing(fullProd); setProductoShowForm(true); setScreen('productos'); } }}
+                              className="w-52 rounded-2xl border overflow-hidden text-left transition-opacity hover:opacity-80 active:opacity-60 bg-white dark:bg-slate-800 border-slate-100 dark:border-white/10 shadow-sm">
+                              <div className="aspect-square w-full bg-slate-100 dark:bg-white/8 flex items-center justify-center overflow-hidden">
+                                {foto ? <img src={foto} alt={nombre} className="w-full h-full object-cover" /> : <ShoppingBag className="w-10 h-10 text-slate-300 dark:text-slate-600" />}
+                              </div>
+                              <div className="px-3 py-2.5">
+                                <p className="text-[10px] font-bold text-emerald-600 mb-0.5">Producto</p>
+                                <p className="text-sm font-bold line-clamp-2 text-slate-800 dark:text-slate-100">{nombre}</p>
+                                {descripcion && <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">{descripcion}</p>}
+                                <div className="flex items-center gap-2 mt-1.5">
+                                  {precio != null && <span className="text-sm font-black text-brand-dark dark:text-brand">${Number(precio).toLocaleString('es')}</span>}
+                                  {precioOrig && precio && Number(precioOrig) > Number(precio) && <span className="text-xs text-slate-400 line-through">${Number(precioOrig).toLocaleString('es')}</span>}
+                                  {stock != null && <span className="text-[10px] text-slate-400 ml-auto">Stock: {stock}</span>}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        }
+                        if (att.type === 'ubicacion') {
+                          const mapsUrl = att.lat && att.lng ? `https://www.google.com/maps?q=${att.lat},${att.lng}` : att.direccion ? `https://www.google.com/maps/search/${encodeURIComponent(`${att.direccion}${att.ciudad ? ` ${att.ciudad}` : ''}`)}` : null;
+                          const storeFoto = tiendaInfo?.foto || null;
+                          return (
+                            <a href={mapsUrl || '#'} target={mapsUrl ? '_blank' : undefined} rel="noopener noreferrer"
+                              className="block w-52 rounded-2xl border overflow-hidden text-left transition-opacity hover:opacity-80 bg-white dark:bg-slate-800 border-slate-100 dark:border-white/10 shadow-sm">
+                              <div className="h-28 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 flex items-center justify-center relative overflow-hidden">
+                                <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 20px,#94a3b8 20px,#94a3b8 21px),repeating-linear-gradient(90deg,transparent,transparent 20px,#94a3b8 20px,#94a3b8 21px)' }} />
+                                <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-xl ring-4 ring-white/40 relative bg-slate-200 dark:bg-slate-600 flex items-center justify-center">
+                                  {storeFoto ? <img src={storeFoto} alt="" className="w-full h-full object-cover" /> : <MapPin className="w-5 h-5 text-slate-400" />}
+                                </div>
+                              </div>
+                              <div className="px-3 py-2.5">
+                                <p className="text-[10px] text-slate-500 font-bold mb-0.5 flex items-center gap-1">Ubicación <ExternalLink className="w-2.5 h-2.5" /></p>
+                                {att.nombre && <p className="text-xs font-semibold truncate">{att.nombre}</p>}
+                                {att.direccion && <p className="text-[11px] text-slate-500 truncate">{att.direccion}{att.ciudad ? `, ${att.ciudad}` : ''}</p>}
+                              </div>
+                            </a>
+                          );
+                        }
+                        if (att.type === 'tienda-info') {
+                          const waNum = att.telefono ? att.telefono.replace(/\D/g, '').replace(/^0/, '54') : null;
+                          const waUrl = waNum ? `https://wa.me/${waNum}` : null;
+                          return (
+                            <a href={waUrl || '#'} target={waUrl ? '_blank' : undefined} rel="noopener noreferrer"
+                              className="block w-52 rounded-2xl border overflow-hidden shadow-sm border-slate-100 dark:border-white/10 transition-opacity hover:opacity-80">
+                              <div className="bg-[#25D366] px-3 py-3 flex items-center gap-2.5">
+                                <svg viewBox="0 0 24 24" className="w-8 h-8 text-white shrink-0" fill="currentColor">
+                                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+                                  <path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.554 4.118 1.528 5.855L.057 23.215a.75.75 0 0 0 .928.928l5.36-1.471A11.943 11.943 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.718 9.718 0 0 1-4.953-1.352l-.355-.211-3.683 1.01 1.01-3.684-.211-.355A9.718 9.718 0 0 1 2.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z"/>
+                                </svg>
+                                <div className="min-w-0">
+                                  <p className="text-[10px] text-white/80 font-semibold">WhatsApp</p>
+                                  <p className="text-sm font-bold text-white truncate">{att.nombre || 'Contactar'}</p>
+                                </div>
+                              </div>
+                              <div className="bg-white dark:bg-slate-800 px-3 py-2 flex items-center justify-between">
+                                <p className="text-[11px] text-slate-500">{att.telefono || 'Ver contacto'}</p>
+                                <ExternalLink className="w-3 h-3 text-[#25D366] shrink-0" />
+                              </div>
+                            </a>
+                          );
+                        }
+                        if (att.type === 'tienda-publica') return (
+                          <a href={att.url} target="_blank" rel="noopener noreferrer"
+                            className="block w-52 rounded-2xl border overflow-hidden shadow-sm border-slate-100 dark:border-white/10 transition-opacity hover:opacity-80">
+                            <div className="bg-brand px-3 py-3 flex items-center gap-2.5">
+                              <Globe className="w-8 h-8 text-white shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-[10px] text-white/80 font-semibold">Página pública</p>
+                                <p className="text-sm font-bold text-white truncate">{att.nombre}</p>
+                              </div>
+                            </div>
+                            <div className="bg-white dark:bg-slate-800 px-3 py-2 flex items-center justify-between">
+                              <p className="text-[11px] text-slate-500 truncate">{att.url?.replace(/^https?:\/\//, '')}</p>
+                              <ExternalLink className="w-3 h-3 text-brand shrink-0" />
                             </div>
                           </a>
                         );
+                        if (att.type === 'horarios') {
+                          const rows = (() => {
+                            if (!att.horarios) return [];
+                            if (typeof att.horarios === 'string') return att.horarios.split('\n').filter(Boolean).map(l => ({ label: l, value: '' }));
+                            if (Array.isArray(att.horarios)) return att.horarios;
+                            if (typeof att.horarios === 'object') return Object.entries(att.horarios).map(([k, v]) => ({ label: k, value: v }));
+                            return [];
+                          })();
+                          return (
+                            <div className="w-52 rounded-2xl border overflow-hidden shadow-sm border-slate-100 dark:border-white/10">
+                              <div className="bg-amber-500 px-3 py-2.5 flex items-center gap-2">
+                                <Clock className="w-4 h-4 text-white shrink-0" />
+                                <div>
+                                  <p className="text-[10px] text-white/80 font-semibold">Horarios</p>
+                                  {att.nombre && <p className="text-xs font-bold text-white truncate">{att.nombre}</p>}
+                                </div>
+                              </div>
+                              <div className="bg-white dark:bg-slate-800 px-3 py-2.5 flex flex-col gap-1">
+                                {rows.length > 0 ? rows.map((r, i) => (
+                                  <div key={i} className="flex justify-between gap-2 text-[11px]">
+                                    <span className="text-slate-500 capitalize">{r.label}</span>
+                                    {r.value && <span className="font-semibold text-slate-700 dark:text-slate-200 shrink-0">{r.value}</span>}
+                                  </div>
+                                )) : (
+                                  <p className="text-[11px] text-slate-400">Sin horarios configurados</p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
                       })()}
-                      {msg.attachment?.type === 'tienda-info' && (
-                        <div className={`flex flex-col gap-1 rounded-2xl p-3 border max-w-[75%] ${isStore ? 'bg-sky-500/10 border-sky-500/20' : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-white/10 shadow-sm'}`}>
-                          <p className="text-[10px] text-sky-600 font-bold flex items-center gap-1"><Building2 className="w-3 h-3" />Contacto</p>
-                          {msg.attachment.nombre && <p className="text-xs font-semibold">{msg.attachment.nombre}</p>}
-                          {msg.attachment.telefono && <p className="text-[11px] text-slate-500 flex items-center gap-1"><Phone className="w-2.5 h-2.5" />{msg.attachment.telefono}</p>}
-                          {msg.attachment.horarios && <p className="text-[11px] text-slate-500 flex items-center gap-1"><Clock className="w-2.5 h-2.5" />{typeof msg.attachment.horarios === 'string' ? msg.attachment.horarios : 'Ver horarios'}</p>}
+                      {msg.imageUrl && (
+                        <div className={`relative w-fit max-w-[72%]`}>
+                          <img src={msg.imageUrl} alt="" className="rounded-2xl max-w-full max-h-64 object-cover shadow-sm" />
                         </div>
                       )}
-                      {msg.attachment?.type === 'tienda-publica' && (
-                        <a href={msg.attachment.url} target="_blank" rel="noopener noreferrer"
-                          className={`flex items-center gap-2.5 rounded-2xl p-2.5 border max-w-[75%] transition-opacity hover:opacity-80 ${isStore ? 'bg-violet-500/10 border-violet-500/20' : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-white/10 shadow-sm'}`}>
-                          <Globe className="w-8 h-8 text-brand shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-[10px] text-brand font-bold mb-0.5 flex items-center gap-1">Página pública <ExternalLink className="w-2.5 h-2.5" /></p>
-                            <p className="text-xs font-semibold truncate">{msg.attachment.nombre}</p>
-                            <p className="text-[10px] text-slate-400 truncate">{msg.attachment.url}</p>
+                      {msg.text && (() => {
+                        const msgKey = msg.id || msg.ts;
+                        const swiped = swipedMsgId === msgKey;
+                        const isDeleting = deletingMsgId === msgKey;
+                        const isEditing = editingMsg?.id === msgKey;
+
+                        const doDelete = () => {
+                          setDeletingMsgId(msgKey);
+                          setSwipedMsgId(null);
+                          setTimeout(() => {
+                            setInboxConvos(prev => prev.map(c => c.key === inboxSelectedKey
+                              ? { ...c, messages: c.messages.filter(m => (m.id || m.ts) !== msgKey) }
+                              : c
+                            ));
+                            setDeletingMsgId(null);
+                          }, 280);
+                        };
+
+                        let lpTimer = null;
+                        const longPressHandlers = isStore ? {
+                          onContextMenu: e => { e.preventDefault(); setSwipedMsgId(swiped ? null : msgKey); },
+                          onTouchStart: () => { lpTimer = setTimeout(() => setSwipedMsgId(swiped ? null : msgKey), 420); },
+                          onTouchEnd:   () => clearTimeout(lpTimer),
+                          onTouchMove:  () => clearTimeout(lpTimer),
+                        } : {};
+
+                        return (
+                          <>
+                          <div className={`relative w-fit max-w-[72%] transition-all duration-[280ms] ease-out origin-right
+                            ${isDeleting ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'}`}>
+
+                            {/* Botones apilados absolute — no afectan layout de la burbuja */}
+                            {isStore && (
+                              <div className={`absolute right-full top-1/2 -translate-y-1/2 mr-1.5 flex flex-col gap-1 transition-opacity duration-150
+                                ${swiped ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none group-hover/msg:opacity-100 group-hover/msg:pointer-events-auto'}`}>
+                                <button
+                                  onClick={() => { setEditingMsg({ id: msgKey, text: msg.text }); setInboxReply(msg.text); setSwipedMsgId(null); }}
+                                  className="w-7 h-7 rounded-xl flex items-center justify-center bg-slate-100 dark:bg-white/8 text-slate-400 hover:text-brand transition-colors"
+                                  title="Editar">
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={doDelete}
+                                  className="w-7 h-7 rounded-xl flex items-center justify-center bg-slate-100 dark:bg-white/8 text-slate-400 hover:text-rose-500 transition-colors"
+                                  title="Borrar">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+
+                            <div {...longPressHandlers}
+                              className={`rounded-2xl px-4 py-2.5 select-none
+                                ${isStore ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 shadow-sm text-slate-800 dark:text-slate-200'}
+                                ${isEditing ? 'ring-2 ring-brand/50 ring-offset-1' : ''}`}>
+                              <p className="text-sm">{msg.text}</p>
+                            </div>
                           </div>
-                        </a>
-                      )}
-                      {msg.text && (
-                        <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${isStore ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 shadow-sm text-slate-800 dark:text-slate-200'}`}>
-                          <p className="text-sm">{msg.text}</p>
-                          <p className={`text-[10px] mt-1 ${isStore ? 'text-white/60' : 'text-slate-400'}`}>{fmtTime(msg.ts)}</p>
-                        </div>
-                      )}
+                          </>
+                        );
+                      })()}
+                      <div className={`flex items-center gap-1 px-1 ${isStore ? 'justify-end' : 'justify-start'}`}>
+                        <p className="text-[10px] text-slate-400">{fmtTime(msg.ts)}</p>
+                        {isStore && (
+                          <span className="text-[10px] text-slate-400">
+                            {msg.seen ? (
+                              <svg viewBox="0 0 16 11" className="w-4 h-2.5 fill-brand inline" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M11.071.336a1 1 0 0 1 1.415 1.415l-6.364 6.364a1 1 0 0 1-1.415 0L1.293 4.7a1 1 0 1 1 1.414-1.414l2.707 2.707L11.07.336z"/>
+                                <path d="M15.071.336a1 1 0 0 1 1.415 1.415L10.122 8.115a1 1 0 0 1-1.415 0" opacity=".5"/>
+                              </svg>
+                            ) : (
+                              <svg viewBox="0 0 16 11" className="w-4 h-2.5 fill-slate-400 inline" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M11.071.336a1 1 0 0 1 1.415 1.415l-6.364 6.364a1 1 0 0 1-1.415 0L1.293 4.7a1 1 0 1 1 1.414-1.414l2.707 2.707L11.07.336z"/>
+                              </svg>
+                            )}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
               </div>
             )}
+            {/* Indicador "escribiendo..." */}
+            {storeTyping && (
+              <div className="flex items-center gap-2 px-2 pt-1 pb-0">
+                <div className="flex items-center gap-1 bg-white dark:bg-slate-800 rounded-2xl px-3 py-2 shadow-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:0ms]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:150ms]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:300ms]" />
+                </div>
+                <p className="text-[10px] text-slate-400">Escribiendo...</p>
+              </div>
+            )}
+            <div ref={inboxBottomRef} />
           </div>
 
           {/* Footer input — para cualquier chat activo */}
@@ -2538,12 +3213,23 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
               },
               {
                 id: 'tienda-info',
-                icon: Building2,
-                label: 'Contacto',
-                desc: td?.telefono || td?.horarios ? 'Teléfono y horarios' : 'Sin datos',
-                color: 'text-sky-600',
-                bg: 'bg-sky-50 dark:bg-sky-900/20',
-                build: () => ({ type: 'tienda-info', nombre: td?.nombre, telefono: td?.telefono, horarios: td?.horarios }),
+                icon: Phone,
+                label: 'WhatsApp',
+                desc: td?.telefono || 'Sin teléfono',
+                color: 'text-[#25D366]',
+                bg: 'bg-green-50 dark:bg-green-900/20',
+                disabled: !td?.telefono,
+                build: () => ({ type: 'tienda-info', nombre: td?.nombre, telefono: td?.telefono }),
+              },
+              {
+                id: 'horarios',
+                icon: Clock,
+                label: 'Horarios',
+                desc: td?.horarios ? 'Ver horarios de atención' : 'Sin horarios',
+                color: 'text-amber-600',
+                bg: 'bg-amber-50 dark:bg-amber-900/20',
+                disabled: !td?.horarios,
+                build: () => ({ type: 'horarios', nombre: td?.nombre, horarios: td?.horarios }),
               },
               {
                 id: 'tienda-publica',
@@ -2628,7 +3314,36 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                     </button>
                   </div>
                 )}
+                {/* Banner edición estilo WhatsApp */}
+                {editingMsg && (
+                  <div className="flex items-center gap-2 px-3 pt-1.5 pb-0">
+                    <Edit3 className="w-3.5 h-3.5 text-brand shrink-0" />
+                    <p className="flex-1 text-[11px] font-semibold text-brand">Editando mensaje</p>
+                    <button onClick={() => { setEditingMsg(null); setInboxReply(''); }}
+                      className="w-6 h-6 rounded-xl flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/8 text-slate-400 shrink-0 transition-colors">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+                {/* Preview imagen adjunta */}
+                {chatImagePreview && (
+                  <div className="px-3 pt-2">
+                    <div className="relative w-fit">
+                      <img src={chatImagePreview} alt="" className="h-20 rounded-xl object-cover shadow-sm" />
+                      <button onClick={() => setChatImagePreview(null)}
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-slate-800/80 text-white flex items-center justify-center">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="flex gap-2 items-end px-3 pt-2 pb-2">
+                  <input ref={chatImageInputRef} type="file" accept="image/*" className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = ev => setChatImagePreview(ev.target.result); r.readAsDataURL(f); e.target.value = ''; }} />
+                  <button onClick={() => chatImageInputRef.current?.click()}
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${chatImagePreview ? 'bg-brand/10 text-brand' : 'bg-slate-100 dark:bg-white/8 text-slate-400 hover:text-slate-600'}`}>
+                    <Camera className="w-4 h-4" />
+                  </button>
                   <button onClick={() => setAttachOpen(v => !v)}
                     className={`relative w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${attachOpen || chatAttachment ? 'bg-brand/10 text-brand' : 'bg-slate-100 dark:bg-white/8 text-slate-400 hover:text-slate-600'}`}>
                     <Paperclip className="w-4 h-4" />
@@ -2637,8 +3352,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                     )}
                   </button>
                   <div className="flex-1 bg-slate-100 dark:bg-white/8 rounded-2xl px-4 py-2.5 min-h-[40px] flex items-center">
-                    <textarea value={inboxReply} onChange={e => setInboxReply(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); inboxSendReply(); } }}
+                    <textarea value={inboxReply} onChange={e => { setInboxReply(e.target.value); setStoreTyping(true); clearTimeout(window._storeTypingTimer); window._storeTypingTimer = setTimeout(() => setStoreTyping(false), 2000); }}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); inboxSendReply(); setStoreTyping(false); } }}
                       placeholder="Escribí tu respuesta..."
                       rows={1}
                       className="bg-transparent text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none w-full resize-none" />
@@ -2650,7 +3365,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 </div>
                 {/* Barra sutil archivar */}
                 <button onClick={() => toggleClose(selectedThread.key)}
-                  className="w-full flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors">
+                  className="w-full flex items-center justify-center gap-1.5 pt-0 pb-2 text-[11px] font-semibold text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors">
                   <Archive className="w-3 h-3" />
                   Archivar conversación
                 </button>
@@ -2670,19 +3385,212 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       );
     };
 
+    // ── Panel de info del cliente ─────────────────────────────────────────
+    const ClientInfoPanel = () => {
+      if (!selectedThread) return null;
+      const meta = TYPE_META[selectedThread.type] || TYPE_META.chat;
+      const TypeIcon = meta.Icon;
+      const msgs = selectedConvo?.messages || [];
+      const msgCount = msgs.length;
+      const firstMsg = msgs[0];
+      const lastMsg = msgs[msgs.length - 1];
+      const uid = selectedThread.partnerUid;
+
+      return (
+        <div className="w-64 xl:w-72 border-l border-slate-100 dark:border-white/8 flex flex-col bg-white dark:bg-slate-900 overflow-y-auto">
+          {/* Header */}
+          <div className="px-4 pt-4 pb-3 border-b border-slate-100 dark:border-white/8 shrink-0 flex items-center justify-between">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Info del cliente</p>
+            <button onClick={() => setInboxInfoOpen(false)} className="ui-icon-btn text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="p-4 flex flex-col gap-4">
+            {/* Avatar + nombre */}
+            <div className="flex flex-col items-center gap-2 pt-2">
+              <div className={`w-16 h-16 rounded-2xl ${uid ? avatarColor(uid) : 'bg-slate-200'} flex items-center justify-center font-black text-xl text-white shadow-sm`}>
+                {uid ? uid.slice(-2).toUpperCase() : <User className="w-7 h-7" />}
+              </div>
+              <div className="text-center">
+                <p className="font-bold text-sm">{selectedThread.title}</p>
+                <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full ${meta.color} text-white mt-1`}>
+                  <TypeIcon className="w-2.5 h-2.5" />
+                  {meta.label}
+                </span>
+              </div>
+            </div>
+
+            {/* ID del usuario */}
+            {uid && (
+              <div className="rounded-2xl bg-slate-50 dark:bg-white/5 px-3 py-2.5 flex items-center gap-2.5">
+                <Hash className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[10px] text-slate-400 font-medium">ID de usuario</p>
+                  <p className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-300 truncate">{uid}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Contexto del hilo */}
+            {selectedThread.subtitle && (
+              <div className="rounded-2xl bg-slate-50 dark:bg-white/5 px-3 py-2.5 flex items-start gap-2.5">
+                <MessageCircle className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <p className="text-[10px] text-slate-400 font-medium">Contexto</p>
+                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 line-clamp-2">{selectedThread.subtitle}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Stats mensajes */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-2xl bg-slate-50 dark:bg-white/5 px-3 py-2.5 text-center">
+                <p className="text-lg font-black text-slate-800 dark:text-slate-100">{msgCount}</p>
+                <p className="text-[10px] text-slate-400 font-medium">mensajes</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 dark:bg-white/5 px-3 py-2.5 text-center">
+                <p className="text-lg font-black text-slate-800 dark:text-slate-100">{selectedThread.unread || 0}</p>
+                <p className="text-[10px] text-slate-400 font-medium">sin leer</p>
+              </div>
+            </div>
+
+            {/* Fechas */}
+            {(firstMsg || lastMsg) && (
+              <div className="rounded-2xl bg-slate-50 dark:bg-white/5 px-3 py-2.5 flex flex-col gap-1.5">
+                <div className="flex items-center gap-2">
+                  <CalendarClock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <p className="text-[10px] text-slate-400 font-medium">Actividad</p>
+                </div>
+                {firstMsg?.ts && (
+                  <div className="flex justify-between items-center">
+                    <p className="text-[10px] text-slate-400">Primer mensaje</p>
+                    <p className="text-[10px] font-semibold text-slate-600 dark:text-slate-400">{fmtTime(firstMsg.ts)}</p>
+                  </div>
+                )}
+                {lastMsg?.ts && (
+                  <div className="flex justify-between items-center">
+                    <p className="text-[10px] text-slate-400">Último mensaje</p>
+                    <p className="text-[10px] font-semibold text-slate-600 dark:text-slate-400">{fmtTime(lastMsg.ts)}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Estado */}
+            <div className={`rounded-2xl px-3 py-2.5 flex items-center gap-2 ${selectedThread.closed ? 'bg-slate-100 dark:bg-white/5' : 'bg-ok/8 dark:bg-ok/10'}`}>
+              <div className={`w-2 h-2 rounded-full shrink-0 ${selectedThread.closed ? 'bg-slate-400' : 'bg-ok'}`} />
+              <p className={`text-xs font-bold ${selectedThread.closed ? 'text-slate-500' : 'text-ok-dark dark:text-ok'}`}>
+                {selectedThread.closed ? 'Conversación cerrada' : 'Conversación activa'}
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ── Bottom sheet info (mobile) ────────────────────────────────────────────
+    const ClientInfoSheet = () => {
+      if (!inboxInfoOpen || !selectedThread) return null;
+      const meta = TYPE_META[selectedThread.type] || TYPE_META.chat;
+      const TypeIcon = meta.Icon;
+      const msgs = selectedConvo?.messages || [];
+      const msgCount = msgs.length;
+      const firstMsg = msgs[0];
+      const lastMsg = msgs[msgs.length - 1];
+      const uid = selectedThread.partnerUid;
+
+      return (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end lg:hidden" onClick={() => setInboxInfoOpen(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative bg-white dark:bg-slate-900 rounded-t-3xl p-5 flex flex-col gap-4 max-h-[80vh] overflow-y-auto animate-fade-in"
+            onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 rounded-full bg-slate-200 dark:bg-white/15 mx-auto mb-1" />
+            <div className="flex items-center justify-between">
+              <p className="font-bold">Info del cliente</p>
+              <button onClick={() => setInboxInfoOpen(false)} className="ui-icon-btn text-slate-400"><X className="w-4 h-4" /></button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className={`w-14 h-14 rounded-2xl ${uid ? avatarColor(uid) : 'bg-slate-200'} flex items-center justify-center font-black text-lg text-white`}>
+                {uid ? uid.slice(-2).toUpperCase() : <User className="w-6 h-6" />}
+              </div>
+              <div>
+                <p className="font-bold">{selectedThread.title}</p>
+                <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full ${meta.color} text-white`}>
+                  <TypeIcon className="w-2.5 h-2.5" />{meta.label}
+                </span>
+              </div>
+            </div>
+
+            {uid && (
+              <div className="rounded-2xl bg-slate-50 dark:bg-white/5 px-3 py-2.5 flex items-center gap-2.5">
+                <Hash className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <div>
+                  <p className="text-[10px] text-slate-400 font-medium">ID de usuario</p>
+                  <p className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-300">{uid}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-2xl bg-slate-50 dark:bg-white/5 px-3 py-3 text-center">
+                <p className="text-xl font-black text-slate-800 dark:text-slate-100">{msgCount}</p>
+                <p className="text-[10px] text-slate-400 font-medium">mensajes</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 dark:bg-white/5 px-3 py-3 text-center">
+                <p className="text-xl font-black text-slate-800 dark:text-slate-100">{selectedThread.unread || 0}</p>
+                <p className="text-[10px] text-slate-400 font-medium">sin leer</p>
+              </div>
+            </div>
+
+            {selectedThread.subtitle && (
+              <div className="rounded-2xl bg-slate-50 dark:bg-white/5 px-3 py-2.5">
+                <p className="text-[10px] text-slate-400 font-medium mb-1">Contexto</p>
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{selectedThread.subtitle}</p>
+              </div>
+            )}
+
+            <div className={`rounded-2xl px-3 py-2.5 flex items-center gap-2 ${selectedThread.closed ? 'bg-slate-100 dark:bg-white/5' : 'bg-ok/8 dark:bg-ok/10'}`}>
+              <div className={`w-2 h-2 rounded-full ${selectedThread.closed ? 'bg-slate-400' : 'bg-ok'}`} />
+              <p className={`text-sm font-bold ${selectedThread.closed ? 'text-slate-500' : 'text-ok-dark dark:text-ok'}`}>
+                {selectedThread.closed ? 'Conversación cerrada' : 'Conversación activa'}
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
     return (
-      <div className="h-screen flex flex-col bg-white dark:bg-slate-900">
+      <div className="h-[100dvh] flex flex-col bg-white dark:bg-slate-900">
+        {/* Header mobile — desktop usa el header interno del ThreadList */}
+        <div className="lg:hidden shrink-0">
+          <StorePageHeader
+            title="Mensajes"
+            subtitle={unreadTotal > 0 ? `${unreadTotal} sin leer` : `${allThreads.length} conversación${allThreads.length !== 1 ? 'es' : ''}`}
+            actionSlot={
+              <button onClick={fetchInbox} className="ui-icon-btn hover:bg-slate-100 dark:hover:bg-white/8 text-slate-400" title="Actualizar">
+                <RotateCcw className={`w-4 h-4 ${inboxLoading ? 'animate-spin' : ''}`} />
+              </button>
+            }
+          />
+        </div>
         <div className="hidden lg:flex flex-1 min-h-0">
           <div className="w-80 xl:w-96 border-r border-slate-100 dark:border-white/8 flex flex-col min-h-0">
             {ThreadList()}
           </div>
           <div className="flex-1 flex flex-col min-h-0">
-            {ChatPanel()}
+            {ChatPanel({ scrollRef: inboxScrollRef })}
           </div>
+          {inboxInfoOpen && selectedThread && ClientInfoPanel()}
         </div>
-        <div className="lg:hidden flex-1 min-h-0 flex flex-col pb-20">
-          {inboxMobileView === 'list' ? ThreadList() : ChatPanel()}
+        <div className={`lg:hidden flex-1 min-h-0 flex flex-col ${inboxMobileView === 'chat' ? 'pb-0' : 'pb-20'}`}
+          onTouchStart={e => { if (inboxMobileView === 'chat') window._swipeStartX = e.touches[0].clientX; }}
+          onTouchEnd={e => { if (inboxMobileView === 'chat' && window._swipeStartX != null) { const dx = e.changedTouches[0].clientX - window._swipeStartX; if (dx > 60) setInboxMobileView('list'); window._swipeStartX = null; } }}>
+          {inboxMobileView === 'list' ? ThreadList() : ChatPanel({ scrollRef: inboxMobileScrollRef })}
         </div>
+        {ClientInfoSheet()}
       </div>
     );
   };
@@ -2806,8 +3714,34 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     };
 
     return (
+      <div className="h-[100dvh] flex flex-col bg-slate-50 dark:bg-slate-950">
+        <StorePageHeader title="Suscripción" subtitle="Gestioná tu plan y facturación" onBack={() => setScreen('perfil')} />
+        <div className="flex-1 overflow-y-auto">
+        <SuscripcionContent
+          planActual={planActual}
+          isActiva={isActiva}
+          isEmpresa={isEmpresa}
+          isPremium={isPremium}
+          isEmprendimiento={isEmprendimiento}
+          vence={vence}
+          trial={trial}
+          trialHasta={trialHasta}
+          dias={dias}
+          historialPagos={historialPagos}
+          loadingHistorial={loadingHistorial}
+          checkoutLoading={checkoutLoading}
+          renovando={renovando}
+          onPagar={handlePagarMP}
+          onTransferencia={(plan) => { setTransferenciaPlan(plan); setShowTransferenciaModal(true); }}
+          setShowPremiumModal={setShowPremiumModal}
+        />
+        </div>
+      </div>
+    );
+    // ── Old SuscripcionScreen (reemplazada) ──
+    return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-        <StorePageHeader title="Suscripción" onBack={() => setScreen('perfil')} />
+        <StorePageHeader title="Suscripción" subtitle="Gestioná tu plan y facturación" onBack={() => setScreen('perfil')} />
 
         <div className="p-4 lg:p-8 space-y-6 max-w-lg mx-auto">
           {/* Estado actual */}
@@ -3588,7 +4522,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24 lg:pb-8">
-        <StorePageHeader title="Estadísticas" />
+        <StorePageHeader title="Estadísticas" subtitle="Rendimiento de tu tienda" />
 
         <div className="max-w-3xl mx-auto px-5 py-6 space-y-5">
           {/* Cards visitas mock */}
@@ -4453,92 +5387,677 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     };
 
     const toggleActiva = async (producto) => {
+      haptic('medium');
       const updated = { ...producto, activa: !producto.activa };
+      // Optimistic — actualiza UI antes del server
       setMisProductos(prev => prev.map(o => o.id === producto.id ? updated : o));
-      await apiFetch(`${API_BASE}/ofertas`, { method: 'PATCH', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: producto.id, activa: updated.activa }) });
+      try {
+        const res = await apiFetch(`${API_BASE}/ofertas`, { method: 'PATCH', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: producto.id, activa: updated.activa }) });
+        if (!res.ok) throw new Error();
+        haptic('success');
+      } catch {
+        // Rollback si falla
+        setMisProductos(prev => prev.map(o => o.id === producto.id ? producto : o));
+        haptic('error');
+      }
     };
 
     const deleteProducto = async (id) => {
+      haptic('heavy');
+      // Optimistic — saca de la lista inmediatamente
+      const original = misProductos.find(o => o.id === id);
       setMisProductos(prev => prev.filter(o => o.id !== id));
-      await apiFetch(`${API_BASE}/ofertas?id=${id}`, { method: 'DELETE', authRequired: true });
+      try {
+        const res = await apiFetch(`${API_BASE}/ofertas?id=${id}`, { method: 'DELETE', authRequired: true });
+        if (!res.ok) throw new Error();
+      } catch {
+        // Rollback
+        if (original) setMisProductos(prev => [...prev, original]);
+      }
     };
 
     if (showForm) return null;
 
+    const activos  = misProductos.filter(o => o.activa !== false);
+    const pausados = misProductos.filter(o => o.activa === false);
+    const usados   = activos.length;
+    const pct      = productLimit === Infinity ? 0 : Math.min(100, Math.round((usados / productLimit) * 100));
+    const nearLimit = productLimit !== Infinity && usados >= productLimit * 0.9;
+
+    const activeFilterCount = (prodFilter !== 'todos' ? 1 : 0) + (prodCondicion ? 1 : 0) + (prodSinStock ? 1 : 0) + (prodDescuento ? 1 : 0);
+
+    const clearFilters = () => { setProdFilter('todos'); setProdCondicion(null); setProdSinStock(false); setProdDescuento(false); setProdSearch(''); };
+
+    const filtered = misProductos
+      .filter(o => {
+        const q = prodSearch.toLowerCase();
+        if (q && !o.titulo?.toLowerCase().includes(q) && !o.descripcion?.toLowerCase().includes(q)) return false;
+        if (prodFilter === 'activos' && o.activa === false) return false;
+        if (prodFilter === 'pausados' && o.activa !== false) return false;
+        if (prodCondicion && o.condicion !== prodCondicion) return false;
+        if (prodSinStock && Number(o.stock) !== 0) return false;
+        if (prodDescuento && !(o.precioOriginal && o.precio && Number(o.precioOriginal) > Number(o.precio))) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        if (prodSort === 'precio-asc')  return (a.precio || Infinity) - (b.precio || Infinity);
+        if (prodSort === 'precio-desc') return (b.precio || 0) - (a.precio || 0);
+        if (prodSort === 'nombre')      return (a.titulo || '').localeCompare(b.titulo || '');
+        return 0; // recientes: orden del array original
+      });
+
+    const SORT_OPTS = [
+      { value: 'recientes', label: 'Más recientes' },
+      { value: 'nombre',    label: 'Nombre A-Z' },
+      { value: 'precio-asc',  label: 'Menor precio' },
+      { value: 'precio-desc', label: 'Mayor precio' },
+    ];
+
+    const chipCls = (active) => `w-full text-left flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
+      active ? 'bg-brand/10 dark:bg-brand/15 text-brand-dark dark:text-brand' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/8'
+    }`;
+
+    // Card grilla
+    const GridCard = ({ o }) => {
+      const vc = o.ventaja ? (Array.isArray(o.ventaja) ? VENTAJA_OPTS.find(x => x.id === o.ventaja[0]) : VENTAJA_OPTS.find(x => x.id === o.ventaja)) : null;
+      const img = o.fotos?.[0];
+      const sinStock = o.stock != null && Number(o.stock) === 0;
+      return (
+        <div onClick={() => { setProdDetail(o); setProdDetailPhotoIdx(0); setProdDetailEditField(null); }} className={`bg-white dark:bg-slate-900 rounded-2xl overflow-hidden border transition-all group cursor-pointer ${o.activa !== false ? 'border-slate-100 dark:border-white/8 hover:shadow-md hover:shadow-black/5' : 'border-dashed border-slate-200 dark:border-white/10 opacity-50'}`}>
+          {/* Foto */}
+          <div className="aspect-square bg-gradient-to-br from-slate-100 to-slate-200 dark:from-white/6 dark:to-white/10 relative overflow-hidden">
+            {img ? <LazyImg src={img} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Package className="w-10 h-10 text-slate-300 dark:text-white/20" /></div>}
+            {/* Badge ventaja */}
+            {vc && <span className={`absolute top-2 left-2 ${vc.badgeClass} text-[9px] font-bold px-1.5 py-0.5 rounded-xl flex items-center gap-1 shadow`}><vc.Icon className={`w-2.5 h-2.5 ${vc.iconClass}`} />{vc.label}</span>}
+            {/* Badge sin stock */}
+            {sinStock && <span className="absolute top-2 right-2 bg-danger text-white text-[9px] font-bold px-1.5 py-0.5 rounded-xl shadow">Sin stock</span>}
+            {/* Acciones hover — desktop only */}
+            <div className="absolute inset-x-0 bottom-0 hidden lg:flex gap-1 p-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-black/60 to-transparent">
+              <button onClick={e => { e.stopPropagation(); toggleActiva(o); }}
+                className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-xl text-[10px] font-bold text-white transition-colors ${o.activa !== false ? 'bg-white/20 hover:bg-white/30' : 'bg-brand/80 hover:bg-brand'}`}>
+                {o.activa !== false ? <ToggleRight className="w-3 h-3" /> : <ToggleLeft className="w-3 h-3" />}
+                {o.activa !== false ? 'Pausar' : 'Activar'}
+              </button>
+              <button onClick={e => { e.stopPropagation(); openEdit(o); }} className="flex items-center justify-center w-7 rounded-xl bg-white/20 hover:bg-white/30 text-white transition-colors">
+                <Edit3 className="w-3 h-3" />
+              </button>
+              <button onClick={e => { e.stopPropagation(); setConfirmDelete(o.id); }} className="flex items-center justify-center w-7 rounded-xl bg-white/20 hover:bg-rose-500/80 text-white transition-colors">
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+          {/* Info + acciones */}
+          <div className="p-2.5">
+            <p className="font-bold text-[12px] leading-snug line-clamp-2 mb-1">{o.titulo}</p>
+            <div className="flex items-center justify-between gap-1 mb-2">
+              {o.precio != null
+                ? <span className="text-sm font-black text-slate-900 dark:text-white">${Number(o.precio).toLocaleString('es')}</span>
+                : <span className="text-[10px] text-slate-400 italic">Sin precio</span>}
+              {o.condicion && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-lg ${o.condicion === 'nuevo' ? 'bg-ok/10 text-ok-dark dark:text-ok' : 'bg-amber-50 dark:bg-amber-500/10 text-amber-600'}`}>{o.condicion === 'nuevo' ? 'Nuevo' : 'Usado'}</span>}
+            </div>
+            {/* Acciones móvil — siempre visibles */}
+            <div className="lg:hidden flex gap-1">
+              <button onClick={e => { e.stopPropagation(); toggleActiva(o); }}
+                className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-xl text-[10px] font-bold transition-colors ${o.activa !== false ? 'bg-slate-100 dark:bg-white/8 text-slate-500' : 'bg-brand/10 text-brand'}`}>
+                {o.activa !== false ? <ToggleRight className="w-3 h-3" /> : <ToggleLeft className="w-3 h-3" />}
+                {o.activa !== false ? 'Pausar' : 'Activar'}
+              </button>
+              <button onClick={e => { e.stopPropagation(); openEdit(o); }} className="flex items-center justify-center w-8 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8 hover:text-brand transition-colors">
+                <Edit3 className="w-3 h-3" />
+              </button>
+              <button onClick={e => { e.stopPropagation(); setConfirmDelete(o.id); }} className="flex items-center justify-center w-8 rounded-xl text-slate-300 hover:bg-danger/10 hover:text-danger transition-colors">
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // Card lista
+    const ListCard = ({ o }) => {
+      const vc = o.ventaja ? (Array.isArray(o.ventaja) ? VENTAJA_OPTS.find(x => x.id === o.ventaja[0]) : VENTAJA_OPTS.find(x => x.id === o.ventaja)) : null;
+      const img = o.fotos?.[0];
+      const sinStock = o.stock != null && Number(o.stock) === 0;
+      return (
+        <div onClick={() => { setProdDetail(o); setProdDetailPhotoIdx(0); setProdDetailEditField(null); }} className={`bg-white dark:bg-slate-900 rounded-2xl border overflow-hidden flex gap-0 transition-all cursor-pointer ${o.activa !== false ? 'border-slate-100 dark:border-white/8 hover:shadow-md hover:shadow-black/5' : 'border-dashed border-slate-200 dark:border-white/10 opacity-55'}`}>
+          {/* Foto */}
+          <div className="relative w-24 shrink-0 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-white/6 dark:to-white/10 overflow-hidden">
+            {img ? <LazyImg src={img} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Package className="w-7 h-7 text-slate-300 dark:text-white/20" /></div>}
+            {vc && <span className={`absolute top-1.5 left-1.5 ${vc.badgeClass} text-[8px] font-bold px-1 py-0.5 rounded-lg flex items-center gap-0.5 shadow`}><vc.Icon className={`w-2 h-2 ${vc.iconClass}`} />{vc.label}</span>}
+            {sinStock && <span className="absolute bottom-1.5 left-1.5 bg-danger text-white text-[8px] font-bold px-1 py-0.5 rounded-lg shadow">Sin stock</span>}
+          </div>
+          {/* Contenido */}
+          <div className="flex-1 min-w-0 p-3 flex flex-col justify-between gap-1.5">
+            {/* Top: título + dot estado */}
+            <div className="flex items-start gap-1.5">
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-[13px] leading-snug line-clamp-2">{o.titulo}</p>
+                {o.descripcion && <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">{o.descripcion}</p>}
+              </div>
+              <span className={`shrink-0 w-2 h-2 rounded-full mt-1 ${o.activa !== false ? 'bg-ok' : 'bg-slate-300 dark:bg-slate-600'}`} />
+            </div>
+            {/* Bottom: precio + badges + acciones */}
+            <div className="flex items-center gap-1.5">
+              {o.precio != null
+                ? <span className="text-sm font-black text-slate-900 dark:text-white">${Number(o.precio).toLocaleString('es')}</span>
+                : <span className="text-[10px] text-slate-400 italic">Sin precio</span>}
+              {o.precioOriginal && o.precio && Number(o.precioOriginal) > Number(o.precio) && (
+                <span className="text-[10px] text-slate-400 line-through">${Number(o.precioOriginal).toLocaleString('es')}</span>
+              )}
+              {o.condicion && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-lg ${o.condicion === 'nuevo' ? 'bg-ok/10 text-ok-dark dark:text-ok' : 'bg-amber-50 dark:bg-amber-500/10 text-amber-600'}`}>{o.condicion === 'nuevo' ? 'N' : 'U'}</span>}
+              {/* Acciones — empujar a la derecha */}
+              <div className="ml-auto flex items-center gap-1">
+                <button onClick={e => { e.stopPropagation(); toggleActiva(o); }}
+                  className={`w-7 h-7 rounded-xl flex items-center justify-center transition-colors ${o.activa !== false ? 'bg-slate-100 dark:bg-white/8 text-slate-500 hover:bg-slate-200' : 'bg-brand/10 text-brand hover:bg-brand/20'}`}
+                  title={o.activa !== false ? 'Pausar' : 'Activar'}>
+                  {o.activa !== false ? <ToggleRight className="w-3.5 h-3.5" /> : <ToggleLeft className="w-3.5 h-3.5" />}
+                </button>
+                <button onClick={e => { e.stopPropagation(); openEdit(o); }}
+                  className="w-7 h-7 rounded-xl flex items-center justify-center text-slate-400 hover:bg-brand/10 hover:text-brand transition-colors"
+                  title="Editar">
+                  <Edit3 className="w-3 h-3" />
+                </button>
+                <button onClick={e => { e.stopPropagation(); setConfirmDelete(o.id); }}
+                  className="w-7 h-7 rounded-xl flex items-center justify-center text-slate-300 hover:bg-danger/10 hover:text-danger transition-colors"
+                  title="Eliminar">
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ── Detalle de producto (overlay) ────────────────────────────────────────
+    const ProductoDetail = () => {
+      if (!prodDetail) return null;
+      const o = prodDetail;
+      const fotos = o.fotos?.length ? o.fotos : [];
+      const vc = o.ventaja ? (Array.isArray(o.ventaja) ? VENTAJA_OPTS.find(x => x.id === o.ventaja[0]) : VENTAJA_OPTS.find(x => x.id === o.ventaja)) : null;
+
+      const saveField = async (field, value) => {
+        const parsed = field === 'precio' || field === 'precioOriginal' ? (value ? Number(value) : null) : value.trim() || null;
+        setProdDetailSaving(true);
+        try {
+          const res = await apiFetch(`${API_BASE}/ofertas`, {
+            method: 'PATCH', authRequired: true,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: o.id, [field]: parsed }),
+          });
+          if (res.ok) {
+            const updated = { ...o, [field]: parsed };
+            setProdDetail(updated);
+            setMisProductos(prev => prev.map(p => p.id === o.id ? updated : p));
+          }
+        } catch { /* silencioso */ }
+        finally { setProdDetailSaving(false); setProdDetailEditField(null); }
+      };
+
+      const removePhoto = async (idx) => {
+        const nuevasFotos = fotos.filter((_, i) => i !== idx);
+        setProdDetailSaving(true);
+        try {
+          const res = await apiFetch(`${API_BASE}/ofertas`, {
+            method: 'PATCH', authRequired: true,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: o.id, fotos: nuevasFotos }),
+          });
+          if (res.ok) {
+            const updated = { ...o, fotos: nuevasFotos };
+            setProdDetail(updated);
+            setMisProductos(prev => prev.map(p => p.id === o.id ? updated : p));
+            setProdDetailPhotoIdx(Math.min(prodDetailPhotoIdx, nuevasFotos.length - 1));
+          }
+        } catch { /* silencioso */ }
+        finally { setProdDetailSaving(false); setProdDetailPhotoConfirm(null); }
+      };
+
+      const InlineField = ({ field, value, display, multiline = false, placeholder = '—' }) => {
+        const editing = prodDetailEditField === field;
+        if (editing) {
+          const El = multiline ? 'textarea' : 'input';
+          return (
+            <div className="relative">
+              <El
+                autoFocus
+                defaultValue={prodDetailDraft}
+                onBlur={e => saveField(field, e.target.value)}
+                onKeyDown={e => { if (!multiline && e.key === 'Enter') { e.preventDefault(); saveField(field, e.target.value); } if (e.key === 'Escape') { setProdDetailEditField(null); } }}
+                className={`w-full bg-brand/5 dark:bg-brand/10 border border-brand/30 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand resize-none ${multiline ? 'min-h-[80px]' : ''}`}
+              />
+              {prodDetailSaving && <Loader2 className="absolute right-2 top-2 w-3.5 h-3.5 animate-spin text-brand" />}
+            </div>
+          );
+        }
+        return (
+          <button
+            onClick={() => { setProdDetailEditField(field); setProdDetailDraft(value ?? ''); }}
+            className="group/field flex items-start gap-1.5 w-full text-left hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl px-3 py-2 -mx-3 transition-colors"
+          >
+            <span className="flex-1">{display ?? value ?? <span className="text-slate-400 italic">{placeholder}</span>}</span>
+            <Edit3 className="w-3 h-3 text-slate-300 group-hover/field:text-brand shrink-0 mt-0.5 transition-colors" />
+          </button>
+        );
+      };
+
+      return (
+        <div className="fixed inset-0 z-[6000] bg-white dark:bg-slate-900 flex flex-col overflow-hidden animate-fade-in">
+          {/* Header */}
+          <div className="shrink-0 flex items-center gap-2 px-3 h-14 border-b border-slate-100 dark:border-white/8">
+            <button onClick={() => setProdDetail(null)} className="ui-icon-btn text-slate-500 hover:bg-slate-100 dark:hover:bg-white/8 transition-colors shrink-0">
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <p className="font-black flex-1 truncate text-sm">{o.titulo}</p>
+            {prodDetailSaving && <Loader2 className="w-4 h-4 animate-spin text-brand shrink-0" />}
+            <button onClick={() => { setProdDetail(null); toggleActiva(o); }}
+              className={`shrink-0 text-xs font-bold px-3 py-1.5 rounded-xl transition-colors ${o.activa !== false ? 'bg-slate-100 dark:bg-white/8 text-slate-500 hover:bg-slate-200' : 'bg-brand/10 text-brand hover:bg-brand/20'}`}>
+              {o.activa !== false ? 'Pausar' : 'Activar'}
+            </button>
+            <div className="w-px h-5 bg-slate-200 dark:bg-white/10 shrink-0" />
+            <button onClick={() => { setProdDetail(null); openEdit(o); }} className="ui-icon-btn text-slate-400 hover:bg-brand/10 hover:text-brand transition-colors shrink-0" title="Editar formulario">
+              <Edit3 className="w-4 h-4" />
+            </button>
+            <button onClick={() => { setProdDetail(null); setConfirmDelete(o.id); }} className="ui-icon-btn text-slate-300 hover:bg-danger/10 hover:text-danger transition-colors shrink-0" title="Eliminar">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Body scrolleable */}
+          <div className="flex-1 overflow-y-auto">
+            {/* Carrusel de fotos */}
+            {fotos.length > 0 ? (
+              <div className="relative bg-black select-none">
+                <div className="aspect-[4/3] max-h-80 overflow-hidden flex items-center justify-center">
+                  <img src={fotos[prodDetailPhotoIdx]} alt="" className="w-full h-full object-contain" />
+                </div>
+                {/* X eliminar foto */}
+                <button
+                  onClick={() => setProdDetailPhotoConfirm(prodDetailPhotoIdx)}
+                  className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/50 hover:bg-danger/80 flex items-center justify-center text-white transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                {/* Flechas navegación */}
+                {fotos.length > 1 && (
+                  <>
+                    <button onClick={() => setProdDetailPhotoIdx(i => (i - 1 + fotos.length) % fotos.length)}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white transition-colors">
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => setProdDetailPhotoIdx(i => (i + 1) % fotos.length)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 flex items-center justify-center text-white transition-colors">
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                    {/* Dots */}
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                      {fotos.map((_, i) => (
+                        <button key={i} onClick={() => setProdDetailPhotoIdx(i)}
+                          className={`w-1.5 h-1.5 rounded-full transition-all ${i === prodDetailPhotoIdx ? 'bg-white w-4' : 'bg-white/50'}`} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="aspect-[4/3] max-h-72 bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                <Package className="w-16 h-16 text-slate-300 dark:text-slate-600" />
+              </div>
+            )}
+
+            {/* Info editable */}
+            <div className="px-5 py-5 space-y-5 max-w-2xl mx-auto">
+              {/* Badges */}
+              <div className="flex flex-wrap gap-2">
+                {o.activa === false && <span className="text-xs font-bold bg-slate-100 dark:bg-white/10 text-slate-500 px-3 py-1 rounded-xl">Pausado</span>}
+                {o.condicion && <span className={`text-xs font-bold px-3 py-1 rounded-xl ${o.condicion === 'nuevo' ? 'bg-ok/10 text-ok-dark dark:text-ok' : 'bg-amber-50 dark:bg-amber-500/10 text-amber-600'}`}>{o.condicion === 'nuevo' ? 'Nuevo' : 'Usado'}</span>}
+                {vc && <span className={`text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-1 ${vc.badgeClass}`}><vc.Icon className={`w-3 h-3 ${vc.iconClass}`} />{vc.label}</span>}
+              </div>
+
+              {/* Título */}
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Título</p>
+                <p className="font-black text-xl leading-snug">
+                  <InlineField field="titulo" value={o.titulo} />
+                </p>
+              </div>
+
+              {/* Precio */}
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Precio</p>
+                  <div className="font-black text-2xl text-brand-dark dark:text-brand">
+                    <InlineField field="precio" value={String(o.precio ?? '')} display={o.precio != null ? `$${Number(o.precio).toLocaleString('es')}` : null} placeholder="Sin precio" />
+                  </div>
+                </div>
+                {(o.precioOriginal || prodDetailEditField === 'precioOriginal') && (
+                  <div className="flex-1">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Precio original</p>
+                    <div className="text-slate-400 line-through text-lg">
+                      <InlineField field="precioOriginal" value={String(o.precioOriginal ?? '')} display={o.precioOriginal ? `$${Number(o.precioOriginal).toLocaleString('es')}` : null} placeholder="—" />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Descripción */}
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Descripción</p>
+                <div className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                  <InlineField field="descripcion" value={o.descripcion ?? ''} multiline placeholder="Sin descripción" />
+                </div>
+              </div>
+
+              {/* Financiación */}
+              {(o.financiacion || prodDetailEditField === 'financiacion') && (
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Financiación</p>
+                  <div className="text-sm text-slate-600 dark:text-slate-300">
+                    <InlineField field="financiacion" value={o.financiacion ?? ''} placeholder="—" />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Modal confirmar eliminar foto */}
+          {prodDetailPhotoConfirm !== null && (
+            <div className="fixed inset-0 z-[7000] flex items-center justify-center p-4" onClick={() => setProdDetailPhotoConfirm(null)}>
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+              <div className="relative bg-white dark:bg-slate-900 rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-fade-in" onClick={e => e.stopPropagation()}>
+                <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center mx-auto mb-4">
+                  <Trash2 className="w-6 h-6 text-rose-500" />
+                </div>
+                <h3 className="font-black text-lg text-center mb-1">¿Eliminar esta foto?</h3>
+                <p className="text-sm text-slate-400 text-center mb-6">Esta acción no se puede deshacer.</p>
+                <div className="flex gap-3">
+                  <button onClick={() => setProdDetailPhotoConfirm(null)} className="flex-1 py-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-sm font-bold text-slate-600 dark:text-slate-300">Cancelar</button>
+                  <button onClick={() => removePhoto(prodDetailPhotoConfirm)} className="flex-1 py-2.5 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold transition-colors">
+                    {prodDetailSaving ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Eliminar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24 lg:pb-8">
+      <>
+      {ProductoDetail()}
+      <div className="h-[100dvh] flex flex-col bg-slate-50 dark:bg-slate-950">
+        {/* Header */}
         <StorePageHeader
-          title="Productos"
+          title="Mis productos"
+          subtitle={`${misProductos.length} publicación${misProductos.length !== 1 ? 'es' : ''} · ${activos.length} activa${activos.length !== 1 ? 's' : ''}`}
           actionSlot={(
             <>
               {loadingProductos && <Loader2 className="w-4 h-4 animate-spin text-slate-400 shrink-0" />}
-              <button
-                onClick={openNew}
-                className="flex items-center gap-1.5 bg-brand hover:bg-brand-light text-white text-sm font-bold px-4 py-2 rounded-xl transition-colors shrink-0"
-              >
-                <Plus className="w-4 h-4" /> Nueva
+              <button onClick={openNew} className="flex items-center gap-1.5 bg-brand hover:bg-brand-light text-white text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0 shadow-sm shadow-brand/20">
+                <Plus className="w-4 h-4" /><span className="hidden sm:inline">Nuevo</span>
               </button>
             </>
           )}
         />
 
-        <div className="max-w-2xl mx-auto px-5 py-5">
-          {misProductos.length === 0 && !loadingProductos ? (
-            <div className="text-center py-20">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-3xl bg-brand/10 dark:bg-brand/15 flex items-center justify-center">
-                <Package className="w-8 h-8 text-brand" />
-              </div>
-              <h3 className="font-black text-xl mb-2">Sin productos aún</h3>
-              <p className="text-sm text-slate-400 mb-6">Publicá productos con ventajas exclusivas para atraer clientes</p>
-              <button onClick={openNew} className="px-6 py-3 bg-brand hover:bg-brand-light text-white rounded-2xl font-bold transition-colors shadow-lg shadow-brand/25">
-                Crear primer producto
-              </button>
+        {loadingProductos && misProductos.length === 0 ? (
+          <div className="flex-1 overflow-y-auto p-4 pb-24 lg:pb-4">
+            <SkeletonProductosGrid cols={2} count={6} />
+          </div>
+        ) : misProductos.length === 0 && !loadingProductos ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-center px-6 gap-4 pb-24 lg:pb-0">
+            <div className="w-16 h-16 rounded-3xl bg-brand/10 dark:bg-brand/15 flex items-center justify-center">
+              <Package className="w-8 h-8 text-brand" />
             </div>
-          ) : (
-            <div className="space-y-3">
-              {misProductos.map(o => {
-                return (
-                  <div key={o.id} className={`bg-white dark:bg-slate-900 rounded-2xl border ${o.activa !== false ? 'border-slate-100 dark:border-white/8' : 'border-dashed border-slate-200 dark:border-white/15 opacity-60'} overflow-hidden`}>
-                    <div className="flex gap-3 p-4">
-                      {/* Foto */}
-                      <div className="w-16 h-16 rounded-xl bg-slate-100 dark:bg-white/8 overflow-hidden shrink-0 flex items-center justify-center">
-                        {o.fotos?.[0] ? <img src={o.fotos[0]} alt="" className="w-full h-full object-cover" /> : <Package className="w-7 h-7 text-slate-400" />}
-                      </div>
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="font-bold text-sm line-clamp-1">{o.titulo}</p>
-                          {o.ventaja && <AdvantageBadge value={o.ventaja} compact />}
-                        </div>
-                        {o.descripcion && <p className="text-xs text-slate-400 line-clamp-1 mt-0.5">{o.descripcion}</p>}
-                        <div className="flex items-center gap-2 mt-1.5">
-                          {o.precio && <span className="text-sm font-black text-brand-dark dark:text-brand">${Number(o.precio).toLocaleString()}</span>}
-                          {o.precioOriginal && o.precio && Number(o.precioOriginal) > Number(o.precio) && <span className="text-xs text-slate-400 line-through">${Number(o.precioOriginal).toLocaleString()}</span>}
-                          {o.stock != null && <span className="text-xs text-slate-400 ml-auto">Stock: {o.stock}</span>}
-                        </div>
-                      </div>
+            <div>
+              <h3 className="font-black text-xl mb-1">Sin productos aún</h3>
+              <p className="text-sm text-slate-400">Publicá tu primer producto para que los clientes te encuentren</p>
+            </div>
+            <button onClick={openNew} className="px-6 py-3 bg-brand hover:bg-brand-light text-white rounded-2xl font-bold transition-colors shadow-lg shadow-brand/25">
+              Crear primer producto
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-1 min-h-0">
+
+            {/* ── Sidebar izquierda (desktop) ── */}
+            <div className="hidden lg:flex flex-col w-56 xl:w-64 border-r border-slate-100 dark:border-white/8 bg-white dark:bg-slate-900 shrink-0 overflow-y-auto">
+              <div className="p-4 space-y-5">
+
+                {/* Capacidad */}
+                {productLimit !== Infinity && (
+                  <div className={`rounded-2xl px-3 py-2.5 ${nearLimit ? 'bg-warn/8' : 'bg-slate-50 dark:bg-white/5'}`}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className={`text-[10px] font-bold uppercase tracking-wider ${nearLimit ? 'text-warn-dark dark:text-warn' : 'text-slate-400'}`}>Capacidad</p>
+                      {nearLimit && <AlertTriangle className="w-3 h-3 text-warn" />}
                     </div>
-                    {/* Acciones */}
-                    <div className="flex items-center gap-2 px-4 pb-3">
-                      <button onClick={() => toggleActiva(o)}
-                        className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors ${o.activa !== false ? 'bg-brand/8 dark:bg-brand/15 text-brand-dark dark:text-brand' : 'bg-slate-100 dark:bg-white/8 text-slate-500'}`}>
-                        {o.activa !== false ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-                        {o.activa !== false ? 'Activa' : 'Inactiva'}
-                      </button>
-                      <button onClick={() => openEdit(o)} className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/8 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/15 transition-colors">
-                        <Edit3 className="w-3.5 h-3.5" /> Editar
-                      </button>
-                      <button onClick={() => deleteProducto(o.id)} className="ml-auto flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" /> Eliminar
-                      </button>
+                    <p className={`text-sm font-black mb-1.5 ${nearLimit ? 'text-warn-dark dark:text-warn' : 'text-slate-700 dark:text-slate-200'}`}>{usados} / {productLimit}</p>
+                    <div className="h-1.5 bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${nearLimit ? 'bg-warn' : 'bg-brand'}`} style={{ width: `${pct}%` }} />
                     </div>
                   </div>
-                );
-              })}
+                )}
+
+                {/* Estado */}
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Estado</p>
+                  <div className="space-y-0.5">
+                    {[['todos', `Todos`, misProductos.length], ['activos', 'Activos', activos.length], ['pausados', 'Pausados', pausados.length]].map(([v, label, count]) => (
+                      <button key={v} onClick={() => setProdFilter(v)} className={chipCls(prodFilter === v)}>
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${v === 'activos' ? 'bg-ok' : v === 'pausados' ? 'bg-slate-300 dark:bg-slate-600' : 'bg-brand'}`} />
+                        {label}
+                        <span className="ml-auto text-[10px] font-black text-slate-400">{count}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Condición */}
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Condición</p>
+                  <div className="space-y-0.5">
+                    {[['nuevo', 'Nuevo'], ['usado', 'Usado']].map(([v, label]) => (
+                      <button key={v} onClick={() => setProdCondicion(prodCondicion === v ? null : v)} className={chipCls(prodCondicion === v)}>
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${v === 'nuevo' ? 'bg-ok' : 'bg-amber-400'}`} />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Filtros rápidos */}
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Filtros</p>
+                  <div className="space-y-0.5">
+                    <button onClick={() => setProdSinStock(v => !v)} className={chipCls(prodSinStock)}>
+                      <Package className="w-3 h-3 shrink-0" /> Sin stock
+                    </button>
+                    <button onClick={() => setProdDescuento(v => !v)} className={chipCls(prodDescuento)}>
+                      <Tag className="w-3 h-3 shrink-0" /> Con descuento
+                    </button>
+                  </div>
+                </div>
+
+                {/* Limpiar */}
+                {activeFilterCount > 0 && (
+                  <button onClick={clearFilters} className="w-full text-xs font-bold text-slate-400 hover:text-brand transition-colors py-1.5">
+                    Limpiar filtros ({activeFilterCount})
+                  </button>
+                )}
+              </div>
             </div>
-          )}
-        </div>
+
+            {/* ── Contenido derecho ── */}
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+              {/* Toolbar */}
+              <div className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-white/8 shrink-0">
+                {/* Búsqueda */}
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <input value={prodSearch} onChange={e => setProdSearch(e.target.value)}
+                    placeholder="Buscar..."
+                    className="w-full pl-8 pr-8 py-2 bg-slate-50 dark:bg-white/5 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand transition-all border border-transparent focus:border-brand/20" />
+                  {prodSearch && <button onClick={() => setProdSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400"><X className="w-3 h-3" /></button>}
+                </div>
+
+                {/* Sort */}
+                <div className="relative group shrink-0">
+                  <button className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${prodSort !== 'recientes' ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-white/8 text-slate-500'}`}>
+                    <ArrowUpDown className="w-3.5 h-3.5" />
+                  </button>
+                  <div className="absolute right-0 top-full mt-1.5 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-100 dark:border-white/10 overflow-hidden z-50 min-w-[160px] hidden group-focus-within:block">
+                    {SORT_OPTS.map(o => (
+                      <button key={o.value} onClick={() => setProdSort(o.value)}
+                        className={`w-full flex items-center gap-2 px-4 py-2.5 text-xs transition-colors text-left ${prodSort === o.value ? 'bg-slate-50 dark:bg-white/5 font-bold text-brand' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'}`}>
+                        {prodSort === o.value && <CheckCircle className="w-3 h-3 text-brand shrink-0" />}
+                        <span className={prodSort === o.value ? '' : 'pl-4'}>{o.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Filtros mobile */}
+                <button onClick={() => setProdFilterSheet(true)} className={`lg:hidden relative w-8 h-8 rounded-xl flex items-center justify-center transition-colors shrink-0 ${activeFilterCount > 0 ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-white/8 text-slate-500'}`}>
+                  <ListFilter className="w-3.5 h-3.5" />
+                  {activeFilterCount > 0 && <span className="absolute -top-1 -right-1 min-w-[14px] h-3.5 px-0.5 bg-warn text-white text-[8px] font-black rounded-full flex items-center justify-center">{activeFilterCount}</span>}
+                </button>
+
+                {/* View toggle */}
+                <div className="flex gap-0.5 bg-slate-100 dark:bg-white/8 rounded-xl p-0.5 shrink-0">
+                  <button onClick={() => setProdView('grid')} className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${prodView === 'grid' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-700 dark:text-white' : 'text-slate-400'}`}>
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => setProdView('lista')} className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${prodView === 'lista' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-700 dark:text-white' : 'text-slate-400'}`}>
+                    <LayoutList className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Contador */}
+                <p className="text-xs text-slate-400 shrink-0 hidden sm:block">{filtered.length} producto{filtered.length !== 1 ? 's' : ''}</p>
+              </div>
+
+              {/* Lista / Grilla */}
+              <div className="flex-1 overflow-y-auto p-4 pb-24 lg:pb-4">
+                {filtered.length === 0 ? (
+                  <div className="flex flex-col items-center text-center gap-3 pt-12 pb-8">
+                    <Search className="w-8 h-8 text-slate-300 dark:text-slate-600" />
+                    <p className="text-sm font-semibold text-slate-400">Sin resultados</p>
+                    {(prodSearch || activeFilterCount > 0) && (
+                      <button onClick={clearFilters} className="text-xs font-bold text-brand hover:text-brand-dark transition-colors">Limpiar filtros</button>
+                    )}
+                  </div>
+                ) : prodView === 'grid' ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                    {filtered.map(o => <GridCard key={o.id} o={o} />)}
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-w-2xl">
+                    {filtered.map(o => <ListCard key={o.id} o={o} />)}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Sheet filtros móvil */}
+      {prodFilterSheet && (
+        <div className="lg:hidden fixed inset-0 z-[5000] flex flex-col justify-end" onClick={() => setProdFilterSheet(false)}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="relative bg-white dark:bg-slate-900 rounded-t-3xl px-4 pt-3 pb-8 shadow-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 2rem)', animation: 'sheet-up .22s ease' }} onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 rounded-full bg-slate-200 dark:bg-white/15 mx-auto mb-5" />
+            <h3 className="font-black text-base mb-4">Filtros</h3>
+
+            {/* Estado */}
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Estado</p>
+            <div className="flex gap-2 mb-4">
+              {[
+                { value: 'todos',   label: 'Todos' },
+                { value: 'activos', label: 'Activos' },
+                { value: 'pausados',label: 'Pausados' },
+              ].map(opt => (
+                <button key={opt.value} onClick={() => setProdFilter(opt.value)}
+                  className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${prodFilter === opt.value ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-white/8 text-slate-500'}`}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Condición */}
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Condición</p>
+            <div className="flex gap-2 mb-4">
+              {[
+                { value: null,    label: 'Todas' },
+                { value: 'nuevo', label: 'Nuevo' },
+                { value: 'usado', label: 'Usado' },
+              ].map(opt => (
+                <button key={String(opt.value)} onClick={() => setProdCondicion(opt.value)}
+                  className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${prodCondicion === opt.value ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-white/8 text-slate-500'}`}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Ordenar */}
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Ordenar</p>
+            <div className="flex flex-col gap-1 mb-5">
+              {SORT_OPTS.map(opt => (
+                <button key={opt.value} onClick={() => setProdSort(opt.value)}
+                  className={`flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${prodSort === opt.value ? 'bg-brand/10 text-brand' : 'bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-slate-300'}`}>
+                  {opt.label}
+                  {prodSort === opt.value && <CheckCircle className="w-4 h-4" />}
+                </button>
+              ))}
+            </div>
+
+            {/* Quick filters */}
+            <div className="flex gap-2 mb-5">
+              <button onClick={() => setProdSinStock(v => !v)}
+                className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${prodSinStock ? 'bg-danger/10 text-danger' : 'bg-slate-100 dark:bg-white/8 text-slate-500'}`}>
+                Sin stock
+              </button>
+              <button onClick={() => setProdDescuento(v => !v)}
+                className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${prodDescuento ? 'bg-ok/10 text-ok-dark dark:text-ok' : 'bg-slate-100 dark:bg-white/8 text-slate-500'}`}>
+                Con descuento
+              </button>
+            </div>
+
+            <div className="flex gap-3">
+              {activeFilterCount > 0 && (
+                <button onClick={() => { clearFilters(); }} className="flex-1 py-3 rounded-2xl border border-slate-200 dark:border-white/10 text-sm font-bold text-slate-500">
+                  Limpiar
+                </button>
+              )}
+              <button onClick={() => setProdFilterSheet(false)} className="flex-1 py-3 rounded-2xl bg-brand text-white text-sm font-bold">
+                Ver {filtered.length} producto{filtered.length !== 1 ? 's' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal confirmar borrado */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-[9000] flex items-center justify-center p-4" onClick={() => setConfirmDelete(null)}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="relative bg-white dark:bg-slate-900 rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-fade-in" onClick={e => e.stopPropagation()}>
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6 text-rose-500" />
+            </div>
+            <h3 className="font-black text-lg text-center mb-1">¿Eliminar producto?</h3>
+            <p className="text-sm text-slate-400 text-center mb-6">Esta acción no se puede deshacer.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmDelete(null)} className="flex-1 py-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">Cancelar</button>
+              <button onClick={() => { deleteProducto(confirmDelete); setConfirmDelete(null); }} className="flex-1 py-2.5 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold transition-colors">Eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
+      </>
     );
   };
 
@@ -4567,8 +6086,9 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     const dash = circ * (profilePct / 100);
 
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-28 lg:pb-10">
-        <StorePageHeader title="Mi tienda" />
+      <div className="h-[100dvh] flex flex-col bg-slate-50 dark:bg-slate-950">
+        <StorePageHeader title={tiendaInfo?.nombre || 'Mi tienda'} subtitle={tiendaInfo?.tagline || 'Editá tu perfil público'} />
+        <div className="flex-1 overflow-y-auto pb-24 lg:pb-8">
 
         {/* ── Hero cover + avatar ─────────────────────────────────────── */}
         <div className="relative">
@@ -5031,6 +6551,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           </div>
 
         </div>
+        </div>{/* fin overflow-y-auto */}
       </div>
     );
   };
@@ -5052,11 +6573,11 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         </div>
         <div className="space-y-0.5">
           {[
-            { label: 'Inicio (marketplace)', icon: Home, action: () => { setScreen('inicio'); setMoreSheetOpen(false); } },
-            ...(isEmpresa ? [{ label: 'Estadísticas', icon: TrendingUp, action: () => { setScreen('stats'); setMoreSheetOpen(false); } }] : []),
-            ...(isEmpresa ? [{ label: 'Suscripción', icon: CreditCard, action: () => { setScreen('suscripcion'); setMoreSheetOpen(false); } }] : []),
+            { label: 'Inicio (marketplace)', icon: Home, action: () => { navigateTo('inicio'); setMoreSheetOpen(false); } },
+            ...(isEmpresa ? [{ label: 'Estadísticas', icon: TrendingUp, action: () => { navigateTo('stats'); setMoreSheetOpen(false); } }] : []),
+            ...(isEmpresa ? [{ label: 'Suscripción', icon: CreditCard, action: () => { navigateTo('suscripcion'); setMoreSheetOpen(false); } }] : []),
+            { label: 'Demandas', icon: Package, action: () => { navigateTo('feed'); setMoreSheetOpen(false); } },
             { label: 'Diseño de página', icon: Palette, action: () => { setPaginaForm({ template: tiendaData?.pagina?.template || 'minimal', color: tiendaData?.pagina?.color || '#00b8d9', modoOscuro: tiendaData?.pagina?.modoOscuro || false }); setPublicPageForm({ slug: tiendaData?.slug || '', tagline: tiendaData?.tagline || '', whatsapp: tiendaData?.whatsapp || tiendaData?.telefono || '', instagram: tiendaData?.instagram || '' }); setPublicPageError(null); setScreen('mi-pagina'); setMoreSheetOpen(false); } },
-            { label: 'Demandas', icon: Package, action: () => { setScreen('feed'); setMoreSheetOpen(false); } },
             isAdmin ? { label: 'Panel Admin', icon: ShieldCheck, action: () => { onOpenAdmin?.(); setMoreSheetOpen(false); } } : null,
           ].filter(Boolean).map(({ label, icon: Icon, action }) => (
             <button key={label} onClick={action} className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-left">
@@ -5065,6 +6586,12 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             </button>
           ))}
           <div className="border-t border-slate-100 dark:border-white/8 my-2" />
+          {isAdmin && (
+            <button onClick={() => { toggleMockMode(); setMoreSheetOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-3 rounded-2xl transition-colors ${mockMode ? 'bg-violet-50 dark:bg-violet-500/10 text-violet-600' : 'hover:bg-slate-50 dark:hover:bg-white/5 text-slate-500'}`}>
+              <FlaskConical className="w-5 h-5 shrink-0" />
+              <span className="font-semibold text-sm">{mockMode ? 'Mock ON — desactivar' : 'Datos mock'}</span>
+            </button>
+          )}
           <button onClick={toggleTheme} className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
             {isDark ? <Sun className="w-5 h-5 text-amber-400 shrink-0" /> : <Moon className="w-5 h-5 text-slate-400 shrink-0" />}
             <span className="font-semibold text-sm">{isDark ? 'Modo claro' : 'Modo oscuro'}</span>
@@ -5174,39 +6701,22 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           </div>
         )}
 
-        {/* Banner admin: simulación de rol + toggle datos mock */}
-        {isAdmin && (
-          <div className="bg-violet-600 text-white px-4 py-2 flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-2 text-sm">
-              <FlaskConical className="w-4 h-4 shrink-0" />
-              {userProfile?._simulated ? (
-                <span className="font-semibold">
-                  Simulando: {userProfile.role === 'empresa' ? `Empresa (${userProfile.plan || 'básico'})` : userProfile.role === 'emprendimiento' ? 'Emprendimiento' : 'Usuario'}
-                  {' '}<span className="opacity-75 font-normal">(original: {userProfile._originalRole})</span>
-                </span>
-              ) : (
-                <span className="font-semibold">Panel Admin</span>
-              )}
-            </div>
-            <button
-              onClick={toggleMockMode}
-              className={`flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${mockMode ? 'bg-white text-violet-700' : 'bg-white/20 hover:bg-white/30 text-white'}`}
-            >
-              {mockMode ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-              {mockMode ? 'Datos mock ON' : 'Datos mock'}
-            </button>
-          </div>
-        )}
 
-        {screen === 'feed' && <FeedScreen />}
-        {screen === 'mensajes' && MensajesScreen()}
-        {screen === 'demanda-detail' && selectedDemanda && DemandaDetailScreen()}
-        {screen === 'stats' && StatsScreen()}
-        {screen === 'productos' && ProductosScreen()}
-        {screen === 'suscripcion' && <SuscripcionScreen />}
-        {screen === 'mi-pagina' && MiPaginaScreen()}
-        {screen === 'perfil' && PerfilScreen()}
-        {screen === 'inicio' && InicioScreen()}
+        <div style={{
+          opacity: screenVisible ? 1 : 0,
+          transition: screenVisible ? 'opacity 0.18s ease' : 'opacity 0.10s ease',
+          willChange: 'opacity',
+        }}>
+          {screen === 'feed' && <FeedScreen />}
+          {screen === 'mensajes' && MensajesScreen()}
+          {screen === 'demanda-detail' && selectedDemanda && DemandaDetailScreen()}
+          {screen === 'stats' && StatsScreen()}
+          {screen === 'productos' && ProductosScreen()}
+          {screen === 'suscripcion' && <SuscripcionScreen />}
+          {screen === 'mi-pagina' && MiPaginaScreen()}
+          {screen === 'perfil' && PerfilScreen()}
+          {screen === 'inicio' && InicioScreen()}
+        </div>
         {BottomNav()}
         {moreSheetOpen && MoreSheet()}
         {CreateSheet()}
@@ -5226,135 +6736,166 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         {editInfoModal && EditInfoModal()}
 
         {/* ── Chat flotante (estilo Messenger — persiste entre pantallas) ── */}
-        {floatingChatKey && (() => {
-          // En mensajes: siempre colapsado (solo chip de feedback visual)
-          const forceCollapsed = screen === 'mensajes';
+        {/* ── Multi floating chat ── */}
+        {floatingChats.length > 0 && (() => {
           const storeId = String(tienda?.id || tiendaData?.id || '');
-          const convo = inboxConvos.find(c => c.key === floatingChatKey);
-          if (!convo) return null;
-          const msgs = convo.messages || [];
-          const unread = msgs.filter(m => m.from !== storeId).length;
+          // En mobile: un solo chip agrupado que abre el más reciente no colapsado
+          const totalUnread = floatingChats.reduce((acc, fc) => {
+            const convo = inboxConvos.find(c => c.key === fc.key);
+            return acc + (convo?.messages || []).filter(m => m.from !== storeId).length;
+          }, 0);
+          const mobileActive = floatingChats.find(c => !c.collapsed) || floatingChats[0];
 
-          const sendFloating = async () => {
-            const text = floatingChatMsg.trim();
-            if (!text || !storeId) return;
-            setFloatingChatSending(true);
-            const optimistic = { id: `opt-${Date.now()}`, from: storeId, text, ts: new Date().toISOString() };
-            setInboxConvos(prev => prev.map(c => c.key === floatingChatKey
-              ? { ...c, messages: [...c.messages, optimistic], lastMessage: optimistic }
-              : c
-            ));
-            setFloatingChatMsg('');
-            try {
-              await apiFetch(`${API_BASE}/messages`, {
-                method: 'POST', authRequired: true,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ storeId, partnerUid: convo.partnerUid, text }),
-              });
-            } catch { /* optimistic */ } finally { setFloatingChatSending(false); }
-          };
-
-          /* Chip colapsado (también forzado cuando screen === 'mensajes') */
-          if (floatingChatCollapsed || forceCollapsed) return (
-            <div
-              className="fixed right-4 bottom-24 lg:right-8 lg:bottom-8 z-[5000] flex items-center gap-2.5 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-white/10 rounded-2xl shadow-xl px-3 py-2.5 cursor-pointer hover:shadow-2xl transition-shadow select-none"
-              onClick={() => { if (forceCollapsed) { setInboxSelectedKey(floatingChatKey); setInboxMobileView('chat'); } else setFloatingChatCollapsed(false); }}
-            >
-              <div className="relative shrink-0">
-                <div className={`w-8 h-8 rounded-xl ${avatarColor(convo.partnerUid)} flex items-center justify-center text-white font-bold text-xs`}>
-                  {(convo.partnerUid || 'C').slice(-2).toUpperCase()}
-                </div>
-                {unread > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-4 h-4 bg-rose-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center px-0.5">
-                    {unread > 9 ? '9+' : unread}
-                  </span>
-                )}
-              </div>
-              <span className="font-bold text-sm text-slate-800 dark:text-slate-200 max-w-[110px] truncate">{clientLabel(convo.partnerUid)}</span>
-              <ChevronDown className="w-4 h-4 text-slate-400 rotate-180 shrink-0" />
-              <button
-                onMouseDown={e => e.stopPropagation()}
-                onClick={e => { e.stopPropagation(); setFloatingChatKey(null); setFloatingChatCollapsed(false); }}
-                className="ml-0.5 w-5 h-5 rounded-full flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 shrink-0"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          );
-
-          /* Panel expandido */
           return (
-            <div className="fixed inset-0 lg:inset-auto lg:right-8 lg:bottom-8 lg:w-96 lg:h-[560px] bg-white dark:bg-slate-900 z-[5000] flex flex-col lg:rounded-3xl lg:shadow-2xl lg:border-2 border-slate-200 dark:border-white/10">
-              {/* Header */}
-              <div className="flex items-center gap-3 px-4 py-3 border-b-2 border-slate-200 dark:border-white/10 lg:rounded-t-3xl shrink-0"
-                style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
-                <button onClick={() => setFloatingChatKey(null)} className="lg:hidden p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl">
-                  <X className="w-5 h-5" />
-                </button>
-                <button onClick={() => setFloatingChatCollapsed(true)} className="hidden lg:flex p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl" title="Minimizar">
-                  <ChevronDown className="w-5 h-5" />
-                </button>
-                <div className={`w-9 h-9 rounded-xl ${avatarColor(convo.partnerUid)} flex items-center justify-center text-white font-bold text-sm shrink-0`}>
-                  {(convo.partnerUid || 'C').slice(-2).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-sm truncate">{clientLabel(convo.partnerUid)}</p>
-                  <p className="text-xs text-slate-400">{msgs.length} mensaje{msgs.length !== 1 ? 's' : ''}</p>
-                </div>
-                <button
-                  onClick={() => { setScreen('mensajes'); setInboxSelectedKey(floatingChatKey); setInboxMobileView('chat'); setFloatingChatKey(null); }}
-                  className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl shrink-0" title="Abrir en mensajes"
-                >
-                  <ExternalLink className="w-4 h-4 text-slate-400" />
-                </button>
-                <button onClick={() => setFloatingChatKey(null)} className="hidden lg:flex p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl" title="Cerrar">
-                  <X className="w-4 h-4 text-slate-400" />
-                </button>
+            <>
+              {/* MOBILE: chip agrupado único */}
+              <div className="lg:hidden fixed right-4 bottom-24 z-[5000]">
+                {mobileActive && (() => {
+                  const convo = inboxConvos.find(c => c.key === mobileActive.key);
+                  if (!convo) return null;
+                  // En mobile abrimos pantalla completa del chat en mensajes
+                  return (
+                    <button
+                      onClick={() => { navigateTo('mensajes'); setInboxSelectedKey(mobileActive.key); setInboxMobileView('chat'); }}
+                      className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-xl px-2.5 py-2 hover:shadow-2xl transition-shadow"
+                    >
+                      {/* Avatares apilados */}
+                      <div className="flex -space-x-2">
+                        {floatingChats.slice(0, 3).map(fc => {
+                          const cv = inboxConvos.find(c => c.key === fc.key);
+                          return (
+                            <div key={fc.key} className={`w-8 h-8 rounded-xl border-2 border-white dark:border-slate-900 ${avatarColor(cv?.partnerUid)} flex items-center justify-center text-white font-bold text-[10px]`}>
+                              {(cv?.partnerUid || 'C').slice(-2).toUpperCase()}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate max-w-[90px]">{clientLabel(convo.partnerUid)}</p>
+                        {floatingChats.length > 1 && <p className="text-[10px] text-slate-400">+{floatingChats.length - 1} más</p>}
+                      </div>
+                      {totalUnread > 0 && (
+                        <span className="w-5 h-5 bg-rose-500 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                          {totalUnread > 9 ? '9+' : totalUnread}
+                        </span>
+                      )}
+                      <div onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setFloatingChats([]); }}
+                        className="w-6 h-6 rounded-xl flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 shrink-0 transition-colors cursor-pointer">
+                        <X className="w-3 h-3" />
+                      </div>
+                    </button>
+                  );
+                })()}
               </div>
 
-              {/* Mensajes */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50 dark:bg-slate-950">
-                {msgs.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full gap-2 text-center">
-                    <MessageSquare className="w-10 h-10 text-slate-200 dark:text-slate-700" />
-                    <p className="text-sm text-slate-400">Iniciá la conversación</p>
-                  </div>
-                ) : msgs.map(msg => {
-                  const isStore = msg.from === storeId;
-                  return (
-                    <div key={msg.id} className={`flex flex-col ${isStore ? 'items-end' : 'items-start'} gap-1`}>
-                      {msg.text && (
-                        <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${isStore ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 shadow-sm text-slate-800 dark:text-slate-200'}`}>
-                          <p className="text-sm">{msg.text}</p>
-                          <p className={`text-[10px] mt-1 ${isStore ? 'text-white/60' : 'text-slate-400'}`}>{fmtTime(msg.ts)}</p>
+              {/* DESKTOP: paneles flotantes en fila desde la derecha */}
+              <div className="hidden lg:flex fixed right-8 bottom-8 z-[5000] flex-row-reverse items-end gap-3 pointer-events-none">
+                {floatingChats.map((fc) => {
+                  const convo = inboxConvos.find(c => c.key === fc.key);
+                  if (!convo) return null;
+                  const msgs = convo.messages || [];
+                  const unread = msgs.filter(m => m.from !== storeId).length;
+                  // Compacto si hay 3+ chats abiertos
+                  const compact = floatingChats.filter(c => !c.collapsed).length >= 3;
+
+                  const sendFloating = async () => {
+                    const text = fc.msg.trim();
+                    if (!text || !storeId) return;
+                    setFloatingSending(fc.key, true);
+                    const optimistic = { id: `opt-${Date.now()}`, from: storeId, text, ts: new Date().toISOString() };
+                    setInboxConvos(prev => prev.map(c => c.key === fc.key ? { ...c, messages: [...c.messages, optimistic], lastMessage: optimistic } : c));
+                    setFloatingMsg(fc.key, '');
+                    try {
+                      await apiFetch(`${API_BASE}/messages`, { method: 'POST', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ storeId, partnerUid: convo.partnerUid, text }) });
+                    } catch { } finally { setFloatingSending(fc.key, false); }
+                  };
+
+                  /* Colapsado */
+                  if (fc.collapsed) return (
+                    <div key={fc.key} className="pointer-events-auto flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-xl px-2.5 py-2 cursor-pointer hover:shadow-2xl transition-shadow select-none"
+                      onClick={() => toggleFloatingCollapse(fc.key)}>
+                      <div className="relative shrink-0">
+                        <div className={`w-9 h-9 rounded-xl ${avatarColor(convo.partnerUid)} flex items-center justify-center text-white font-bold text-xs`}>
+                          {(convo.partnerUid || 'C').slice(-2).toUpperCase()}
                         </div>
-                      )}
+                        {unread > 0 && <span className="absolute -top-1 -right-1 min-w-4 h-4 bg-rose-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center px-0.5">{unread > 9 ? '9+' : unread}</span>}
+                      </div>
+                      {!compact && <span className="font-bold text-sm text-slate-800 dark:text-slate-200 max-w-[100px] truncate">{clientLabel(convo.partnerUid)}</span>}
+                      <ChevronDown className="w-4 h-4 text-slate-400 rotate-180 shrink-0" />
+                      <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); closeFloatingChat(fc.key); }}
+                        className="w-7 h-7 rounded-xl flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 shrink-0 transition-colors">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+
+                  /* Expandido */
+                  return (
+                    <div key={fc.key} className="pointer-events-auto w-80 h-[520px] bg-white dark:bg-slate-900 flex flex-col rounded-3xl shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                      {/* Header */}
+                      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100 dark:border-white/8 shrink-0">
+                        <button onClick={() => toggleFloatingCollapse(fc.key)} className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 transition-colors" title="Minimizar">
+                          <ChevronDown className="w-4 h-4 text-slate-400" />
+                        </button>
+                        <div className={`w-8 h-8 rounded-xl ${avatarColor(convo.partnerUid)} flex items-center justify-center text-white font-bold text-xs shrink-0`}>
+                          {(convo.partnerUid || 'C').slice(-2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-sm truncate">{clientLabel(convo.partnerUid)}</p>
+                          <p className="text-[10px] text-slate-400">{msgs.length} mensaje{msgs.length !== 1 ? 's' : ''}</p>
+                        </div>
+                        <button onClick={() => { navigateTo('mensajes'); setInboxSelectedKey(fc.key); setInboxMobileView('chat'); closeFloatingChat(fc.key); }}
+                          className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 transition-colors" title="Abrir en mensajes">
+                          <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                        </button>
+                        <button onClick={() => closeFloatingChat(fc.key)}
+                          className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 transition-colors" title="Cerrar">
+                          <X className="w-3.5 h-3.5 text-slate-400" />
+                        </button>
+                      </div>
+
+                      {/* Mensajes */}
+                      <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-50 dark:bg-slate-950">
+                        {msgs.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center h-full gap-2 text-center">
+                            <MessageSquare className="w-8 h-8 text-slate-200 dark:text-slate-700" />
+                            <p className="text-xs text-slate-400">Iniciá la conversación</p>
+                          </div>
+                        ) : msgs.map(msg => {
+                          const isStore = msg.from === storeId;
+                          return (
+                            <div key={msg.id || msg.ts} className={`flex flex-col ${isStore ? 'items-end' : 'items-start'} gap-0.5`}>
+                              {msg.text && (
+                                <div className={`max-w-[80%] rounded-2xl px-3 py-2 ${isStore ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 shadow-sm text-slate-800 dark:text-slate-200'}`}>
+                                  <p className="text-sm">{msg.text}</p>
+                                  <p className={`text-[10px] mt-0.5 ${isStore ? 'text-white/60' : 'text-slate-400'}`}>{fmtTime(msg.ts)}</p>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Input */}
+                      <div className="shrink-0 border-t border-slate-100 dark:border-white/8 bg-white dark:bg-slate-900 px-3 py-2.5">
+                        <div className="flex gap-2 items-end">
+                          <div className="flex-1 bg-slate-100 dark:bg-white/8 rounded-2xl px-3 py-2 flex items-center">
+                            <textarea value={fc.msg} onChange={e => setFloatingMsg(fc.key, e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendFloating(); } }}
+                              placeholder="Responder..." rows={1}
+                              className="bg-transparent text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none w-full resize-none" />
+                          </div>
+                          <button onClick={sendFloating} disabled={!fc.msg.trim() || fc.sending}
+                            className="w-9 h-9 bg-brand hover:bg-brand-dark rounded-xl flex items-center justify-center disabled:opacity-40 transition-colors shrink-0">
+                            {fc.sending ? <Loader2 className="w-4 h-4 text-white animate-spin" /> : <Send className="w-4 h-4 text-white" />}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
               </div>
-
-              {/* Input */}
-              <div className="shrink-0 lg:rounded-b-3xl border-t-2 border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 px-3 py-3"
-                style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
-                <div className="flex gap-2 items-end">
-                  <div className="flex-1 bg-slate-100 dark:bg-white/8 rounded-2xl px-4 py-2.5 flex items-center">
-                    <textarea
-                      value={floatingChatMsg}
-                      onChange={e => setFloatingChatMsg(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendFloating(); } }}
-                      placeholder="Responder..."
-                      rows={1}
-                      className="bg-transparent text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none w-full resize-none"
-                    />
-                  </div>
-                  <button onClick={sendFloating} disabled={!floatingChatMsg.trim() || floatingChatSending}
-                    className="w-10 h-10 bg-brand hover:bg-brand-dark rounded-xl flex items-center justify-center disabled:opacity-40 transition-colors shrink-0">
-                    {floatingChatSending ? <Loader2 className="w-4 h-4 text-white animate-spin" /> : <Send className="w-4 h-4 text-white" />}
-                  </button>
-                </div>
-              </div>
-            </div>
+            </>
           );
         })()}
 

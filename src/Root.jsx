@@ -48,8 +48,169 @@ function LogoLoader() {
   );
 }
 
-// Splash screen completo estilo Meta
+// Decidido UNA vez al cargar el módulo — no durante el render
+// IS_FIRST_LOAD = true solo si no cargó en los últimos 20 minutos
+const SPLASH_TS_KEY = 'lokal-splash-ts';
+const _lastSplash = Number(localStorage.getItem(SPLASH_TS_KEY) || 0);
+const IS_FIRST_LOAD = Date.now() - _lastSplash > 20 * 60 * 1000;
+if (IS_FIRST_LOAD) localStorage.setItem(SPLASH_TS_KEY, String(Date.now()));
+const USER_TYPE_KEY = 'lokal-user-type'; // 'store' | 'client' | null
+// lokal-shell.type es más confiable — se setea al montar cada app
+const CACHED_USER_TYPE = (() => {
+  try {
+    const shell = JSON.parse(localStorage.getItem('lokal-shell') || '{}');
+    return shell.type || localStorage.getItem(USER_TYPE_KEY);
+  } catch { return localStorage.getItem(USER_TYPE_KEY); }
+})();
+
 function SplashScreen() {
+  if (IS_FIRST_LOAD) return <SplashScreenFull />;
+  // Recarga: shell real con skeleton en el área de contenido
+  const type = CACHED_USER_TYPE;
+  if (type === 'store')  return <StoreShell />;
+  if (type === 'client') return <ClientShell />;
+  return <SplashScreenFast />; // fallback: primera vez sin tipo cacheado
+}
+
+// Skeleton de recarga — imita la estructura real según tipo de usuario
+const FAST_SPLASH_DARK = localStorage.getItem('lokal-theme') !== 'light';
+
+function SplashScreenFast() {
+  return CACHED_USER_TYPE === 'store' ? <SkeletonStore /> : <SkeletonClient />;
+}
+
+function useSkeletonTokens() {
+  const dark = FAST_SPLASH_DARK;
+  return {
+    dark,
+    bg:      dark ? '#060d1a' : '#f7f8fa',
+    card:    dark ? '#0d1526' : '#ffffff',
+    sh:      dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)',
+    sh2:     dark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.04)',
+    border:  dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+  };
+}
+
+function ShimmerBlock({ w = '100%', h = 14, r = 10, style = {} }) {
+  const { sh } = useSkeletonTokens();
+  return <div style={{ width: w, height: h, borderRadius: r, background: sh, flexShrink: 0, ...style }} />;
+}
+
+// Skeleton para StoreApp (tienda)
+function SkeletonStore() {
+  const { bg, card, sh, sh2, border } = useSkeletonTokens();
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: bg, display: 'flex', overflow: 'hidden' }}>
+      <style>{`.sk{animation:sk-sh 1.4s ease-in-out infinite}@keyframes sk-sh{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+
+      {/* Sidebar desktop */}
+      <div className="sk" style={{ width: 220, background: card, borderRight: `1px solid ${border}`, padding: 16, display: 'none', flexDirection: 'column', gap: 8 }}>
+        <ShimmerBlock h={40} r={12} style={{ marginBottom: 16 }} />
+        {[1,2,3,4,5].map(i => <ShimmerBlock key={i} h={36} r={10} />)}
+      </div>
+
+      {/* Main */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Top bar */}
+        <div className="sk" style={{ background: card, borderBottom: `1px solid ${border}`, height: 56, display: 'flex', alignItems: 'center', padding: '0 16px', gap: 10, flexShrink: 0 }}>
+          <ShimmerBlock w={28} h={28} r={8} />
+          <div style={{ flex: 1 }} />
+          <ShimmerBlock w={100} h={12} r={8} />
+          <div style={{ flex: 1 }} />
+          <ShimmerBlock w={28} h={28} r={14} />
+          <ShimmerBlock w={28} h={28} r={14} />
+        </div>
+
+        {/* Content — grid de productos */}
+        <div style={{ flex: 1, padding: 16, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'hidden' }}>
+          {/* Search + filter row */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div className="sk" style={{ flex: 1, height: 40, borderRadius: 12, background: sh2 }} />
+            <div className="sk" style={{ width: 40, height: 40, borderRadius: 12, background: sh2 }} />
+          </div>
+          {/* Grid 2 cols */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {[1,2,3,4].map(i => (
+              <div key={i} className="sk" style={{ background: card, borderRadius: 16, overflow: 'hidden', border: `1px solid ${border}` }}>
+                <div style={{ aspectRatio: '1', background: sh }} />
+                <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <ShimmerBlock w="75%" h={12} r={6} />
+                  <ShimmerBlock w="45%" h={14} r={6} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Bottom nav mobile */}
+        <div className="sk" style={{ background: card, borderTop: `1px solid ${border}`, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-around', padding: '0 8px', flexShrink: 0 }}>
+          {[1,2,3,4,5].map(i => (
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <ShimmerBlock w={22} h={22} r={6} />
+              <ShimmerBlock w={28} h={8} r={4} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Skeleton para UserApp (cliente)
+function SkeletonClient() {
+  const { bg, card, sh, sh2, border } = useSkeletonTokens();
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: bg, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <style>{`.sk{animation:sk-sh 1.4s ease-in-out infinite}@keyframes sk-sh{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+
+      {/* Top bar */}
+      <div className="sk" style={{ background: card, borderBottom: `1px solid ${border}`, height: 60, display: 'flex', alignItems: 'center', padding: '0 16px', gap: 10, flexShrink: 0 }}>
+        <ShimmerBlock w={80} h={12} r={8} />
+        <div style={{ flex: 1 }} />
+        <ShimmerBlock w={32} h={32} r={10} />
+        <ShimmerBlock w={32} h={32} r={16} />
+      </div>
+
+      {/* Search */}
+      <div style={{ padding: '12px 16px' }}>
+        <div className="sk" style={{ height: 44, borderRadius: 14, background: sh2 }} />
+      </div>
+
+      {/* Category chips */}
+      <div style={{ display: 'flex', gap: 8, padding: '0 16px 12px', overflowX: 'hidden' }}>
+        {[80,60,90,70].map((w,i) => (
+          <div key={i} className="sk" style={{ width: w, height: 30, borderRadius: 20, background: sh, flexShrink: 0 }} />
+        ))}
+      </div>
+
+      {/* Cards lista */}
+      <div style={{ flex: 1, padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'hidden' }}>
+        {[1,2,3,4].map(i => (
+          <div key={i} className="sk" style={{ background: card, borderRadius: 16, padding: 12, display: 'flex', gap: 12, border: `1px solid ${border}` }}>
+            <div style={{ width: 64, height: 64, borderRadius: 12, background: sh, flexShrink: 0 }} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7, paddingTop: 2 }}>
+              <ShimmerBlock w="65%" h={12} r={6} />
+              <ShimmerBlock w="40%" h={10} r={6} />
+              <ShimmerBlock w="50%" h={12} r={6} style={{ marginTop: 4 }} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Bottom nav */}
+      <div className="sk" style={{ background: card, borderTop: `1px solid ${border}`, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-around', padding: '0 8px', flexShrink: 0 }}>
+        {[1,2,3,4].map(i => (
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+            <ShimmerBlock w={22} h={22} r={6} />
+            <ShimmerBlock w={28} h={8} r={4} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SplashScreenFull() {
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center overflow-hidden"
       style={{ background: '#060d1a' }}>
@@ -123,6 +284,7 @@ function SplashScreen() {
   );
 }
 import UserApp from './App';
+import { StoreShell, ClientShell } from './AppShell';
 import StoreApp from './StoreApp';
 import InviteFlow from './InviteFlow';
 import AuthScreen from './AuthScreen';
@@ -214,6 +376,35 @@ function PWAInstallBanner() {
   );
 }
 
+const OFFLINE_AUTH_KEY = 'lokal-last-auth';
+
+function ConnectionBanner() {
+  const [online, setOnline]   = React.useState(navigator.onLine);
+  const [wasOffline, setWasOffline] = React.useState(false);
+  const [showGreen, setShowGreen]   = React.useState(false);
+
+  React.useEffect(() => {
+    const up   = () => { setOnline(true);  if (wasOffline) { setShowGreen(true); setTimeout(() => setShowGreen(false), 2500); } };
+    const down = () => { setOnline(false); setWasOffline(true); };
+    window.addEventListener('online',  up);
+    window.addEventListener('offline', down);
+    return () => { window.removeEventListener('online', up); window.removeEventListener('offline', down); };
+  }, [wasOffline]);
+
+  if (online && !showGreen) return null;
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 99999,
+      background: online ? '#22c55e' : '#ef4444',
+      color: '#fff', textAlign: 'center', fontSize: 12, fontWeight: 700,
+      padding: '6px 16px', letterSpacing: '0.03em',
+      transition: 'background 0.4s ease',
+    }}>
+      {online ? '✓ Conexión restaurada' : 'Sin conexión — mostrando datos guardados'}
+    </div>
+  );
+}
+
 export default function Root() {
   const [firebaseUser, setFirebaseUser]       = useState(undefined);
   const [redirectChecked, setRedirectChecked] = useState(false); // true cuando getRedirectResult resolvió
@@ -241,7 +432,26 @@ export default function Root() {
   const [minLoadDone, setMinLoadDone]   = useState(false);
   const [demoMode, setDemoMode]         = useState(false);
   const [featureModules, setFeatureModules] = useState(null); // null = usar defaults del frontend
-  useEffect(() => { const t = setTimeout(() => setMinLoadDone(true), 3200); return () => clearTimeout(t); }, []);
+  useEffect(() => {
+    if (!IS_FIRST_LOAD) { setMinLoadDone(true); return; }
+    const t = setTimeout(() => setMinLoadDone(true), 3200);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Offline fallback: si Firebase no resuelve en 4s y no hay internet, usar cache
+  useEffect(() => {
+    if (firebaseUser !== undefined) return; // ya resolvió
+    const t = setTimeout(() => {
+      if (!navigator.onLine && firebaseUser === undefined) {
+        const cached = localStorage.getItem(OFFLINE_AUTH_KEY);
+        // Forzar resolución con null (mostrará login) o con shell cacheado
+        setFirebaseUser(cached ? '__offline__' : null);
+        setRedirectChecked(true);
+        setMinLoadDone(true);
+      }
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [firebaseUser]);
 
   // Leer config global al arrancar — sin auth, es pública
   useEffect(() => {
@@ -314,6 +524,9 @@ export default function Root() {
       if (!mounted) return;
 
       setFirebaseUser(user || null);
+      // Guardar estado mínimo para uso offline
+      if (user) localStorage.setItem(OFFLINE_AUTH_KEY, JSON.stringify({ uid: user.uid, email: user.email }));
+      else localStorage.removeItem(OFFLINE_AUTH_KEY);
       window._getFirebaseToken = user ? () => user.getIdToken() : null;
       if (user) {
         // Verificar intent de registro guardado por la landing (AuthScreen) o bottom sheet
@@ -593,6 +806,39 @@ export default function Root() {
     return <PremiumStorefront2026 />;
   }
 
+  // ── Preview vista de tienda de COMIDA (template commerce-modern) — carrito + toggle lista/grilla ─
+  if (window.location.pathname === '/preview-comida') {
+    const MOCK_COMIDA = {
+      nombre: 'Burger Station', slug: 'burger-station',
+      descripcion: 'Hamburguesas artesanales, papas y bebidas. Retiro en el local o delivery.',
+      logo: 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?q=80&w=200&auto=format&fit=crop',
+      foto: 'https://images.unsplash.com/photo-1550547660-d9450f859349?q=80&w=1600&auto=format&fit=crop',
+      whatsapp: '5491112345678', instagram: 'burger.station', telefono: '', ciudad: 'Bovril',
+      direccion: 'San Martín 450', rating: 4.7, totalReseñas: 342,
+      horarios: {
+        lunes: '11:00-23:00', martes: '11:00-23:00', miercoles: '11:00-23:00',
+        jueves: '11:00-23:00', viernes: '11:00-01:00', sabado: '12:00-02:00', domingo: '12:00-23:00',
+      },
+      pagina: { template: 'commerce-modern', color: '#e11d2e', modoOscuro: false, secciones: { hero:{activa:true}, productos:{activa:true}, contacto:{activa:true} } },
+      productos: [
+        { id:'h1', nombre:'Hamburguesa Clásica', categoria:'Hamburguesas', precio:6500, descripcion:'Carne 200g, lechuga, tomate, cheddar y salsa de la casa en pan brioche.', foto:'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?q=80&w=800&auto=format&fit=crop', serves:1, prepTimeMin:15, rating:4.8, activo:true },
+        { id:'h2', nombre:'Doble Bacon Cheddar', categoria:'Hamburguesas', precio:8900, precioOriginal:10500, descripcion:'Doble carne, doble cheddar, panceta crocante y cebolla caramelizada.', foto:'https://images.unsplash.com/photo-1553979459-d2229ba7433b?q=80&w=800&auto=format&fit=crop', serves:1, prepTimeMin:18, tags:['kids'], rating:4.9, activo:true },
+        { id:'h3', nombre:'Veggie Deluxe', categoria:'Hamburguesas', precio:7200, descripcion:'Medallón de garbanzos y espinaca, palta, rúcula y mayo de ajo.', foto:'https://images.unsplash.com/photo-1520072959219-c595dc870360?q=80&w=800&auto=format&fit=crop', serves:1, prepTimeMin:16, tags:['vegetarian','vegan'], rating:4.6, activo:true },
+        { id:'p1', nombre:'Papas Clásicas', categoria:'Acompañamientos', precio:3200, descripcion:'Corte bastón, crocantes por fuera.', foto:'https://images.unsplash.com/photo-1573080496219-bb080dd4f877?q=80&w=800&auto=format&fit=crop', serves:2, prepTimeMin:10, rating:4.5, activo:true },
+        { id:'p2', nombre:'Papas Cheddar & Bacon', categoria:'Acompañamientos', precio:4800, precioOriginal:5600, descripcion:'Con cheddar fundido y trozos de panceta.', foto:'https://images.unsplash.com/photo-1639024471283-03518883512d?q=80&w=800&auto=format&fit=crop', serves:2, prepTimeMin:12, activo:true },
+        { id:'b1', nombre:'Coca-Cola 500ml', categoria:'Bebidas', precio:1800, descripcion:'Bien fría.', foto:'https://images.unsplash.com/photo-1554866585-cd94860890b7?q=80&w=800&auto=format&fit=crop', serves:1, prepTimeMin:1, activo:true },
+        { id:'b2', nombre:'Agua Mineral 500ml', categoria:'Bebidas', precio:1400, descripcion:'Sin gas.', foto:'https://images.unsplash.com/photo-1553456558-aff63285bdd1?q=80&w=800&auto=format&fit=crop', serves:1, prepTimeMin:1, activo:true },
+        { id:'b3', nombre:'Cerveza Artesanal IPA', categoria:'Bebidas', precio:2600, descripcion:'Rubia, amarga y aromática. 500ml.', foto:'https://images.unsplash.com/photo-1608270586620-248524c67de9?q=80&w=800&auto=format&fit=crop', serves:1, prepTimeMin:1, tags:['glutenFree'], rating:4.7, activo:true },
+        { id:'b4', nombre:'Sprite 500ml', categoria:'Bebidas', precio:1800, descripcion:'Bien fría, sabor lima limón.', foto:'https://images.unsplash.com/photo-1690993022002-27ba5d02c497?q=80&w=800&auto=format&fit=crop', serves:1, prepTimeMin:1, rating:4.4, activo:true },
+        { id:'b5', nombre:'Agua Saborizada Pomelo', categoria:'Bebidas', precio:1600, descripcion:'Sin gas, sabor pomelo natural.', foto:'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?q=80&w=800&auto=format&fit=crop', serves:1, prepTimeMin:1, activo:true },
+        { id:'b6', nombre:'Cerveza Rubia 500ml', categoria:'Bebidas', precio:2200, precioOriginal:2600, descripcion:'Lager suave, ideal para acompañar.', foto:'https://images.unsplash.com/photo-1618183479302-1e0aa382c36b?q=80&w=800&auto=format&fit=crop', serves:1, prepTimeMin:1, rating:4.6, activo:true },
+        { id:'b7', nombre:'Limonada Casera', categoria:'Bebidas', precio:2100, descripcion:'Limón, menta y jengibre. 500ml.', foto:'https://images.unsplash.com/photo-1621263764928-df1444c5e859?q=80&w=800&auto=format&fit=crop', serves:2, prepTimeMin:2, tags:['vegan'], rating:4.9, activo:true },
+        { id:'d1', nombre:'Brownie con helado', categoria:'Postres', precio:3900, descripcion:'Brownie tibio, helado de crema y salsa de chocolate.', foto:'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?q=80&w=800&auto=format&fit=crop', serves:1, prepTimeMin:5, tags:['vegetarian'], rating:5, activo:true },
+      ],
+    };
+    return <TiendaPublicaRenderer tienda={MOCK_COMIDA} />;
+  }
+
   // ── Preview del template premium real con datos mock (usa TiendaPublicaRenderer) ─
   if (window.location.pathname === '/preview-premium-real') {
     const MOCK_TIENDA = {
@@ -646,10 +892,20 @@ export default function Root() {
   }
 
   // ── Pantalla de carga ─────────────────────────────────────────────────────
-  // Esperar tanto a que Firebase resuelva el auth state como a que getRedirectResult
-  // termine (crítico en mobile para no mostrar AuthScreen antes de tiempo).
-  if (!minLoadDone || firebaseUser === undefined || !redirectChecked || checkingTienda || (firebaseUser && userProfile === undefined)) {
+  const isOfflineMode = firebaseUser === '__offline__';
+  if (!minLoadDone || firebaseUser === undefined || !redirectChecked || checkingTienda || (!isOfflineMode && firebaseUser && userProfile === undefined)) {
     return <SplashScreen />;
+  }
+
+  // ── Modo offline — mostrar shell con datos cacheados ─────────────────────
+  if (isOfflineMode) {
+    const type = CACHED_USER_TYPE;
+    return (
+      <>
+        <ConnectionBanner />
+        {type === 'store' ? <StoreShell /> : <ClientShell />}
+      </>
+    );
   }
 
   // ── Polling post-pago ─────────────────────────────────────────────────────
@@ -797,16 +1053,19 @@ export default function Root() {
 
   // ── App de empresa/emprendimiento (StoreApp) ──────────────────────────────
   // Empresa y Emprendimiento ven StoreApp. Usuarios van a UserApp.
-  if (firebaseUser && (effectiveUserProfile?.role === 'empresa' || effectiveUserProfile?.role === 'emprendimiento') && !browseAsUser) {
+  const isStoreRole = effectiveUserProfile?.role === 'empresa' || effectiveUserProfile?.role === 'emprendimiento';
+  if (firebaseUser && isStoreRole) localStorage.setItem(USER_TYPE_KEY, 'store');
+  else if (firebaseUser && !isStoreRole) localStorage.setItem(USER_TYPE_KEY, 'client');
+
+  if (firebaseUser && isStoreRole && !browseAsUser) {
     const isAdminUser = ADMIN_EMAILS.includes((firebaseUser?.email || '').toLowerCase());
     return (
       <>
+        <ConnectionBanner />
         <StoreApp
           firebaseUser={firebaseUser}
-          /* tiendaData={tiendaData} // DEPRECADO: ahora lee de userProfile.businessProfile */
           userProfile={effectiveUserProfile}
           onLogout={handleLogout}
-          /* onTiendaUpdate={setTiendaData} // DEPRECADO */
           isDark={isDark}
           toggleTheme={toggleTheme}
           onBrowseAsUser={() => { window.history.replaceState({}, '', '/'); setBrowseAsUser(true); }}
@@ -823,6 +1082,7 @@ export default function Root() {
     const isAdmin = ADMIN_EMAILS.includes((firebaseUser?.email || '').toLowerCase());
     return (
       <>
+        <ConnectionBanner />
         <AuthProvider firebaseUser={firebaseUser}>
           <UserApp
             firebaseUser={firebaseUser}
@@ -853,6 +1113,7 @@ export default function Root() {
   if (!firebaseUser) {
     return (
       <>
+        <ConnectionBanner />
         <UserApp
           firebaseUser={null}
           onLogout={handleLogout}

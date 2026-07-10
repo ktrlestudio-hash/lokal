@@ -59,7 +59,9 @@ export async function signInWithGoogle() {
       throw new Error('El navegador bloqueó el popup. Permitir popups para este sitio e intentar de nuevo.');
     }
     if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
-      return null; // el usuario cerró el popup — no es un error
+      const e = new Error('popup-closed');
+      e.code = 'popup-closed';
+      throw e;
     }
     throw err;
   }

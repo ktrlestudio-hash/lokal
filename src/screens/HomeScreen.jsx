@@ -1,4 +1,5 @@
 import React, { useRef, useState, useMemo, useEffect } from 'react';
+import { SkeletonOfertas, SkeletonDemandas } from '../Skeletons';
 import {
   Search, MessageSquare, Flame, Store, ChevronLeft, ChevronRight,
   Package, Tag, MapPin, Star, Bell, X, LayoutGrid, User
@@ -118,10 +119,10 @@ export default function HomeScreen(props) {
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0a0d16] pb-32">
+    <div className="h-[100dvh] flex flex-col bg-slate-50 dark:bg-[#0a0d16]">
 
-      {/* ── Header sticky mobile ── */}
-      <div className="lg:hidden sticky top-0 z-20 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-white/10">
+      {/* ── Header mobile ── */}
+      <div className="lg:hidden shrink-0 z-20 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-white/10">
         <div className="px-3 h-14 flex items-center gap-2">
           <div className="w-10 h-10 flex items-center justify-center shrink-0">
             <LogoSymbol size={26} className="text-slate-900 dark:text-white" />
@@ -212,7 +213,7 @@ export default function HomeScreen(props) {
       </div>
 
       {/* ── Desktop header ── */}
-      <div className="hidden lg:block sticky top-0 z-20 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-white/10">
+      <div className="hidden lg:block shrink-0 z-20 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-white/10">
         <div className="h-14 flex items-center px-6 gap-3 max-w-5xl mx-auto">
           <div className="flex items-center shrink-0 text-[#0B132B] dark:text-white">
             <LogoFull size={22} />
@@ -308,7 +309,8 @@ export default function HomeScreen(props) {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto">
+      <div className="flex-1 overflow-y-auto overscroll-y-contain no-scrollbar">
+      <div className="max-w-5xl mx-auto pb-32">
 
         {/* ── Hero mapa decorativo ── */}
         <div
@@ -413,18 +415,8 @@ export default function HomeScreen(props) {
             <h2 className="font-black text-[15px] text-slate-900 dark:text-white">Destacados cerca tuyo</h2>
             <button onClick={() => navigate('todas-ofertas')} className="text-xs text-primary font-bold">Ver todo →</button>
           </div>
-          {loadingOfertas ? (
-            <div className="flex gap-3 px-4 overflow-hidden">
-              {[1,2,3].map(i => (
-                <div key={i} className="w-44 shrink-0 bg-white dark:bg-slate-900 rounded-3xl overflow-hidden animate-pulse">
-                  <div className="h-48 bg-slate-200 dark:bg-white/8" />
-                  <div className="p-3 space-y-2">
-                    <div className="h-3 bg-slate-200 dark:bg-white/8 rounded w-3/4" />
-                    <div className="h-3 bg-slate-100 dark:bg-white/5 rounded w-1/2" />
-                  </div>
-                </div>
-              ))}
-            </div>
+          {loadingOfertas && filteredOfertas.length === 0 ? (
+            <div className="px-4"><SkeletonOfertas count={4} /></div>
           ) : filteredOfertas.length === 0 ? (
             <div className="px-4">
               <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 text-center">
@@ -561,8 +553,8 @@ export default function HomeScreen(props) {
 
           {/* Logged in: mis demandas normales */}
           {props.firebaseUser && (
-            loadingDemandas ? (
-              <div className="space-y-2">{[1,2].map(i => <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl h-16 animate-pulse" />)}</div>
+            loadingDemandas && demandasActivas.length === 0 ? (
+              <SkeletonDemandas count={2} />
             ) : demandasActivas.length === 0 ? (
               <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 text-center">
                 <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-3">
@@ -606,7 +598,8 @@ export default function HomeScreen(props) {
           )}
         </div>
 
-      </div>
+      </div>{/* fin max-w-5xl */}
+      </div>{/* fin flex-1 overflow-y-auto */}
     </div>
   );
 }

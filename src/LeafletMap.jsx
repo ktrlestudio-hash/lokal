@@ -127,22 +127,19 @@ function userDotIcon(pinned = false) {
   return L.divIcon({
     className: '',
     html: `
-      <div style="position:relative;width:22px;height:22px">
-        <div class="lokal-user-pulse" style="
-          position:absolute;inset:-6px;
-          background:rgba(0,184,217,.18);
-          border-radius:50%;
-        "></div>
+      <div style="position:relative;width:48px;height:48px;display:flex;align-items:center;justify-content:center;">
+        <div class="lokal-user-ring1" style="position:absolute;border-radius:50%;background:rgba(0,184,217,0.28);"></div>
+        <div class="lokal-user-ring2" style="position:absolute;border-radius:50%;background:rgba(0,184,217,0.18);"></div>
         <div style="
-          width:22px;height:22px;
-          background:var(--primary-hex);
+          width:14px;height:14px;
+          background:#00B8D9;
           border-radius:50%;
-          border:2.5px solid #fff;
-          box-shadow:0 1px 8px rgba(var(--primary),0.55);
+          box-shadow:0 0 0 3px rgba(0,184,217,0.28),0 0 12px rgba(0,184,217,0.55);
+          position:relative;z-index:2;
         "></div>
       </div>`,
-    iconSize: [22, 22],
-    iconAnchor: [11, 11],
+    iconSize: [48, 48],
+    iconAnchor: [24, 24],
   });
 }
 
