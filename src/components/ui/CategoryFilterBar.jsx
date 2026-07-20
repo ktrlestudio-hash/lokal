@@ -33,7 +33,7 @@ export default function CategoryFilterBar({ filterCategory, setFilterCategory, c
   const onMouseUp   = () => { isDragging.current = false; if (scrollRef.current) scrollRef.current.style.cursor = ''; };
 
   const cats = categories.filter(c => c.parentId === null && (!presentIds || presentIds.has(c.id)));
-  const btnClass = (active) => `shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors ${active ? 'bg-primary text-white' : 'bg-slate-100 dark:bg-white/8 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/12'}`;
+  const btnClass = (active) => `shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors ${active ? 'bg-primary text-white' : 'bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:bg-surface-card-2/70 dark:hover:bg-white/12'}`;
 
   return (
     <div className="relative w-full min-w-0 overflow-hidden flex items-center">
@@ -48,7 +48,7 @@ export default function CategoryFilterBar({ filterCategory, setFilterCategory, c
           </button>
         ))}
         {navigate && (
-          <button onClick={() => navigate('categorias')} className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors bg-slate-100 dark:bg-white/8 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/12 border border-dashed border-slate-300 dark:border-white/20">
+          <button onClick={() => navigate('categorias')} className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:bg-surface-card-2/70 dark:hover:bg-white/12 border border-dashed border-slate-300 dark:border-white/20">
             <LayoutGrid className="w-4 h-4" />
             <span>Ver todas</span>
           </button>
@@ -56,7 +56,7 @@ export default function CategoryFilterBar({ filterCategory, setFilterCategory, c
       </div>
       {canScrollRight && (
         <button onClick={() => scrollRef.current?.scrollBy({ left: 160, behavior: 'smooth' })}
-          className="absolute right-0 flex items-center justify-center w-10 h-full bg-gradient-to-l from-slate-50 dark:from-slate-950 to-transparent pr-2 text-slate-400 hover:text-slate-600 transition-colors">
+          className="absolute right-0 flex items-center justify-center w-10 h-full bg-gradient-to-l from-surface-card-2 to-transparent pr-2 text-ink-dim hover:text-ink transition-colors">
           <ChevronRight className="w-5 h-5" />
         </button>
       )}

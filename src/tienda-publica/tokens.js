@@ -75,6 +75,10 @@ export const SECCIONES_DEFAULT = {
   galeria:   { activa: false, orden: 5, label: 'Galería',    desc: 'Fotos de la tienda' },
   sobre:     { activa: true,  orden: 6, label: 'Sobre nosotros', desc: 'Descripción libre' },
   mapa:      { activa: false, orden: 7, label: 'Ubicación',  desc: 'Mapa con la dirección' },
+  // Módulo de negocio LOKAL LINKS — galería de imágenes con enlace
+  // individual y Open Graph dinámico al compartir (netlify/functions/
+  // ofertas.js + oferta-ssr.js). Ver MODULES.md en la raíz del proyecto.
+  ofertas:   { activa: false, orden: 8, label: 'Ofertas',    desc: 'Imágenes con link compartible y preview enriquecido' },
 };
 
 /**
@@ -94,7 +98,7 @@ export const TEMPLATES = {
   'base':        { label: '⭐ Base',     desc: 'El template definitivo: parallax hero, filtros avanzados, carrito, mapa, contacto, dark/light adaptable.' },
 };
 
-export const TEMPLATE_DEFAULT = 'detail';
+export const TEMPLATE_DEFAULT = 'commerce-modern';
 
 /**
  * Config de página por defecto.
@@ -103,6 +107,7 @@ export const TEMPLATE_DEFAULT = 'detail';
 export const PAGINA_DEFAULT = {
   template: TEMPLATE_DEFAULT,
   color: '#00B8D9',
+  colorSecundario: null, // null = usa --accent-hex (#FFC530) de LOKAL por defecto
   modoOscuro: false,
   secciones: { ...SECCIONES_DEFAULT },
 };

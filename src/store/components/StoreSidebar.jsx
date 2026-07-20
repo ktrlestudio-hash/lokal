@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   Home, Package, Zap, TrendingUp, Store, Globe, ExternalLink,
   Sun, Moon, LogOut
@@ -8,39 +8,35 @@ import { LogoFull, KtrlMark } from '../../Brand';
 export default function StoreSidebar({ activeScreen, onNavigate, isEmprendimiento, isPremium, tiendaData, dias, isActiva }) {
   const tiendaInfo = tiendaData || {};
   const isEmpresa = !isEmprendimiento;
-  const newDemandasCount = tiendaData?._newDemandasCount || 0;
   const misProductosCount = tiendaData?._misProductosCount || 0;
 
   const navItems = [
     { label: 'Inicio', icon: Home, id: 'home' },
-    ...(isEmprendimiento
-      ? [{ label: 'Demandas', icon: Package, id: 'feed' }]
-      : [{ label: 'Demandas', icon: Package, id: 'feed', newBadge: newDemandasCount }]
-    ),
+    { label: 'Feed', icon: Package, id: 'feed' },
     { label: 'Mis productos', icon: Zap, id: 'productos', badge: misProductosCount || null },
     ...(isEmpresa ? [{ label: 'Estadísticas', icon: TrendingUp, id: 'stats' }] : []),
     { label: isEmprendimiento ? 'Mi perfil' : 'Mi tienda', icon: Store, id: 'perfil' },
   ];
 
   return (
-    <div className="hidden lg:flex lg:flex-col w-64 bg-white dark:bg-slate-900 border-r-2 border-slate-100 dark:border-white/10 h-screen sticky top-0 shrink-0">
+    <div className="hidden lg:flex lg:flex-col w-64 bg-surface-card border-r-2 border-slate-100 dark:border-white/10 h-screen sticky top-0 shrink-0">
       <div className="p-5 border-b-2 border-slate-100 dark:border-white/10">
-        <LogoFull size={20} className="dark:hidden mb-4" color="#0B132B" />
+        <LogoFull size={20} className="dark:hidden mb-4" color="#1a1a1a" />
         <LogoFull size={20} className="hidden dark:inline-flex mb-4" light />
         <div className="min-w-0">
-          <p className="font-bold text-slate-900 dark:text-white text-sm truncate">{tiendaInfo.nombre}</p>
+          <p className="font-bold text-ink text-sm truncate">{tiendaInfo.nombre}</p>
           <p className="text-xs text-brand font-semibold">Panel de tienda</p>
         </div>
       </div>
 
       <nav className="flex-1 p-4 space-y-1">
         {navItems.map(({ label, icon: Icon, id, badge, newBadge }) => {
-          const isActive = id === 'feed' ? (activeScreen === 'feed' || activeScreen === 'demanda-detail') : activeScreen === id;
+          const isActive = activeScreen === id;
           return (
             <button
               key={id}
               onClick={() => onNavigate(id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${isActive ? 'bg-slate-900 dark:bg-brand/15 text-white dark:text-brand' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${isActive ? 'bg-ink dark:bg-brand/15 text-white dark:text-brand' : 'text-ink dark:text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/10'}`}
             >
               <div className="relative shrink-0">
                 <Icon className="w-5 h-5" />
@@ -52,7 +48,7 @@ export default function StoreSidebar({ activeScreen, onNavigate, isEmprendimient
               </div>
               <span className="font-semibold flex-1">{label}</span>
               {badge > 0 && (
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isActive ? 'bg-white/20' : 'bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300'}`}>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isActive ? 'bg-white/20' : 'bg-surface-card-2 dark:bg-white/10 text-ink-dim dark:text-ink-dim'}`}>
                   {badge}
                 </span>
               )}
@@ -76,7 +72,7 @@ export default function StoreSidebar({ activeScreen, onNavigate, isEmprendimient
         )}
         <button
           onClick={() => onNavigate('toggleTheme')}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-ink dark:text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/10 transition-colors"
         >
           <Sun className="w-5 h-5 text-amber-400" />
           <span className="font-semibold">Tema</span>
@@ -89,8 +85,8 @@ export default function StoreSidebar({ activeScreen, onNavigate, isEmprendimient
           <span className="font-semibold">Cerrar sesión</span>
         </button>
         <div className="pt-3 flex items-center gap-1.5 px-1 opacity-25">
-          <span className="text-[10px] text-slate-400">por</span>
-          <KtrlMark className="h-2.5 text-slate-400" />
+          <span className="text-[10px] text-ink-dim">por</span>
+          <KtrlMark className="h-2.5 text-ink-dim" />
         </div>
       </div>
     </div>

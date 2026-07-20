@@ -20,6 +20,7 @@
         "npm:leaflet@^1.9.4",
         "npm:lucide-react@0.400",
         "npm:motion@^12.40.0",
+        "npm:photoswipe@^5.4.4",
         "npm:postcss@^8.4.39",
         "npm:react-dom@^18.3.1",
         "npm:react-leaflet@^4.2.1",

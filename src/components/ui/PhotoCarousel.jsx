@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { ChevronDown } from 'lucide-react';
 
 export default function PhotoCarousel({ photos = [], className = '' }) {
@@ -7,10 +7,11 @@ export default function PhotoCarousel({ photos = [], className = '' }) {
   const prev = () => setIdx(i => (i - 1 + photos.length) % photos.length);
   const next = () => setIdx(i => (i + 1) % photos.length);
   return (
-    <div className={`relative bg-slate-100 dark:bg-black/30 ${className}`}>
+    <div className={`relative bg-surface-card-2 dark:bg-black/30 ${className}`}>
       <img
         src={photos[idx]}
         alt=""
+        decoding="async"
         className="w-full object-contain max-h-72"
         style={{ aspectRatio: '16/9' }}
       />

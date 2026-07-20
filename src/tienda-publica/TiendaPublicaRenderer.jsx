@@ -1,8 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Sun, Moon } from 'lucide-react';
+import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { deriveColorPalette, resolvePagina, getSeccionesActivas } from './utils.js';
 import { buildPreviewTienda } from './mockData.js';
-import { LogoSymbol, KtrlMark } from '../Brand.jsx';
 
 // Auto-detecta todos los templates en ./templates/*.jsx
 // Cada template exporta su componente (TemplateXxx) + META { label, desc }
@@ -23,7 +21,25 @@ function buildTemplateMaps() {
 const { components: TEMPLATES, meta: TEMPLATES_META } = buildTemplateMaps();
 export { TEMPLATES_META };
 
-export function TiendaPublicaRenderer({ tienda, paginaOverride = null, previewMode = false, isDark: isDarkApp, onToggleTheme }) {
+export function TiendaPublicaRenderer({
+  tienda, paginaOverride = null, previewMode = false, isDark: isDarkApp, onToggleTheme,
+  // modo: por defecto 'standalone' — este renderer es el único punto que
+  // monta el template para /t/:slug público, Root.jsx y el preview de
+  // StoreApp.jsx, ninguno de esos es "logueado dentro de LOKAL". Solo el
+  // wrapper que reemplaza TiendaDetailScreen pasa modo="plataforma"
+  // explícito (ver src/screens/TiendaDetailScreen.jsx nuevo).
+  modo = 'standalone',
+  // Props de "modo plataforma" — reenviadas tal cual al Template. Cuando no
+  // vienen (todos los usos actuales: /t/:slug, Root.jsx, preview de
+  // StoreApp.jsx), no cambia nada del comportamiento existente.
+  onVerEnMapaGlobal, tiendasSimilares, onIrATienda, onVerTodosFiltrado,
+  // Clic interno en una oferta (SPA, sin re-fetch) — Root pasa navegarAOferta.
+  onVerOferta,
+  // Dueño logueado viendo su propia tienda — habilita el FAB "+" de carga
+  // rápida de oferta directo en la vista pública (ver OfertaQuickForm) y el
+  // menú de 3 puntos por card (ver OfertaAdminSheet).
+  esDueño, onOfertaCreada, onOfertaActualizada, onOfertaEliminada,
+}) {
   const pagina = useMemo(() => resolvePagina(paginaOverride ?? tienda.pagina), [tienda, paginaOverride]);
   const secciones = useMemo(() => getSeccionesActivas(pagina.secciones), [pagina]);
 
@@ -32,28 +48,6 @@ export function TiendaPublicaRenderer({ tienda, paginaOverride = null, previewMo
     const base = buildPreviewTienda(tienda, tienda?.productos || []);
     return { ...tienda, ...base, productos: base._productos };
   }, [tienda, previewMode]);
-
-  const [cart, setCart] = useState([]);
-  const [note, setNote] = useState('');
-
-  const onAdd = (producto, qty = 1) => setCart(prev => {
-    const ex = prev.find(i => i.id === producto.id);
-    if (ex) return prev.map(i => i.id === producto.id ? { ...i, qty: i.qty + qty } : i);
-    const item = {
-      ...producto,
-      nombre: producto.nombre || producto.titulo || '',
-      foto:   producto.foto || producto.fotos?.[0] || producto.galeria?.[0] || null,
-      qty,
-    };
-    return [...prev, item];
-  });
-  const onRemove = (id) => setCart(prev => {
-    const ex = prev.find(i => i.id === id);
-    if (!ex) return prev;
-    if (ex.qty === 1) return prev.filter(i => i.id !== id);
-    return prev.map(i => i.id === id ? { ...i, qty: i.qty - 1 } : i);
-  });
-  const onClear = () => setCart([]);
 
   // El modo claro/oscuro es UNO SOLO para toda la interfaz de LOKAL — no un
   // sub-modo aislado por tienda. Cuando se navega logueado desde dentro de
@@ -71,81 +65,58 @@ export function TiendaPublicaRenderer({ tienda, paginaOverride = null, previewMo
   const dark = standalone ? darkLocal : isDarkApp;
   const toggleDark = standalone ? () => setDarkLocal(d => !d) : onToggleTheme;
 
-  useEffect(() => {
+  // useLayoutEffect (no useEffect): aplica la clase .dark en <html> de forma
+  // SÍNCRONA, antes de que el navegador pinte el frame. Con useEffect había
+  // un frame intermedio donde React ya renderizó el árbol con el `dark` de
+  // este componente (footer incluido, que usa la misma variable) pero el
+  // DOM real de <html> todavía tenía la clase de una navegación SPA
+  // anterior (sin full reload) — el resto de la página, cuyo CSS lee la
+  // clase real en <html> en vez de la prop de React, pintaba con el tema
+  // viejo por ese instante. Se veía "a veces" porque depende de si <html>
+  // ya traía o no .dark puesta de antes; el toggle manual lo "arreglaba"
+  // porque fuerza un nuevo ciclo de render+efecto ya sincronizado.
+  useLayoutEffect(() => {
     if (!standalone) return undefined; // Root.jsx ya maneja su propia clase .dark
     document.documentElement.classList.toggle('dark', dark);
     return () => { if (!pagina.modoOscuro) document.documentElement.classList.remove('dark'); };
   }, [standalone, dark]);
 
-  useEffect(() => {
-    const vars = deriveColorPalette(pagina.color, dark);
+  useLayoutEffect(() => {
+    const vars = deriveColorPalette(pagina.color, dark, pagina.colorSecundario);
     const el = document.documentElement;
     Object.entries(vars).forEach(([k, v]) => el.style.setProperty(k, v));
     return () => Object.keys(vars).forEach(k => el.style.removeProperty(k));
-  }, [pagina.color, dark]);
+  }, [pagina.color, pagina.colorSecundario, dark]);
 
-  const Template = TEMPLATES[pagina.template] ?? TEMPLATES['detail'];
+  const Template = TEMPLATES[pagina.template] ?? TEMPLATES['commerce-modern'];
 
+  // El Template ahora controla TODO el layout de scroll (hero + catálogo +
+  // footer de marca juntos, dentro de un contenedor con altura fija de
+  // viewport) — el footer de marca se le pasa como render-prop en vez de
+  // vivir acá afuera, para que el scroll interno del template lo incluya.
+  // Antes vivía como hermano de <Template>, fuera de cualquier scroll
+  // acotado, y TiendaNavBar (fixed, sin ocupar espacio en el flujo) lo
+  // tapaba sin que nada del documento lo empujara a la vista.
   return (
-    <div style={{ minHeight: '100dvh', background: 'var(--tp-bg)', fontFamily: 'inherit' }}>
-      <Template
-        tienda={tiendaConDatos}
-        secciones={secciones}
-        cart={cart}
-        onAdd={onAdd}
-        onRemove={onRemove}
-        onClear={onClear}
-        note={note}
-        setNote={setNote}
-        isDark={dark}
-      />
-
-      {/* Footer de marca — aparece en todas las plantillas */}
-      {!previewMode && (
-        <footer id="tp-footer" style={{
-          borderTop: `1px solid ${dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)'}`,
-          padding: '20px 24px 32px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 12,
-          background: dark ? '#060d1a' : '#f1f5f9',
-        }}>
-          {/* Logo Lokal */}
-          <a href="https://lokalbovril.netlify.app" target="_blank" rel="noopener noreferrer"
-            style={{ display:'inline-flex', alignItems:'center', gap:7, textDecoration:'none', color: dark ? 'rgba(255,255,255,.35)' : '#94a3b8' }}>
-            <LogoSymbol size={18} color="currentColor" />
-            <span style={{ fontSize:13, fontWeight:800, letterSpacing:'0.01em', fontFamily:"'Inter', system-ui, sans-serif" }}>lokal</span>
-          </a>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            {/* Toggle claro/oscuro — el MISMO modo de toda la app cuando se
-                navega logueado (afecta cualquier pantalla, no solo esta
-                tienda); solo queda aislado a esta visita en el caso
-                standalone del link público sin sesión. */}
-            <button
-              onClick={toggleDark}
-              aria-label={dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-              title={dark ? 'Modo claro' : 'Modo oscuro'}
-              style={{
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                width: 30, height: 30, borderRadius: 999, border: 'none', cursor: 'pointer',
-                background: dark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.05)',
-                color: dark ? 'rgba(255,255,255,.5)' : '#64748b',
-              }}>
-              {dark ? <Sun size={15} /> : <Moon size={15} />}
-            </button>
-
-            {/* Creado por KTRL */}
-            <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
-              style={{ display:'inline-flex', alignItems:'center', gap:6, textDecoration:'none', color: dark ? 'rgba(255,255,255,.2)' : '#cbd5e1' }}>
-              <span style={{ fontSize:10, fontWeight:600, fontFamily:"'Inter', system-ui, sans-serif" }}>Creado por</span>
-              <KtrlMark style={{ height:11, color:'currentColor' }} />
-            </a>
-          </div>
-        </footer>
-      )}
-    </div>
+    <Template
+      tienda={tiendaConDatos}
+      secciones={secciones}
+      isDark={dark}
+      modo={modo}
+      onVerEnMapaGlobal={onVerEnMapaGlobal}
+      tiendasSimilares={tiendasSimilares}
+      onIrATienda={onIrATienda}
+      onVerTodosFiltrado={onVerTodosFiltrado}
+      onVerOferta={onVerOferta}
+      esDueño={esDueño}
+      onOfertaCreada={onOfertaCreada}
+      onOfertaActualizada={onOfertaActualizada}
+      onOfertaEliminada={onOfertaEliminada}
+      heroLayout={'editorial' /* TEMP: forzado para preview — revertir a: pagina.heroLayout || 'card' */}
+      // Footer de marca "lokal" se muestra en ambos modos por consistencia
+      // visual — en plataforma el toggle de tema comparte el mismo estado
+      // global (isDark/onToggleTheme) que el resto de LOKAL, no uno aislado.
+      footer={!previewMode ? { dark, toggleDark } : null}
+    />
   );
 }

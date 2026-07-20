@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+﻿import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { cacheGet, cacheSet } from './lokCache';
 import { PaywallModal as PaywallModalUI, PremiumModal as PremiumModalUI, SuscripcionContent } from './store/PricingUI';
 import { haptic } from './haptic';
 import LazyImg from './LazyImg';
 import { SkeletonProductosGrid, SkeletonProductosList, SkeletonInbox, SkeletonFeed, SkeletonPerfil, SkeletonStats } from './Skeletons';
-import { MOCK_PRODUCTOS, MOCK_INBOX, MOCK_DEMANDAS, MOCK_RESPUESTAS, MOCK_HISTORIAL_PAGOS, MOCK_STATS } from './mockStoreData';
+import { MOCK_PRODUCTOS, MOCK_INBOX, MOCK_HISTORIAL_PAGOS, MOCK_STATS } from './mockStoreData';
 import { TiendaPublicaRenderer, TEMPLATES_META } from './tienda-publica/TiendaPublicaRenderer.jsx';
 import { SECCIONES_DEFAULT } from './tienda-publica/tokens.js';
+import { isModuleActive, deriveColorPalette, getEstadoApertura } from './tienda-publica/utils.js';
+import { useGeolocation } from './hooks';
 import TransferenciaModal from './store/modals/TransferenciaModal';
 import {
   Store, Package, MessageSquare, Search, ArrowLeft, Globe, Home,
@@ -19,7 +21,7 @@ import {
   Tag, Gift, Wrench, Copy, Menu, Info, Infinity, FlaskConical, Clock, Palette,
   PanelLeft, Archive, Paperclip, ShoppingBag, Building2,
   User, Hash, CalendarClock, MessageCircle, ChevronLeft,
-  LayoutGrid, LayoutList, ArrowUpDown, SlidersHorizontal, ListFilter
+  LayoutGrid, LayoutList, ArrowUpDown, SlidersHorizontal, ListFilter, Navigation
 } from 'lucide-react';
 
 // ─── Precios suscripción (deben coincidir con mp-checkout.js) ─────────────────
@@ -44,13 +46,14 @@ import CategoryPicker from './CategoryPicker';
 import { VENTAJA_CONFIG } from './utils/ventajaConfig';
 import ProductoFormComp from './components/ProductoForm';
 import ProductoSuccessModal from './components/ProductoSuccessModal';
+import DatePicker from './components/DatePicker';
 import HomeScreen from './screens/HomeScreen';
 import ProductDetailScreen from './screens/ProductDetailScreen';
 import TiendaDetailScreen from './screens/TiendaDetailScreen';
 import { CATEGORIES as BASE_CATEGORIES, getCategoryPath, getAllDescendants } from './categories';
 import CategoryIcon from './CategoryIcon';
 import { apiFetch } from './api';
-import { PlaceAutocomplete, MapPicker, uploadFile } from './StoreRegisterFlow';
+import { PlaceAutocomplete, MapPicker, uploadFile, reverseGeocode } from './storeFormUtils';
 
 const API_BASE = '/.netlify/functions';
 
@@ -60,7 +63,7 @@ const StorePhotoCarousel = ({ photos = [] }) => {
   const prev = () => setIdx(i => (i - 1 + photos.length) % photos.length);
   const next = () => setIdx(i => (i + 1) % photos.length);
   return (
-    <div className="relative bg-slate-100 dark:bg-black/30 select-none">
+    <div className="relative bg-surface-card-2 dark:bg-black/30 select-none">
       <img src={photos[idx]} alt="" className="w-full object-contain max-h-64" style={{ aspectRatio: '16/9' }} />
       {photos.length > 1 && (
         <>
@@ -131,15 +134,16 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
   // Límites según rol/plan
   const productLimit = isEmprendimiento ? 5 : (isBasico ? 20 : Infinity);
-  const canRespondDemandas = isEmpresa;
-  const canViewStats = isEmpresa;
-  const canViewAI = isPremium;
   const galleryLimit = isEmprendimiento ? 3 : (isBasico ? 6 : 10);
 
-  const STORE_SCREENS = ['perfil', 'feed', 'mensajes', 'productos', 'inicio', 'stats', 'suscripcion'];
-  const savedScreen = localStorage.getItem('lokal-store-screen');
+  const STORE_SCREENS = ['perfil', 'mensajes', 'productos', 'inicio', 'stats', 'suscripcion'];
+  // Key por tienda (no global al navegador): sin el id, la última pantalla
+  // visitada por UNA cuenta se filtraba a la sesión de cualquier otra
+  // cuenta que abriera el panel en el mismo navegador (ej. probando varias
+  // cuentas de Google en dev) — cada tienda recuerda la suya, aisladas.
+  const storeScreenKey = tiendaData?.id ? `lokal-store-screen-${tiendaData.id}` : null;
+  const savedScreen = storeScreenKey ? localStorage.getItem(storeScreenKey) : null;
   const [screen, setScreen] = useState(STORE_SCREENS.includes(savedScreen) ? savedScreen : 'perfil');
-  const [selectedDemanda, setSelectedDemanda] = useState(null);
 
   // Mock test mode (solo admins)
   const [mockMode, setMockMode] = useState(false);
@@ -152,10 +156,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [sidebarPinned, setSidebarPinned] = React.useState(() => localStorage.getItem('lokal-store-sidebar-pinned') !== 'false');
 
   // Datos
-  const [demandas, setDemandas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tienda, setTienda] = useState(null);
-  const [misRespuestas, setMisRespuestas] = useState([]);
 
   // ── Inbox (mensajes directos de clientes) ─────────────────────────────────
   const [inboxConvos,      setInboxConvos]      = useState([]);
@@ -166,6 +168,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [editingMsg,       setEditingMsg]        = useState(null); // {id, text}
   const [swipedMsgId,      setSwipedMsgId]       = useState(null); // long-press mobile
   const [deletingMsgId,    setDeletingMsgId]     = useState(null); // animación borrado
+  const [confirmDeleteMsg, setConfirmDeleteMsg]  = useState(null); // {key} pendiente de confirmar
   const [storeTyping,      setStoreTyping]       = useState(false); // "escribiendo..." simulado
   const [inboxSending,     setInboxSending]      = useState(false);
   const [attachOpen,       setAttachOpen]        = useState(false);
@@ -175,7 +178,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [inboxSearch,      setInboxSearch]       = useState('');
   const [inboxMobileView,  setInboxMobileView]   = useState('list'); // 'list' | 'chat'
   const [inboxTab,         setInboxTab]          = useState('chats'); // 'chats' | 'respuestas'
-  const [msgFilter,        setMsgFilter]         = useState('todos'); // 'todos' | 'chats' | 'demandas' | 'laborales'
+  const [msgFilter,        setMsgFilter]         = useState('todos'); // 'todos' | 'chats' | 'laborales'
   const [closedConvos,     setClosedConvos]      = useState(new Set()); // keys cerradas
   const [showClosed,       setShowClosed]        = useState(false);
 
@@ -187,7 +190,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [inicioSubScreen,       setInicioSubScreen]       = useState(null); // null | 'producto' | 'tienda'
   const [inicioSelectedProduct, setInicioSelectedProduct] = useState(null);
   const [inicioSelectedTienda,  setInicioSelectedTienda]  = useState(null);
-  const [inicioSelectedDemanda, setInicioSelectedDemanda] = useState(null);
   const [recentSearches,        setRecentSearches]        = useState([]);
 
   // ── Chat flotante (persiste entre pantallas) ──────────────────────────────
@@ -207,20 +209,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   // Categorías unificadas (base + custom)
   const [allCategories, setAllCategories] = useState(BASE_CATEGORIES);
 
-  // Filtros feed
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterRubro, setFilterRubro] = useState('todas');
-
-  // Responder
-  const [respondiendo, setRespondiendo] = useState(false);
-  const [msgRespuesta, setMsgRespuesta] = useState('');
-  const [precioRespuesta, setPrecioRespuesta] = useState('');
-  const [adjuntosRespuesta, setAdjuntosRespuesta] = useState([]); // [{ file, preview, type }]
-  const [matchType, setMatchType] = useState(null);
-  const [submitError, setSubmitError] = useState(null);
-  const [submitOk, setSubmitOk] = useState(false);
-  const adjuntosInputRef = useRef(null);
-
   // Suscripción / paywall
   const [showPaywall, setShowPaywall]   = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
@@ -230,7 +218,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [renovError, setRenovError]     = useState(null);
   const [historialPagos, setHistorialPagos] = useState([]);
   const [loadingHistorial, setLoadingHistorial] = useState(false);
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(null); // string del plan en curso ('mensual'/'anual'), null = ninguno — así el spinner solo prende en el botón que realmente está en vuelo
+  const [checkoutError, setCheckoutError] = useState(null);
   const isActiva = suscripcionActiva(tiendaData);
   const dias     = diasRestantes(tiendaData);
 
@@ -239,8 +228,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
   const [createSheetClosing, setCreateSheetClosing] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
-  const [newDemandasCount, setNewDemandasCount] = useState(0);
-  const LAST_FEED_KEY = `lokal-lastfeed-${tiendaData?.id || 'store'}`;
 
   // Productos
   const PROD_CACHE_KEY = `productos-${tiendaData?.id || 'store'}`;
@@ -255,7 +242,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
   // Diseño de página — template, color, secciones
   const [editingPagina, setEditingPagina] = useState(false);
-  const [paginaForm, setPaginaForm] = useState({ template: 'minimal', color: '#00b8d9', modoOscuro: false, secciones: {} });
+  const [paginaForm, setPaginaForm] = useState({ template: 'commerce-modern', color: '#e4002b', colorSecundario: null, modoOscuro: false, secciones: {} });
   const [savingPagina, setSavingPagina] = useState(false);
 
   // Edición info básica
@@ -280,20 +267,31 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [locationFlyTo, setLocationFlyTo] = useState(null);
   const [locationSaving, setLocationSaving] = useState(false);
   const [locationError, setLocationError] = useState(null);
+  // Cuál de los dos PlaceAutocomplete (ciudad/dirección) del sheet de
+  // Ubicación tiene su dropdown abierto — coordinación explícita para que
+  // nunca estén los dos desplegados a la vez ni se solapen.
+  const [activeLocationField, setActiveLocationField] = useState(null);
+  // A nivel StoreApp (no dentro de LocationEditorModal, que hace
+  // `if (!locationModal) return null;` antes de llegar acá) — un hook
+  // después de ese early-return entraría y saldría del conteo de hooks
+  // según el modal esté abierto o no, mismo problema que tuvimos con
+  // PerfilScreen ("Rendered fewer hooks than expected").
+  const geo = useGeolocation();
+  // Cuando el GPS resuelve una posición, mueve el pin y dispara reverse
+  // geocoding para completar ciudad/dirección — mismo criterio que tocar
+  // el mapa (applyGeocode dentro de LocationEditorModal), así "usar mi
+  // ubicación" es una alternativa completa a tipear, no solo mueve el pin.
+  useEffect(() => {
+    if (!geo.location || !locationModal) return;
+    const { lat, lng } = geo.location;
+    setLocationForm(prev => ({ ...prev, lat, lng }));
+    setLocationFlyTo({ lat, lng });
+    reverseGeocode(lat, lng)
+      .then(({ ciudad, direccion }) => setLocationForm(prev => ({ ...prev, lat, lng, ciudad: ciudad || prev.ciudad, direccion: direccion || prev.direccion })))
+      .catch(() => {});
+  }, [geo.location, locationModal]);
 
-  // FeedScreen
-  const [feedTab,    setFeedTab]    = useState('feed');
-  const [feedSort,   setFeedSort]   = useState('recientes'); // 'recientes' | 'presupuesto' | 'urgentes'
-  const [feedEstado, setFeedEstado] = useState('todas');     // 'todas' | 'nuevas' | 'respondidas'
 
-  // MatchTypeSelector
-  const [matchTypeStep, setMatchTypeStep] = useState('root');
-
-  // ChatThread
-  const [chatMsgs, setChatMsgs] = useState([]);
-  const [chatTexto, setChatTexto] = useState('');
-  const [chatSending, setChatSending] = useState(false);
-  const chatBottomRef = useRef(null);
   const inboxBottomRef      = useRef(null);
   const inboxScrollRef      = useRef(null); // desktop
   const inboxMobileScrollRef = useRef(null); // mobile
@@ -339,6 +337,20 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [productoSuccess, setProductoSuccess] = useState(null); // producto guardado para mostrar modal
   const productoFotoInputRef = useRef(null);
 
+  // Ofertas — módulo simple (isModuleActive(tienda, 'ofertas')): foto +
+  // nombre + vigencia, nada más. Contrato real del backend
+  // (netlify/functions/ofertas.js → sanitizeOfertaInput): nombre, imageUrl,
+  // thumbUrl, publishAt, expireAt, visible. Comparte misProductos/
+  // loadingProductos con el módulo 'catalogo' (mismo endpoint /ofertas).
+  const [ofertaShowForm, setOfertaShowForm] = useState(false);
+  const [ofertaEditing, setOfertaEditing] = useState(null);
+  const [ofertaForm, setOfertaForm] = useState({ nombre: '', expireAt: '', visible: true });
+  const [ofertaFotoFile, setOfertaFotoFile] = useState(null);
+  const [ofertaFotoPreview, setOfertaFotoPreview] = useState(null);
+  const [ofertaSaving, setOfertaSaving] = useState(false);
+  const [ofertaSaveErr, setOfertaSaveErr] = useState(null);
+  const [ofertaConfirmDelete, setOfertaConfirmDelete] = useState(null);
+
   // Persiste screen en localStorage + sincroniza hash en desktop
   const navigateTo = (s) => {
     if (s === screen && !moreSheetOpen) return;
@@ -350,7 +362,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       setTimeout(() => {
         // Swap de screen en el valle del fade
         setScreen(s);
-        localStorage.setItem('lokal-store-screen', s);
+        if (storeScreenKey) localStorage.setItem(storeScreenKey, s);
         if (window.matchMedia('(min-width: 1024px)').matches) {
           window.history.replaceState(null, '', `#store/${s}`);
         }
@@ -387,7 +399,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     // Popstate: botón atrás del browser en desktop
     const onPop = () => {
       const hash = window.location.hash.replace('#store/', '');
-      if (STORE_SCREENS.includes(hash)) { setScreen(hash); localStorage.setItem('lokal-store-screen', hash); }
+      if (STORE_SCREENS.includes(hash)) { setScreen(hash); if (storeScreenKey) localStorage.setItem(storeScreenKey, hash); }
     };
     window.addEventListener('popstate', onPop);
     // Escribir hash inicial en desktop
@@ -400,21 +412,12 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
   useEffect(() => {
     fetchTienda();
-    fetchDemandas();
-    fetchMisRespuestas();
     fetchMisProductos();
     apiFetch(`${API_BASE}/categories`)
       .then(r => r.ok ? r.json() : [])
       .then(custom => { if (custom.length > 0) setAllCategories([...BASE_CATEGORIES, ...custom]); })
       .catch(() => {});
   }, []);
-
-  // Polling — re-fetch demandas cada 60s (no en mock mode)
-  useEffect(() => {
-    if (mockMode) return;
-    const iv = setInterval(fetchDemandas, 60000);
-    return () => clearInterval(iv);
-  }, [mockMode]);
 
   // Cargar inbox al entrar a mensajes
   useEffect(() => {
@@ -460,6 +463,9 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         nombre: editInfoForm.nombre.trim(),
         descripcion: editInfoForm.descripcion,
         telefono: editInfoForm.telefono,
+        whatsapp: editInfoForm.whatsapp,
+        instagram: editInfoForm.instagram,
+        tagline: editInfoForm.tagline,
         ciudad: editInfoForm.ciudad,
         direccion: editInfoForm.direccion,
       };
@@ -527,6 +533,11 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     });
     setLocationFlyTo(tiendaData?.lat && tiendaData?.lng ? { lat: tiendaData.lat, lng: tiendaData.lng } : null);
     setLocationError(null);
+    // Sin este reset, si una apertura previa dejó "ciudad" como campo
+    // activo (ej. se cerró el modal justo tras hacer foco ahí, sin blur),
+    // la próxima apertura arrancaba con ese dropdown ya considerado
+    // "abierto" por la coordinación, aunque el usuario no tocó nada.
+    setActiveLocationField(null);
     setLocationModal(true);
   };
 
@@ -535,6 +546,9 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       nombre: tiendaInfo.nombre || '',
       descripcion: tiendaInfo.descripcion || '',
       telefono: tiendaInfo.telefono || '',
+      whatsapp: tiendaInfo.whatsapp || '',
+      instagram: tiendaInfo.instagram || '',
+      tagline: tiendaInfo.tagline || '',
       ciudad: tiendaInfo.ciudad || '',
       direccion: tiendaInfo.direccion || '',
     });
@@ -550,9 +564,12 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       openMediaEditor(section === 'portada' ? 'portada' : section);
       return;
     }
-    if (section === 'telefono') {
+    // Teléfono/WhatsApp/Instagram/Tagline: son todos "cómo te encuentran y
+    // te presentás" — un solo scope 'contacto' en el mismo sheet, en vez de
+    // repartidos entre el modal general y la sección de diseño de página.
+    if (['telefono', 'whatsapp', 'instagram', 'tagline'].includes(section)) {
       openGeneralProfileEditor('info');
-      setEditInfoScope('telefono');
+      setEditInfoScope('contacto');
       return;
     }
     if (section === 'descripcion') {
@@ -578,7 +595,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       setHorarioModal(true);
       return;
     }
-    if (['slug', 'tagline', 'instagram', 'whatsapp'].includes(section)) {
+    // slug: es URL/diseño, se queda en la sección de diseño de página.
+    if (section === 'slug') {
       setPublicPageForm({
         slug: tiendaInfo.slug || '',
         tagline: tiendaInfo.tagline || '',
@@ -602,10 +620,11 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     if (paginaGuardadaRef.current === paginaStr) return;
     paginaGuardadaRef.current = paginaStr;
     setPaginaForm({
-      template:   tienda.pagina.template   ?? 'minimal',
-      color:      tienda.pagina.color      ?? '#00b8d9',
-      modoOscuro: tienda.pagina.modoOscuro ?? false,
-      secciones:  tienda.pagina.secciones  ?? {},
+      template:        tienda.pagina.template        ?? 'commerce-modern',
+      color:           tienda.pagina.color           ?? '#e4002b',
+      colorSecundario: tienda.pagina.colorSecundario  ?? null,
+      modoOscuro:      tienda.pagina.modoOscuro       ?? false,
+      secciones:       tienda.pagina.secciones        ?? {},
     });
   }, [tienda]);
 
@@ -698,38 +717,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     }
   };
 
-  const fetchDemandas = async () => {
-    if (mockMode) return;
-    setLoading(true);
-    try {
-      const res = await apiFetch(`${API_BASE}/demandas`, {
-        authRequired: true,
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const activas = data.filter(d => d.estado === 'activa');
-        setDemandas(activas);
-        const lastSeen = Number(localStorage.getItem(LAST_FEED_KEY) || 0);
-        const nuevas = activas.filter(d => d.createdAt && new Date(d.createdAt).getTime() > lastSeen).length;
-        setNewDemandasCount(nuevas);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchMisRespuestas = async () => {
-    if (mockMode) return;
-    try {
-      const res = await apiFetch(`${API_BASE}/respuestas?tiendaId=${tiendaData.id}`, {
-        authRequired: true,
-      });
-      if (res.ok) setMisRespuestas(await res.json());
-    } catch { /* silencioso */ }
-  };
-
   const fetchInbox = async () => {
     if (mockMode) return;
     const storeId = tienda?.id || tiendaData?.id;
@@ -750,7 +737,10 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     if (mockMode) return;
     setLoadingProductos(true);
     try {
-      const res = await apiFetch(`${API_BASE}/ofertas?tiendaId=${tiendaData.id}`, { authRequired: true });
+      // all=1: el dueño ve también vencidas/ocultas en su panel (para poder
+      // reactivarlas); el listado público (GET ?slug=...) sigue filtrando
+      // solo vigentes del lado del backend.
+      const res = await apiFetch(`${API_BASE}/ofertas?tiendaId=${tiendaData.id}&all=1`, { authRequired: true });
       if (res.ok) {
         const data = await res.json();
         cacheSet(PROD_CACHE_KEY, data, 10 * 60 * 1000);
@@ -835,14 +825,10 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     }
   };
 
-  const yaRespondio = (demandaId) => misRespuestas.some(r => String(r.demandaId) === String(demandaId));
-
   const toggleMockMode = () => {
     if (!mockMode) {
       setMisProductos(MOCK_PRODUCTOS);
       setInboxConvos(MOCK_INBOX);
-      setDemandas(MOCK_DEMANDAS);
-      setMisRespuestas(MOCK_RESPUESTAS);
       setHistorialPagos(MOCK_HISTORIAL_PAGOS);
       setAiData({ insights: [
         { prioridad: 'alta', titulo: 'Actualizar precios de herramientas', descripcion: 'Los precios de taladros y amoladoras están por debajo del mercado local. Subir entre 8-12% aumentaría el margen sin afectar la conversión.' },
@@ -852,8 +838,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     } else {
       setMisProductos([]);
       setInboxConvos([]);
-      setDemandas([]);
-      setMisRespuestas([]);
       setHistorialPagos([]);
       setAiData(null);
     }
@@ -885,128 +869,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     }
   };
 
-  // Sube un adjunto (imagen o video) a R2 y devuelve { url, type }
-  const uploadAdjunto = async (item) => {
-    if (!item.file) return null;
-    const type = item.type; // 'image' | 'video'
-    const base64 = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result.split(',')[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(item.file);
-    });
-    const res = await apiFetch(`${API_BASE}/upload`, {
-      method: 'POST',
-      authRequired: true,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName: item.file.name, fileData: base64, contentType: item.file.type }),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return { url: data.url, type };
-  };
-
-  const handleAdjuntosChange = (e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    const MAX = 4;
-    const remaining = MAX - adjuntosRespuesta.length;
-    files.slice(0, remaining).forEach(file => {
-      const type = file.type.startsWith('video/') ? 'video' : 'image';
-      const preview = URL.createObjectURL(file);
-      setAdjuntosRespuesta(prev => prev.length < MAX ? [...prev, { file, preview, type }] : prev);
-    });
-    e.target.value = '';
-  };
-
-  const removeAdjunto = (idx) => {
-    setAdjuntosRespuesta(prev => {
-      URL.revokeObjectURL(prev[idx]?.preview);
-      return prev.filter((_, i) => i !== idx);
-    });
-  };
-
-  const handleResponder = async () => {
-    if (!msgRespuesta.trim()) return;
-    setRespondiendo(true);
-    setSubmitError(null);
-    try {
-      // Subir adjuntos primero
-      const adjuntosSubidos = (
-        await Promise.all(adjuntosRespuesta.map(uploadAdjunto))
-      ).filter(Boolean);
-
-      const res = await apiFetch(`${API_BASE}/respuestas`, {
-        method: 'POST',
-        authRequired: true,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          demandaId: selectedDemanda.id,
-          demandaTitulo: selectedDemanda.titulo,
-          tiendaId: tiendaData.id,
-          tiendaNombre: tiendaData.nombre || tiendaInfo.nombre,
-          tiendaFoto: tiendaData.foto || tiendaInfo.foto || null,
-          tiendaRating: tiendaData.rating || tiendaInfo.rating || null,
-          tiendaHorario: tiendaData.horario || tiendaInfo.horario || null,
-          tiendaDireccion: tiendaData.direccion || tiendaInfo.direccion || null,
-          tiendaCiudad: tiendaData.ciudad || tiendaInfo.ciudad || null,
-          tiendaTelefono: tiendaData.telefono || tiendaInfo.telefono || null,
-          mensaje: msgRespuesta.trim(),
-          precio: precioRespuesta ? Number(precioRespuesta) : null,
-          adjuntos: adjuntosSubidos,
-          matchType: matchType || null,
-        }),
-      });
-      const resData = await res.json();
-      if (!res.ok) throw new Error(resData.error || 'Error al enviar');
-      const nueva = resData;
-      setMisRespuestas(prev => [nueva, ...prev]);
-      setMsgRespuesta('');
-      setPrecioRespuesta('');
-      setAdjuntosRespuesta([]);
-      setMatchType(null);
-      setSubmitOk(true);
-      setTimeout(() => setSubmitOk(false), 3000);
-    } catch (err) {
-      setSubmitError(err.message);
-    } finally {
-      setRespondiendo(false);
-    }
-  };
-
-  // Categorías raíz presentes en las demandas actuales
-  const categoriasFeed = allCategories.filter(c =>
-    c.parentId === null &&
-    demandas.some(d => {
-      if (!d.categoryId) return false;
-      const descendants = getAllDescendants(c.id, allCategories);
-      return d.categoryId === c.id || descendants.includes(d.categoryId);
-    })
-  );
-
-  const demandasFiltradas = demandas
-    .filter(d => {
-      const matchSearch = d.titulo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (d.descripcion || '').toLowerCase().includes(searchQuery.toLowerCase());
-      const matchRubro = filterRubro === 'todas' || (() => {
-        if (!d.categoryId) return false;
-        const descendants = getAllDescendants(filterRubro, allCategories);
-        return d.categoryId === filterRubro || descendants.includes(d.categoryId);
-      })();
-      const matchEstado = feedEstado === 'todas' ||
-        (feedEstado === 'nuevas' && !yaRespondio(d.id)) ||
-        (feedEstado === 'respondidas' && yaRespondio(d.id));
-      return matchSearch && matchRubro && matchEstado;
-    })
-    .sort((a, b) => {
-      if (feedSort === 'presupuesto') return (b.presupuesto?.max || 0) - (a.presupuesto?.max || 0);
-      if (feedSort === 'urgentes') {
-        const uA = a.urgente ? 1 : 0, uB = b.urgente ? 1 : 0;
-        return uB - uA || (b.ts || 0) - (a.ts || 0);
-      }
-      return (b.ts || 0) - (a.ts || 0);
-    });
-
   const tiendaInfo = tienda || {
     nombre: tiendaData?.nombre || '',
     rubros: tiendaData?.rubros || [],
@@ -1016,6 +878,23 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     telefono: tiendaData?.telefono || '',
     horarios: tiendaData?.horarios || null,
   };
+
+  // Inyecta las mismas vars --tp-* que usa la tienda pública real (mismo
+  // mecanismo que TiendaPublicaRenderer/OfertaIndividual: deriveColorPalette
+  // a partir del color de marca elegido en Diseño) — así el hero de Mi
+  // Tienda usa el color real, no un bordó fijo sin relación con la marca.
+  // Vive a nivel StoreApp (no dentro de PerfilScreen) porque PerfilScreen
+  // se invoca como función plana condicionalmente (`screen === 'perfil' &&
+  // PerfilScreen()`, no como <PerfilScreen/>) — un hook ahí adentro entra y
+  // sale del conteo de hooks de StoreApp según la pantalla activa, lo que
+  // rompe las reglas de hooks ("Rendered fewer hooks than expected").
+  useLayoutEffect(() => {
+    if (screen !== 'perfil') return undefined;
+    const el = document.documentElement;
+    const vars = deriveColorPalette(tiendaInfo?.pagina?.color || '#e4002b', isDark, tiendaInfo?.pagina?.colorSecundario);
+    Object.entries(vars).forEach(([k, v]) => el.style.setProperty(k, v));
+    return () => Object.keys(vars).forEach((k) => el.style.removeProperty(k));
+  }, [screen, tiendaInfo?.pagina?.color, tiendaInfo?.pagina?.colorSecundario, isDark]);
 
   const estaAbiertoAhora = (horarios) => {
     if (!horarios) return null;
@@ -1052,7 +931,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       {actionSlot}
       <button
         onClick={toggleTheme}
-        className="ui-icon-btn hover:bg-slate-100 dark:hover:bg-white/8 text-slate-500 dark:text-slate-400 transition-colors shrink-0"
+        className="ui-icon-btn hover:bg-surface-card-2 dark:hover:bg-white/8 text-ink-dim transition-colors shrink-0"
         aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
       >
         {isDark ? <Sun className="w-4.5 h-4.5 text-amber-400" /> : <Moon className="w-4.5 h-4.5" />}
@@ -1075,12 +954,12 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     secondarySlot = null,
     hideActionsOnMobile = false,
   }) => (
-    <div className="bg-white dark:bg-slate-900 sticky top-0 z-20 shrink-0">
+    <div className="bg-surface-card sticky top-0 z-20 shrink-0">
       <div className="px-4 lg:px-8 h-14 lg:h-16 flex items-center gap-3 border-b border-slate-100 dark:border-white/8">
 
         {/* Back o logo en mobile */}
         {onBack ? (
-          <button onClick={onBack} className="ui-icon-btn hover:bg-slate-100 dark:hover:bg-white/8 text-slate-500 shrink-0 -ml-1">
+          <button onClick={onBack} className="ui-icon-btn hover:bg-surface-card-2 dark:hover:bg-white/8 text-ink-dim shrink-0 -ml-1">
             <ArrowLeft className="w-5 h-5" />
           </button>
         ) : (
@@ -1095,7 +974,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         {/* Título + subtítulo */}
         <div className="flex-1 min-w-0">
           <h1 className="font-black text-[15px] lg:text-lg leading-tight truncate">{title}</h1>
-          {subtitle && <p className="text-[11px] text-slate-400 font-medium leading-none mt-0.5 truncate hidden lg:block">{subtitle}</p>}
+          {subtitle && <p className="text-[11px] text-ink-dim font-medium leading-none mt-0.5 truncate hidden lg:block">{subtitle}</p>}
         </div>
 
         {/* Acciones */}
@@ -1103,7 +982,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           {actionSlot}
           <button
             onClick={toggleTheme}
-            className="ui-icon-btn hover:bg-slate-100 dark:hover:bg-white/8 text-slate-400 transition-colors hidden lg:inline-flex"
+            className="ui-icon-btn hover:bg-surface-card-2 dark:hover:bg-white/8 text-ink-dim transition-colors hidden lg:inline-flex"
             title={isDark ? 'Modo claro' : 'Modo oscuro'}
           >
             {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
@@ -1125,60 +1004,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       )}
     </div>
   );
-
-  const MATCH_TYPE_META = {
-    'exacto-nuevo': {
-      label: 'Exacto nuevo',
-      desc: 'Original, sellado o sin estrenar',
-      Icon: Package,
-      tone: 'brand',
-    },
-    'exacto-usado': {
-      label: 'Exacto usado',
-      desc: 'Segunda mano, en buenas condiciones',
-      Icon: RotateCcw,
-      tone: 'brand',
-    },
-    reacondicionado: {
-      label: 'Reacondicionado',
-      desc: 'Revisado, reparado o restaurado',
-      Icon: Wrench,
-      tone: 'brand',
-    },
-    compatible: {
-      label: 'Compatible',
-      desc: 'Mismo uso o función, otra marca o modelo',
-      Icon: Link2,
-      tone: 'violet',
-    },
-    similar: {
-      label: 'Similar',
-      desc: 'Parecido, sin asegurar que sea exactamente igual',
-      Icon: Copy,
-      tone: 'violet',
-    },
-    imitacion: {
-      label: 'Imitación o genérico',
-      desc: 'Copia, réplica o versión no original',
-      Icon: Tag,
-      tone: 'violet',
-    },
-  };
-
-  const MatchTypeBadge = ({ type, className = '' }) => {
-    const meta = MATCH_TYPE_META[type];
-    if (!meta) return null;
-    const Icon = meta.Icon;
-    const toneClass = meta.tone === 'brand'
-      ? 'bg-brand/10 text-brand-dark dark:bg-brand/15 dark:text-brand'
-      : 'bg-violet-100 text-violet-700 dark:bg-violet-500/10 dark:text-violet-400';
-    return (
-      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${toneClass} ${className}`.trim()}>
-        <Icon className="w-3.5 h-3.5" />
-        {meta.label}
-      </span>
-    );
-  };
 
   const VENTAJA_TIPS = {
     precio:         'Tu precio es menor o más conveniente que el de la competencia.',
@@ -1208,98 +1033,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     );
   };
 
-  // ── Match Types — jerarquía de relevancia del producto ────────────────────
-  // priority: menor = más relevante (se usa para ordenar respuestas en App.jsx)
-
-  // ── MatchTypeSelector — selector condicional 2 pasos ──────────────────────
-  const MatchTypeSelector = ({ value, onChange }) => {
-    const step = matchTypeStep;
-    const setStep = setMatchTypeStep;
-    const select = (v) => { onChange(v); };
-    const back = () => { onChange(null); setStep('root'); };
-
-    const btnBase = 'w-full flex items-start gap-3 p-3.5 rounded-xl border-2 text-left transition-all active:scale-[0.98]';
-    const btnActive = (selected, tone = 'brand') => selected
-      ? tone === 'brand'
-        ? 'border-brand bg-brand/8 dark:bg-brand/10'
-        : 'border-violet-400 bg-violet-50 dark:bg-violet-500/10'
-      : 'border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20 bg-white dark:bg-white/4';
-
-    const renderOption = (id) => {
-      const meta = MATCH_TYPE_META[id];
-      const Icon = meta.Icon;
-      const selected = value === id;
-      const accent = meta.tone === 'brand'
-        ? 'text-brand-dark dark:text-brand'
-        : 'text-violet-700 dark:text-violet-400';
-      const iconWrap = meta.tone === 'brand'
-        ? 'bg-brand/10 text-brand'
-        : 'bg-violet-100 text-violet-500 dark:bg-violet-500/10 dark:text-violet-400';
-
-      return (
-        <button key={id} onClick={() => select(id)} className={`${btnBase} ${btnActive(selected, meta.tone)}`}>
-          <div className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${iconWrap}`}>
-            <Icon className="w-4.5 h-4.5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className={`font-bold text-sm ${selected ? accent : 'text-slate-900 dark:text-white'}`}>{meta.label}</p>
-            <p className="text-xs text-slate-400 mt-0.5">{meta.desc}</p>
-          </div>
-          {selected && <CheckCircle className={`w-4 h-4 ml-auto shrink-0 mt-0.5 ${meta.tone === 'brand' ? 'text-brand' : 'text-violet-500'}`} />}
-        </button>
-      );
-    };
-
-    if (step === 'root') return (
-      <div className="space-y-2">
-        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">¿Cómo coincide tu producto?</p>
-        <button className={`${btnBase} ${btnActive(step === 'exacto', 'brand')}`} onClick={() => setStep('exacto')}>
-          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
-            <CheckCircle className="w-4.5 h-4.5" />
-          </div>
-          <div>
-            <p className="font-bold text-sm text-slate-900 dark:text-white">Tengo exactamente lo que pide</p>
-            <p className="text-xs text-slate-400 mt-0.5">El mismo producto, misma marca o especificación</p>
-          </div>
-        </button>
-        <button className={`${btnBase} ${btnActive(step === 'similar', 'violet')}`} onClick={() => setStep('similar')}>
-          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-violet-500 dark:bg-violet-500/10 dark:text-violet-400">
-            <Sparkles className="w-4.5 h-4.5" />
-          </div>
-          <div>
-            <p className="font-bold text-sm text-slate-900 dark:text-white">No es exactamente, pero puede servir</p>
-            <p className="text-xs text-slate-400 mt-0.5">Compatible, similar, alternativa o genérico</p>
-          </div>
-        </button>
-      </div>
-    );
-
-    if (step === 'exacto') return (
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 mb-3">
-          <button onClick={back} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/8 transition-colors">
-            <ArrowLeft className="w-4 h-4 text-slate-500" />
-          </button>
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Es el mismo producto — ¿en qué estado?</p>
-        </div>
-        {['exacto-nuevo', 'exacto-usado', 'reacondicionado'].map(renderOption)}
-      </div>
-    );
-
-    // similar
-    return (
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 mb-3">
-          <button onClick={back} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/8 transition-colors">
-            <ArrowLeft className="w-4 h-4 text-slate-500" />
-          </button>
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">¿Qué tipo de alternativa es?</p>
-        </div>
-        {['compatible', 'similar', 'imitacion'].map(renderOption)}
-      </div>
-    );
-  };
-
   // ── PaywallModal ──────────────────────────────────────────────────────────
   const PaywallModal = () => (
     <PaywallModalUI
@@ -1311,152 +1044,13 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       renovError={renovError}
     />
   );
-  const _PaywallModalOld = () => (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-[#111827] rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
-        {/* Header */}
-        <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 text-white relative">
-          <button onClick={() => setShowPaywall(false)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
-            <X className="w-4 h-4" />
-          </button>
-          <div className="w-12 h-12 bg-rose-500/20 rounded-2xl flex items-center justify-center mb-3">
-            <Lock className="w-6 h-6 text-rose-400" />
-          </div>
-          <h2 className="font-black text-xl mb-1">Suscripción vencida</h2>
-          <p className="text-slate-300 text-sm">
-            {tiendaData?.suscripcion?.vence
-              ? `Tu plan venció el ${new Date(tiendaData.suscripcion.vence).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}.`
-              : 'Tu plan ha vencido.'}
-            {' '}Renovalo para seguir respondiendo demandas.
-          </p>
-        </div>
-
-        <div className="p-5 space-y-3">
-          {/* Plan mensual */}
-          <button
-            onClick={() => handleRenovar('mensual')}
-            disabled={renovando}
-            className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-slate-200 dark:border-white/10 hover:border-brand dark:hover:border-brand transition-all group"
-          >
-            <div className="text-left">
-              <p className="font-bold text-slate-900 dark:text-white">Plan Mensual</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">1 mes de acceso + 1 de regalo al renovar</p>
-            </div>
-            <div className="text-right shrink-0 ml-4">
-              <p className="font-black text-lg text-slate-900 dark:text-white">${PRECIO_MENSUAL.toLocaleString()}</p>
-              <p className="text-xs text-slate-400">ARS / mes</p>
-            </div>
-          </button>
-
-          {/* Plan anual */}
-          <button
-            onClick={() => handleRenovar('anual')}
-            disabled={renovando}
-            className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-brand dark:border-brand bg-brand/8 dark:bg-brand/8 hover:bg-brand/15 dark:hover:bg-brand/15 transition-all relative"
-          >
-            <div className="absolute -top-2.5 left-4 bg-brand text-white text-[10px] font-black px-2.5 py-0.5 rounded-full">
-              AHORRÁS 20%
-            </div>
-            <div className="text-left">
-              <p className="font-bold text-slate-900 dark:text-white">Plan Anual</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Facturado ${PRECIO_ANUAL.toLocaleString()} — 12 meses + 1 de regalo</p>
-            </div>
-            <div className="text-right shrink-0 ml-4">
-              <p className="font-black text-lg text-brand-dark dark:text-brand">${PRECIO_ANUAL_MES.toLocaleString()}</p>
-              <p className="text-xs text-slate-400">ARS / mes</p>
-            </div>
-          </button>
-
-          {renovando && (
-            <div className="flex items-center justify-center gap-2 text-slate-500 text-sm py-2">
-              <Loader2 className="w-4 h-4 animate-spin" /> Redirigiendo a MercadoPago...
-            </div>
-          )}
-          {renovError && (
-            <p className="text-rose-500 text-sm text-center">{renovError}</p>
-          )}
-
-          <p className="text-center text-slate-400 text-xs pt-1">
-            Pago seguro con MercadoPago · Podés cancelar cuando quieras
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-
   // ── PremiumModal ──────────────────────────────────────────────────────────
   const PremiumModal = () => (
     <PremiumModalUI
       onClose={() => setShowPremiumModal(false)}
-      onUpgrade={() => { setShowPremiumModal(false); handleRenovar('premium'); }}
+      onUpgrade={(metodo) => { setShowPremiumModal(false); if (metodo === 'transferencia') { setTransferenciaPlan('premium'); setShowTransferenciaModal(true); } else { handleRenovar('premium'); } }}
       renovando={renovando}
     />
-  );
-  const _PremiumModalOld = () => (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-[#111827] rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
-        {/* Header */}
-        <div className="bg-gradient-to-br from-amber-500 to-amber-700 p-6 text-white relative">
-          <button onClick={() => setShowPremiumModal(false)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
-            <X className="w-4 h-4" />
-          </button>
-          <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center mb-3">
-            <Sparkles className="w-6 h-6 text-white" />
-          </div>
-          <h2 className="font-black text-xl mb-1">Upgrade a Premium</h2>
-          <p className="text-amber-100 text-sm">
-            Desbloqueá todo el potencial de tu negocio en Lokal.
-          </p>
-        </div>
-
-        <div className="p-5 space-y-4">
-          {/* Beneficios */}
-          <div className="space-y-2">
-            {[
-              { icon: Infinity, text: 'Productos ilimitados' },
-              { icon: TrendingUp, text: 'Prioridad en búsquedas' },
-              { icon: Zap, text: 'IA Insights y consejos' },
-              { icon: Award, text: 'Badge premium dorada' },
-              { icon: MessageSquare, text: 'Búsquedas laborales ilimitadas' },
-              { icon: Phone, text: 'Soporte prioritario' },
-            ].map(({ icon: Icon, text }) => (
-              <div key={text} className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-500/15 flex items-center justify-center shrink-0">
-                  <Icon className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                </div>
-                <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{text}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Precio */}
-          <div className="bg-slate-50 dark:bg-white/5 rounded-2xl p-4 text-center">
-            <p className="text-3xl font-black text-slate-900 dark:text-white">${PRECIO_PREMIUM.toLocaleString()}</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">ARS / mes</p>
-          </div>
-
-          {/* CTA */}
-          <button
-            onClick={() => {
-              setShowPremiumModal(false);
-              handleRenovar('premium');
-            }}
-            disabled={renovando}
-            className="w-full py-3.5 rounded-2xl font-bold text-sm bg-amber-500 hover:bg-amber-600 text-white transition-colors shadow-lg shadow-amber-500/25 disabled:opacity-50"
-          >
-            <Sparkles className="w-4 h-4 inline mr-2" />
-            {renovando ? 'Procesando...' : 'Upgrade a Premium'}
-          </button>
-
-          <button
-            onClick={() => setShowPremiumModal(false)}
-            className="w-full py-3 rounded-2xl font-semibold text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
-          >
-            Ahora no
-          </button>
-        </div>
-      </div>
-    </div>
   );
 
   // ── Sidebar ────────────────────────────────────────────────────────────────
@@ -1474,15 +1068,16 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     };
 
     const navItems = [
-      { label: 'Inicio', icon: Home, id: 'inicio' },
-      ...(isEmprendimiento
-        ? [{ label: 'Demandas', icon: Package, id: 'feed' }]
-        : [{ label: 'Demandas', icon: Package, id: 'feed', newBadge: newDemandasCount }]
-      ),
-      { label: 'Mensajes', icon: MessageSquare, id: 'mensajes' },
-      { label: 'Mis productos', icon: Zap, id: 'productos', badge: misProductos.filter(o => o.activa !== false).length || null },
-      ...(isEmpresa ? [{ label: 'Estadísticas', icon: TrendingUp, id: 'stats' }] : []),
-      ...(isEmpresa ? [{ label: 'Suscripción', icon: CreditCard, id: 'suscripcion' }] : []),
+      // "Inicio" (feed marketplace multi-tienda) se sacó: no aplica a la
+      // gestión de un mono-negocio.
+      ...(isModuleActive(tiendaData, 'mensajes') ? [{ label: 'Mensajes', icon: MessageSquare, id: 'mensajes' }] : []),
+      { label: isModuleActive(tiendaData, 'catalogo') ? 'Mis productos' : 'Ofertas', icon: Zap, id: 'productos', badge: misProductos.filter(o => o.activa !== false && o.visible !== false).length || null },
+      // Estadísticas y Suscripción: transversales a todo plan/rubro (la
+      // suscripción es 1 mes gratis + monto por rubro que fija el admin
+      // general). Antes gateadas con isEmpresa, lo que las ocultaba a las
+      // tiendas Emprendimiento — que es justo el caso más común.
+      { label: 'Estadísticas', icon: TrendingUp, id: 'stats' },
+      { label: 'Suscripción', icon: CreditCard, id: 'suscripcion' },
       { label: isEmprendimiento ? 'Mi perfil' : 'Mi tienda', icon: Store, id: 'perfil' },
       { label: 'Diseño de página', icon: Palette, id: 'mi-pagina' },
     ];
@@ -1490,7 +1085,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     return (
       <>
       <div
-        className="hidden lg:flex lg:flex-col bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-white/8 h-screen fixed top-0 left-0 z-[200] overflow-hidden"
+        className="hidden lg:flex lg:flex-col bg-surface-card border-r border-slate-100 dark:border-white/8 h-screen fixed top-0 left-0 z-[200] overflow-hidden"
         style={{ width: expanded ? W_EXPANDED : W_COLLAPSED, transition: 'width 380ms cubic-bezier(0.16,1,0.3,1)' }}
       >
         {/* Logo + pin */}
@@ -1498,7 +1093,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           <div className={`flex items-center h-14 px-3 overflow-hidden gap-1 ${expanded ? '' : 'justify-center'}`}>
             {expanded && (
               <div className="flex flex-col flex-1 min-w-0 px-1">
-                <LogoFull size={16} className="dark:hidden" color="#0B132B" />
+                <LogoFull size={16} className="dark:hidden" color="#2A0509" />
                 <LogoFull size={16} className="hidden dark:inline-flex" light />
                 <p className="text-[10px] text-brand font-semibold mt-0.5 truncate">Panel de tienda</p>
               </div>
@@ -1506,7 +1101,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             <button
               onClick={togglePin}
               title={sidebarPinned ? 'Soltar sidebar' : 'Fijar sidebar'}
-              className={`ui-chip ui-icon-btn shrink-0 transition-colors ${sidebarPinned ? 'text-primary bg-primary/10' : 'text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/8'}`}
+              className={`ui-chip ui-icon-btn shrink-0 transition-colors ${sidebarPinned ? 'text-primary bg-primary/10' : 'text-ink-dim hover:text-ink dark:hover:text-white hover:bg-surface-card-2 dark:hover:bg-white/8'}`}
             >
               <PanelLeft className="w-4 h-4" />
             </button>
@@ -1535,7 +1130,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         {/* Nav */}
         <nav className="flex-1 py-2 px-3 overflow-y-auto overflow-x-hidden">
           {navItems.map(({ label, icon: Icon, id, badge, newBadge }) => {
-            const isActive = id === 'feed' ? (screen === 'feed' || screen === 'demanda-detail') : screen === id;
+            const isActive = screen === id;
             return (
               <button
                 key={id}
@@ -1549,8 +1144,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 onMouseLeave={() => setTooltip(null)}
                 className={`w-full flex items-center ui-chip transition-colors overflow-hidden mb-0.5 ${
                   isActive
-                    ? 'bg-slate-100 dark:bg-white/8 text-slate-900 dark:text-white font-bold'
-                    : 'text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300'
+                    ? 'bg-surface-card-2 dark:bg-white/8 text-ink font-bold'
+                    : 'text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/5 hover:text-ink dark:hover:text-ink-dim'
                 }`}
                 style={{ height: 42 }}
               >
@@ -1570,7 +1165,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 </span>
                 {badge > 0 && (
                   <span
-                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full mr-2 shrink-0 ${isActive ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-slate-400'}`}
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full mr-2 shrink-0 ${isActive ? 'bg-white/20 text-white' : 'bg-surface-card-2 dark:bg-white/10 text-ink-dim'}`}
                     style={{ opacity: expanded ? 1 : 0, transition: 'opacity 160ms ease', transitionDelay: expanded ? '80ms' : '0ms' }}
                   >
                     {badge}
@@ -1597,7 +1192,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           )}
           {tiendaInfo.slug && (
             <a
-              href={`/t/${tiendaInfo.slug}`}
+              href={`/${tiendaInfo.slug}`}
               target="_blank"
               rel="noopener noreferrer"
               onMouseEnter={e => { if (!expanded) { const r = e.currentTarget.getBoundingClientRect(); setTooltip({ label: 'Ver mi tienda', y: r.top + r.height / 2 }); } }}
@@ -1614,7 +1209,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             onClick={toggleTheme}
             onMouseEnter={e => { if (!expanded) { const r = e.currentTarget.getBoundingClientRect(); setTooltip({ label: isDark ? 'Modo claro' : 'Modo oscuro', y: r.top + r.height / 2 }); } }}
             onMouseLeave={() => setTooltip(null)}
-            className="w-full flex items-center ui-chip text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300 transition-colors overflow-hidden"
+            className="w-full flex items-center ui-chip text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/5 hover:text-ink dark:hover:text-ink-dim transition-colors overflow-hidden"
             style={{ height: 42 }}
           >
             <div className="ui-icon-btn shrink-0">
@@ -1629,7 +1224,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
               onClick={toggleMockMode}
               onMouseEnter={e => { if (!expanded) { const r = e.currentTarget.getBoundingClientRect(); setTooltip({ label: mockMode ? 'Mock ON' : 'Mock', y: r.top + r.height / 2 }); } }}
               onMouseLeave={() => setTooltip(null)}
-              className={`w-full flex items-center ui-chip transition-colors overflow-hidden ${mockMode ? 'text-violet-600 bg-violet-50 dark:bg-violet-500/10 hover:bg-violet-100 dark:hover:bg-violet-500/20' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300'}`}
+              className={`w-full flex items-center ui-chip transition-colors overflow-hidden ${mockMode ? 'text-violet-600 bg-violet-50 dark:bg-violet-500/10 hover:bg-violet-100 dark:hover:bg-violet-500/20' : 'text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/5 hover:text-ink dark:hover:text-ink-dim'}`}
               style={{ height: 42 }}
             >
               <div className="ui-icon-btn shrink-0"><FlaskConical className="w-4.5 h-4.5" /></div>
@@ -1649,8 +1244,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             <span className="text-sm font-semibold whitespace-nowrap" style={{ opacity: expanded ? 1 : 0, transition: 'opacity 160ms ease', transitionDelay: expanded ? '80ms' : '0ms' }}>Salir</span>
           </button>
           <div className="pt-2 flex items-center gap-1.5 px-1" style={{ opacity: expanded ? 0.25 : 0, transition: 'opacity 160ms ease' }}>
-            <span className="text-[10px] text-slate-400">por</span>
-            <KtrlMark className="h-2.5 text-slate-400" />
+            <span className="text-[10px] text-ink-dim">por</span>
+            <KtrlMark className="h-2.5 text-ink-dim" />
           </div>
         </div>
       </div>
@@ -1661,7 +1256,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           className="fixed z-[9999] pointer-events-none hidden lg:block"
           style={{ left: W_COLLAPSED + 8, top: tooltip.y, transform: 'translateY(-50%)' }}
         >
-          <div className="relative flex items-center gap-2 bg-slate-900 dark:bg-slate-700 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-xl whitespace-nowrap">
+          <div className="relative flex items-center gap-2 bg-ink dark:bg-surface-card-2 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-xl whitespace-nowrap">
             <span className="absolute right-full top-1/2 -translate-y-1/2 w-0 h-0 border-y-[5px] border-y-transparent border-r-[6px] border-r-slate-900 dark:border-r-slate-700" />
             {tooltip.label}
             {tooltip.badge > 0 && (
@@ -1676,707 +1271,60 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
   // ── Bottom Nav Mobile ──────────────────────────────────────────────────────
   const BottomNav = () => (screen === 'mi-pagina' || (screen === 'mensajes' && inboxMobileView === 'chat')) ? null : (
-    <div style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-white/8 z-[4500]">
+    <div style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} className="lg:hidden fixed bottom-0 left-0 right-0 bg-surface-card border-t border-slate-100 dark:border-white/8 z-[4500]">
       <div className="flex items-end justify-around px-2 pt-2 pb-3 max-w-md mx-auto">
         <button onClick={() => { navigateTo('productos'); setCreateSheetOpen(false); setCreateSheetClosing(false); }} className="flex flex-col items-center gap-1 min-w-[56px]">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${screen === 'productos' ? 'bg-primary/10 dark:bg-primary/15' : 'hover:bg-slate-100 dark:hover:bg-white/8'}`}>
-            <Tag className={`w-5 h-5 ${screen === 'productos' ? 'text-primary' : 'text-slate-500 dark:text-slate-400'}`} />
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${screen === 'productos' ? 'bg-primary/10 dark:bg-primary/15' : 'hover:bg-surface-card-2 dark:hover:bg-white/8'}`}>
+            <Tag className={`w-5 h-5 ${screen === 'productos' ? 'text-primary' : 'text-ink-dim'}`} />
           </div>
-          <span className={`text-[10px] font-semibold ${screen === 'productos' ? 'text-primary' : 'text-slate-400'}`}>Productos</span>
+          <span className={`text-[10px] font-semibold ${screen === 'productos' ? 'text-primary' : 'text-ink-dim'}`}>{isModuleActive(tiendaData, 'catalogo') ? 'Productos' : 'Ofertas'}</span>
         </button>
+        {/* Segundo slot: Mensajes si el módulo está activo (rubro tienda);
+            si no (rubro ofertas tipo Bovril), Estadísticas — así el nav
+            mantiene 5 items balanceados alrededor del FAB central en ambos
+            casos, sin quedar descentrado. */}
+        {isModuleActive(tiendaData, 'mensajes') ? (
         <button onClick={() => { navigateTo('mensajes'); setCreateSheetOpen(false); setCreateSheetClosing(false); }} className="flex flex-col items-center gap-1 min-w-[56px]">
-          <div className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${screen === 'mensajes' ? 'bg-primary/10 dark:bg-primary/15' : 'hover:bg-slate-100 dark:hover:bg-white/8'}`}>
-            <MessageSquare className={`w-5 h-5 ${screen === 'mensajes' ? 'text-primary' : 'text-slate-500 dark:text-slate-400'}`} />
+          <div className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${screen === 'mensajes' ? 'bg-primary/10 dark:bg-primary/15' : 'hover:bg-surface-card-2 dark:hover:bg-white/8'}`}>
+            <MessageSquare className={`w-5 h-5 ${screen === 'mensajes' ? 'text-primary' : 'text-ink-dim'}`} />
             {unreadTotal > 0 && screen !== 'mensajes' && (
               <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-brand text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none">
                 {unreadTotal > 99 ? '99+' : unreadTotal}
               </span>
             )}
           </div>
-          <span className={`text-[10px] font-semibold ${screen === 'mensajes' ? 'text-primary' : 'text-slate-400'}`}>Mensajes</span>
+          <span className={`text-[10px] font-semibold ${screen === 'mensajes' ? 'text-primary' : 'text-ink-dim'}`}>Mensajes</span>
         </button>
+        ) : (
+        <button onClick={() => { navigateTo('stats'); setCreateSheetOpen(false); setCreateSheetClosing(false); }} className="flex flex-col items-center gap-1 min-w-[56px]">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${screen === 'stats' ? 'bg-primary/10 dark:bg-primary/15' : 'hover:bg-surface-card-2 dark:hover:bg-white/8'}`}>
+            <TrendingUp className={`w-5 h-5 ${screen === 'stats' ? 'text-primary' : 'text-ink-dim'}`} />
+          </div>
+          <span className={`text-[10px] font-semibold ${screen === 'stats' ? 'text-primary' : 'text-ink-dim'}`}>Estadísticas</span>
+        </button>
+        )}
         <button onClick={() => createSheetOpen ? closeCreateSheet() : setCreateSheetOpen(true)} className="flex flex-col items-center gap-1 min-w-[56px] -mt-3">
-          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg transition-all ${createSheetOpen ? 'bg-slate-700 dark:bg-slate-600 rotate-45' : 'bg-primary hover:bg-primary-hover'}`}>
+          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg transition-all ${createSheetOpen ? 'bg-ink-dim rotate-45' : 'bg-primary hover:bg-primary-hover'}`}>
             <Plus className="w-7 h-7 text-white" />
           </div>
-          <span className="text-[10px] font-semibold text-slate-400">Crear</span>
+          <span className="text-[10px] font-semibold text-ink-dim">Crear</span>
         </button>
         <button onClick={() => { navigateTo('perfil'); setCreateSheetOpen(false); setCreateSheetClosing(false); }} className="flex flex-col items-center gap-1 min-w-[56px]">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${screen === 'perfil' ? 'bg-primary/10 dark:bg-primary/15' : 'hover:bg-slate-100 dark:hover:bg-white/8'}`}>
-            <Store className={`w-5 h-5 ${screen === 'perfil' ? 'text-primary' : 'text-slate-500 dark:text-slate-400'}`} />
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${screen === 'perfil' ? 'bg-primary/10 dark:bg-primary/15' : 'hover:bg-surface-card-2 dark:hover:bg-white/8'}`}>
+            <Store className={`w-5 h-5 ${screen === 'perfil' ? 'text-primary' : 'text-ink-dim'}`} />
           </div>
-          <span className={`text-[10px] font-semibold ${screen === 'perfil' ? 'text-primary' : 'text-slate-400'}`}>{isEmprendimiento ? 'Mi perfil' : 'Mi tienda'}</span>
+          <span className={`text-[10px] font-semibold ${screen === 'perfil' ? 'text-primary' : 'text-ink-dim'}`}>{isEmprendimiento ? 'Mi perfil' : 'Mi tienda'}</span>
         </button>
         <button onClick={() => setMoreSheetOpen(v => !v)} className="flex flex-col items-center gap-1 min-w-[56px]">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/8 transition-colors">
-            <Menu className="w-5 h-5 text-slate-500 dark:text-slate-400" />
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center hover:bg-surface-card-2 dark:hover:bg-white/8 transition-colors">
+            <Menu className="w-5 h-5 text-ink-dim" />
           </div>
-          <span className="text-[10px] font-semibold text-slate-400">Más</span>
+          <span className="text-[10px] font-semibold text-ink-dim">Más</span>
         </button>
       </div>
     </div>
   );
 
-  const markFeedSeen = () => {
-    localStorage.setItem(LAST_FEED_KEY, String(Date.now()));
-    setNewDemandasCount(0);
-  };
-
-
-  // ── Feed de demandas + Respuestas (fusionado) ─────────────────────────────
-  const FeedScreen = () => {
-    useEffect(() => { markFeedSeen(); }, []);
-
-    const nuevasCount     = demandas.filter(d => !yaRespondio(d.id)).length;
-    const respondídasCount = demandas.filter(d =>  yaRespondio(d.id)).length;
-    const activeFilters   = (feedEstado !== 'todas' ? 1 : 0) + (filterRubro !== 'todas' ? 1 : 0) + (feedSort !== 'recientes' ? 1 : 0);
-
-    const SORT_OPTIONS = [
-      { value: 'recientes',   label: 'Más recientes' },
-      { value: 'presupuesto', label: 'Mayor presupuesto' },
-      { value: 'urgentes',    label: 'Urgentes primero' },
-    ];
-
-    // ── Sidebar Filtros (desktop) ─────────────────────────────────────────
-    const FilterSidebar = () => (
-      <aside className="hidden lg:flex flex-col w-56 xl:w-64 shrink-0 border-r border-slate-200 dark:border-white/8 bg-white dark:bg-slate-900 overflow-y-auto">
-        <div className="p-4 space-y-5">
-
-          {/* Tab demandas / mis respuestas */}
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Vista</p>
-            <div className="flex flex-col gap-1">
-              {[
-                { value: 'feed',       label: 'Demandas',      icon: <Package className="w-3.5 h-3.5" />, count: demandas.length },
-                { value: 'respuestas', label: 'Mis respuestas', icon: <MessageSquare className="w-3.5 h-3.5" />, count: misRespuestas.length },
-              ].map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => setFeedTab(opt.value)}
-                  className={`flex items-center justify-between gap-2 w-full px-3 py-2 rounded-xl text-sm font-semibold transition-all text-left ${feedTab === opt.value ? 'bg-brand/10 text-brand dark:text-brand' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'}`}
-                >
-                  <span className="flex items-center gap-2">{opt.icon}{opt.label}</span>
-                  {opt.count > 0 && <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-lg ${feedTab === opt.value ? 'bg-brand/15 text-brand' : 'bg-slate-100 dark:bg-white/10 text-slate-500'}`}>{opt.count}</span>}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {feedTab === 'feed' && (
-            <>
-              {/* Estado */}
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Estado</p>
-                <div className="flex flex-col gap-0.5">
-                  {[
-                    { value: 'todas',       label: 'Todas',       count: demandas.length },
-                    { value: 'nuevas',      label: 'Sin responder', count: nuevasCount },
-                    { value: 'respondidas', label: 'Respondidas',  count: respondídasCount },
-                  ].map(opt => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setFeedEstado(opt.value)}
-                      className={`flex items-center justify-between gap-2 w-full px-3 py-2 rounded-xl text-sm font-semibold transition-all text-left ${feedEstado === opt.value ? 'bg-brand/10 text-brand' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'}`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${opt.value === 'nuevas' ? 'bg-amber-400' : opt.value === 'respondidas' ? 'bg-brand' : 'bg-slate-300 dark:bg-slate-600'}`} />
-                        {opt.label}
-                      </span>
-                      <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-lg ${feedEstado === opt.value ? 'bg-brand/15 text-brand' : 'bg-slate-100 dark:bg-white/10 text-slate-500'}`}>{opt.count}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Ordenar */}
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Ordenar</p>
-                <div className="flex flex-col gap-0.5">
-                  {SORT_OPTIONS.map(opt => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setFeedSort(opt.value)}
-                      className={`flex items-center gap-2 w-full px-3 py-2 rounded-xl text-sm font-semibold transition-all text-left ${feedSort === opt.value ? 'bg-brand/10 text-brand' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'}`}
-                    >
-                      <ArrowUpDown className="w-3.5 h-3.5 opacity-60" />
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Categorías */}
-              {categoriasFeed.length > 0 && (
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Categoría</p>
-                  <div className="flex flex-col gap-0.5">
-                    <button
-                      onClick={() => setFilterRubro('todas')}
-                      className={`w-full px-3 py-2 rounded-xl text-sm font-semibold transition-all text-left ${filterRubro === 'todas' ? 'bg-brand/10 text-brand' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'}`}
-                    >Todas</button>
-                    {categoriasFeed.map(cat => (
-                      <button
-                        key={cat.id}
-                        onClick={() => setFilterRubro(filterRubro === cat.id ? 'todas' : cat.id)}
-                        className={`flex items-center gap-2 w-full px-3 py-2 rounded-xl text-sm font-semibold transition-all text-left ${filterRubro === cat.id ? 'bg-brand/10 text-brand' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'}`}
-                      >
-                        <CategoryIcon name={cat.icon} className="w-3.5 h-3.5" />
-                        {cat.name.split(' ')[0]}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Clear */}
-              {activeFilters > 0 && (
-                <button
-                  onClick={() => { setFeedEstado('todas'); setFilterRubro('todas'); setFeedSort('recientes'); }}
-                  className="w-full text-center text-xs font-bold text-slate-400 hover:text-danger transition-colors py-1"
-                >
-                  Limpiar filtros
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </aside>
-    );
-
-    // ── Card demanda ──────────────────────────────────────────────────────
-    const DemandaCard = ({ d }) => {
-      const respondida = yaRespondio(d.id);
-      return (
-        <div
-          onClick={() => { setSelectedDemanda(d); setMatchTypeStep('root'); setChatMsgs([]); setChatTexto(''); setScreen('demanda-detail'); }}
-          className={`bg-white dark:bg-slate-900 rounded-3xl border-2 p-5 cursor-pointer hover:shadow-md transition-all active:scale-[0.99] group ${d.urgente ? 'border-danger/20 dark:border-danger/20' : respondida ? 'border-brand/15 dark:border-brand/20' : 'border-slate-100 dark:border-white/10'}`}
-        >
-          <div className="flex gap-4">
-            <div className="relative w-16 h-16 shrink-0">
-              <div className="w-16 h-16 bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 rounded-2xl flex items-center justify-center overflow-hidden">
-                {(d.fotos?.[0] || d.foto)
-                  ? <img src={d.fotos?.[0] || d.foto} alt="" className="w-full h-full object-cover" />
-                  : <Package className="w-7 h-7 text-amber-400" />}
-              </div>
-              {d.urgente && (
-                <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-danger rounded-full flex items-center justify-center shadow-sm">
-                  <Zap className="w-3 h-3 text-white fill-white" />
-                </span>
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2 mb-1">
-                <h3 className="font-bold leading-tight">{d.titulo}</h3>
-                {respondida
-                  ? <span className="flex items-center gap-1 text-xs font-bold text-brand-dark dark:text-brand bg-brand/8 px-2.5 py-1 rounded-xl shrink-0"><CheckCircle className="w-3 h-3" /> Respondida</span>
-                  : d.urgente
-                    ? <span className="flex items-center gap-1 text-xs font-bold text-danger bg-danger/8 px-2.5 py-1 rounded-xl shrink-0"><Zap className="w-3 h-3" /> Urgente</span>
-                    : <span className="text-xs font-bold text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2.5 py-1 rounded-xl shrink-0">Nueva</span>
-                }
-              </div>
-              {d.descripcion && <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-2 mb-2">{d.descripcion}</p>}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-slate-400">{d.tiempoCreado}</span>
-                {d.presupuesto?.max && (
-                  <span className="flex items-center gap-1 text-xs font-semibold text-brand-dark dark:text-brand bg-brand/8 px-2 py-0.5 rounded-lg">
-                    <span className="text-[10px]">hasta</span> ${d.presupuesto.max.toLocaleString()}
-                  </span>
-                )}
-                {(d.categorias || []).slice(0, 2).map(c => (
-                  <span key={c} className="text-xs bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-lg">{c}</span>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="flex justify-end mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
-            <span className="flex items-center gap-1 text-xs font-bold text-brand">
-              {respondida ? 'Ver respuesta' : 'Responder'} <ChevronRight className="w-3.5 h-3.5" />
-            </span>
-          </div>
-        </div>
-      );
-    };
-
-    // ── Card mis respuestas ───────────────────────────────────────────────
-    const RespuestaCard = ({ r }) => {
-      const demandaObj = demandas.find(d => String(d.id) === String(r.demandaId));
-      const hasChat    = r.mensajes?.length > 0;
-      const aceptada   = r.estado === 'aceptada';
-      return (
-        <div className={`bg-white dark:bg-slate-900 rounded-3xl border-2 p-5 transition-all ${aceptada ? 'border-ok/20' : 'border-slate-100 dark:border-white/10'}`}>
-          <div className="flex items-start justify-between gap-3 mb-2">
-            <div className="flex-1 min-w-0">
-              <h3 className="font-bold leading-tight truncate">{r.demandaTitulo || 'Demanda'}</h3>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {aceptada && (
-                <span className="flex items-center gap-1 text-xs font-bold text-ok bg-ok/8 px-2.5 py-1 rounded-xl">
-                  <CheckCircle className="w-3 h-3" /> Aceptada
-                </span>
-              )}
-              <span className="text-xs text-slate-400">{r.tiempoRespuesta || 'Reciente'}</span>
-            </div>
-          </div>
-          {r.matchType && <MatchTypeBadge type={r.matchType} className="mb-2" />}
-          <p className="text-sm text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-white/5 rounded-2xl px-4 py-3 mb-3 leading-relaxed line-clamp-3">{r.mensaje}</p>
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              {r.precio && (
-                <p className="font-bold text-brand-dark dark:text-brand text-sm">$ {r.precio.toLocaleString()}</p>
-              )}
-              {hasChat && (
-                <span className="flex items-center gap-1 text-xs text-brand font-semibold bg-brand/8 px-2.5 py-1 rounded-xl">
-                  <MessageSquare className="w-3.5 h-3.5" /> {r.mensajes.length} mensajes
-                </span>
-              )}
-            </div>
-            {demandaObj && (
-              <button
-                onClick={() => { setSelectedDemanda(demandaObj); setMatchTypeStep('root'); setScreen('demanda-detail'); }}
-                className="flex items-center gap-1 text-xs font-bold bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 hover:bg-brand/10 hover:text-brand transition-colors px-3 py-1.5 rounded-xl"
-              >
-                Ver demanda <ChevronRight className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-        </div>
-      );
-    };
-
-    return (
-      <div className="h-[100dvh] flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden">
-        {/* Header */}
-        <StorePageHeader
-          title="Demandas"
-          subtitle={`${demandas.length} solicitud${demandas.length !== 1 ? 'es' : ''} · ${nuevasCount} sin responder`}
-          actionSlot={(
-            <>
-              {newDemandasCount > 0 && (
-                <span className="hidden sm:flex items-center gap-1 text-xs font-bold text-warn bg-warn/10 px-2.5 py-1.5 rounded-xl">
-                  <Zap className="w-3 h-3" /> {newDemandasCount} nuevas
-                </span>
-              )}
-              <button onClick={fetchDemandas} className="ui-icon-btn hover:bg-slate-100 dark:hover:bg-white/8 text-slate-400 transition-colors" title="Actualizar">
-                <RotateCcw className="w-4 h-4" />
-              </button>
-            </>
-          )}
-          secondarySlot={
-            <div className="lg:hidden flex gap-1 px-4 py-2">
-              {[
-                { value: 'feed',       label: 'Demandas',       count: demandas.length },
-                { value: 'respuestas', label: 'Mis respuestas',  count: misRespuestas.length },
-              ].map(t => (
-                <button
-                  key={t.value}
-                  onClick={() => setFeedTab(t.value)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-bold transition-all ${feedTab === t.value ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-white/5 text-slate-500'}`}
-                >
-                  {t.label}
-                  {t.count > 0 && <span className={`text-[10px] font-black px-1.5 rounded-lg ${feedTab === t.value ? 'bg-white/20' : 'bg-slate-200 dark:bg-white/10'}`}>{t.count}</span>}
-                </button>
-              ))}
-            </div>
-          }
-        />
-
-        {/* Body */}
-        <div className="flex-1 flex min-h-0">
-          <FilterSidebar />
-          <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-            {/* Toolbar */}
-            <div className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-white/8 px-4 lg:px-5 py-3 flex items-center gap-3">
-              <div className="relative flex-1 max-w-xs">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Buscar..."
-                  className="w-full pl-9 pr-3 py-2 bg-slate-100 dark:bg-white/5 dark:text-slate-200 dark:placeholder:text-slate-500 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand"
-                />
-              </div>
-              {/* Sort (mobile) */}
-              {feedTab === 'feed' && (
-                <div className="lg:hidden relative group">
-                  <button className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold transition-all border ${feedSort !== 'recientes' ? 'border-brand bg-brand/5 text-brand' : 'border-slate-200 dark:border-white/10 text-slate-500'}`}>
-                    <ArrowUpDown className="w-4 h-4" />
-                    <span className="hidden sm:inline">{SORT_OPTIONS.find(o => o.value === feedSort)?.label}</span>
-                  </button>
-                  <div className="hidden group-focus-within:block absolute right-0 top-full mt-1 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-white/10 z-30 w-48 py-1 animate-dropdown-in">
-                    {SORT_OPTIONS.map(opt => (
-                      <button
-                        key={opt.value}
-                        onClick={() => setFeedSort(opt.value)}
-                        className={`w-full text-left px-4 py-2.5 text-sm font-semibold transition-colors ${feedSort === opt.value ? 'text-brand bg-brand/5' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5'}`}
-                      >{opt.label}</button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {/* Estado chips mobile */}
-              {feedTab === 'feed' && (
-                <div className="lg:hidden flex gap-1.5 overflow-x-auto scrollbar-hide">
-                  {[
-                    { value: 'todas', label: 'Todas' },
-                    { value: 'nuevas', label: 'Sin responder' },
-                    { value: 'respondidas', label: 'Respondidas' },
-                  ].map(opt => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setFeedEstado(opt.value)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 ${feedEstado === opt.value ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-white/5 text-slate-500'}`}
-                    >{opt.label}</button>
-                  ))}
-                </div>
-              )}
-              <span className="ml-auto text-xs text-slate-400 font-semibold shrink-0">
-                {feedTab === 'feed' ? demandasFiltradas.length : misRespuestas.length}
-              </span>
-            </div>
-
-            {/* Category chips (feed tab) */}
-            {feedTab === 'feed' && categoriasFeed.length > 0 && (
-              <div className="shrink-0 flex gap-2 px-4 lg:px-5 py-2.5 overflow-x-auto scrollbar-hide border-b border-slate-100 dark:border-white/5 bg-white dark:bg-slate-900">
-                <button
-                  onClick={() => setFilterRubro('todas')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 ${filterRubro === 'todas' ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-white/5 text-slate-500 hover:bg-slate-200'}`}
-                >Todas</button>
-                {categoriasFeed.map(cat => (
-                  <button
-                    key={cat.id}
-                    onClick={() => setFilterRubro(filterRubro === cat.id ? 'todas' : cat.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 ${filterRubro === cat.id ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-white/5 text-slate-500 hover:bg-slate-200'}`}
-                  >
-                    <CategoryIcon name={cat.icon} className="w-3 h-3" />
-                    {cat.name.split(' ')[0]}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto pb-24 lg:pb-8">
-              {feedTab === 'feed' ? (
-                <div className="max-w-3xl mx-auto px-4 lg:px-6 py-5 space-y-3">
-                  {loading ? (
-                    <SkeletonFeed count={4} />
-                  ) : demandasFiltradas.length === 0 ? (
-                    <div className="text-center py-16">
-                      <Package className="w-12 h-12 text-slate-200 dark:text-slate-700 mx-auto mb-3" />
-                      <p className="font-semibold text-slate-400">{searchQuery ? 'Sin resultados para tu búsqueda' : 'No hay demandas activas'}</p>
-                      {activeFilters > 0 && (
-                        <button
-                          onClick={() => { setFeedEstado('todas'); setFilterRubro('todas'); setFeedSort('recientes'); setSearchQuery(''); }}
-                          className="mt-3 text-sm font-bold text-brand hover:underline"
-                        >Limpiar filtros</button>
-                      )}
-                      <button onClick={fetchDemandas} className="mt-4 px-5 py-2.5 bg-slate-100 dark:bg-white/5 rounded-xl font-semibold text-sm block mx-auto">Actualizar</button>
-                    </div>
-                  ) : (
-                    demandasFiltradas.map(d => <DemandaCard key={d.id} d={d} />)
-                  )}
-                </div>
-              ) : (
-                <div className="max-w-3xl mx-auto px-4 lg:px-6 py-5 space-y-3">
-                  {misRespuestas.length === 0 ? (
-                    <div className="text-center py-16">
-                      <MessageSquare className="w-12 h-12 text-slate-200 dark:text-slate-700 mx-auto mb-3" />
-                      <p className="font-semibold text-slate-400">Todavía no respondiste ninguna demanda</p>
-                      <button onClick={() => setFeedTab('feed')} className="mt-4 px-5 py-2.5 bg-brand text-white rounded-xl font-semibold text-sm">Ver demandas activas</button>
-                    </div>
-                  ) : (
-                    misRespuestas.map(r => <RespuestaCard key={r.id} r={r} />)
-                  )}
-                </div>
-              )}
-            </div>
-          </main>
-        </div>
-      </div>
-    );
-  };
-
-  // ── Chat thread (seguimiento post-respuesta) ──────────────────────────────
-  const ChatThread = ({ respuestaId, initialMessages }) => {
-    const msgs = chatMsgs.length > 0 ? chatMsgs : initialMessages;
-    const setMsgs = setChatMsgs;
-    const texto = chatTexto;
-    const setTexto = setChatTexto;
-    const sending = chatSending;
-    const setSending = setChatSending;
-    const bottomRef = chatBottomRef;
-
-    useEffect(() => {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [msgs]);
-
-    const send = async () => {
-      const t = texto.trim();
-      if (!t || sending) return;
-      setSending(true);
-      setTexto('');
-      try {
-        const res = await apiFetch(`${API_BASE}/respuestas`, {
-          method: 'PATCH',
-          authRequired: true,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ respuestaId: String(respuestaId), texto: t, rol: 'tienda' }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setMsgs(prev => [...prev, data.msg]);
-        }
-      } catch { /* silencioso */ } finally {
-        setSending(false);
-      }
-    };
-
-    return (
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-slate-100 dark:border-white/10 p-5">
-        <h3 className="font-bold mb-4 flex items-center gap-2">
-          <MessageSquare className="w-4 h-4 text-brand" /> Seguimiento
-        </h3>
-
-        {msgs.length === 0 && (
-          <p className="text-xs text-slate-400 mb-4 text-center">Podés agregar un mensaje de seguimiento al cliente.</p>
-        )}
-
-        <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
-          {msgs.map(m => (
-            <div key={m.id} className={`flex ${m.rol === 'tienda' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                m.rol === 'tienda'
-                  ? 'bg-brand/15 dark:bg-brand/20 text-brand-dark dark:text-brand rounded-br-sm'
-                  : 'bg-slate-100 dark:bg-white/8 text-slate-700 dark:text-slate-300 rounded-bl-sm'
-              }`}>
-                {m.texto}
-                <p className="text-[10px] opacity-50 mt-1 text-right">{m.creadoEn ? new Date(m.creadoEn).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : ''}</p>
-              </div>
-            </div>
-          ))}
-          <div ref={bottomRef} />
-        </div>
-
-        <div className="flex gap-2">
-          <input
-            value={texto}
-            onChange={e => setTexto(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
-            placeholder="Mensaje de seguimiento..."
-            className="flex-1 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl px-4 py-2.5 text-sm outline-none focus:border-brand transition-colors"
-          />
-          <button
-            onClick={send}
-            disabled={!texto.trim() || sending}
-            className="w-10 h-10 bg-brand hover:bg-brand-dark disabled:opacity-40 text-white rounded-2xl flex items-center justify-center shrink-0 transition-colors"
-          >
-            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  // ── Detalle demanda + responder ────────────────────────────────────────────
-  const DemandaDetailScreen = () => {
-    const respondida = yaRespondio(selectedDemanda?.id);
-    const miRespuesta = misRespuestas.find(r => String(r.demandaId) === String(selectedDemanda?.id));
-
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24 lg:pb-8">
-        <StorePageHeader title="Detalle de demanda" subtitle="Respondé para conectar con el cliente" onBack={() => setScreen('feed')} />
-
-        <div className="max-w-2xl mx-auto p-5 space-y-5">
-          {/* Info demanda */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-slate-100 dark:border-white/10 overflow-hidden">
-            {(() => {
-              const imgs = selectedDemanda?.fotos?.length ? selectedDemanda.fotos : selectedDemanda?.foto ? [selectedDemanda.foto] : [];
-              return imgs.length ? <StorePhotoCarousel photos={imgs} /> : null;
-            })()}
-            <div className="p-6">
-              <h2 className="font-bold text-xl mb-1">{selectedDemanda?.titulo}</h2>
-              {selectedDemanda?.descripcion && (
-                <p className="text-sm text-slate-500 mb-3 leading-relaxed">{selectedDemanda.descripcion}</p>
-              )}
-              {selectedDemanda?.presupuesto && (
-                <div className="inline-flex items-center gap-1.5 bg-brand/8 text-brand-dark px-3 py-1.5 rounded-xl text-sm font-semibold">
-                  Presupuesto: ${selectedDemanda.presupuesto.min?.toLocaleString() || '?'} - ${selectedDemanda.presupuesto.max?.toLocaleString() || '?'}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Mi respuesta previa */}
-          {respondida && miRespuesta && (
-            <div className="bg-brand/8 border-2 border-brand/25 rounded-3xl p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <CheckCircle className="w-5 h-5 text-brand-dark" />
-                <h3 className="font-bold text-brand-dark">Tu respuesta enviada</h3>
-              </div>
-              {miRespuesta.matchType && <MatchTypeBadge type={miRespuesta.matchType} className="mb-3" />}
-              <p className="text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 rounded-2xl p-4 mb-3 leading-relaxed">{miRespuesta.mensaje}</p>
-              {miRespuesta.precio && (
-                <p className="text-lg font-bold text-brand-dark">Precio ofrecido: ${miRespuesta.precio.toLocaleString()}</p>
-              )}
-              <p className="text-xs text-slate-400 mt-2">{miRespuesta.tiempoRespuesta || 'Enviada recientemente'}</p>
-            </div>
-          )}
-
-          {/* Formulario de respuesta */}
-          {!respondida && !isActiva && (
-            <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-rose-200 dark:border-rose-500/30 p-5">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center shrink-0">
-                  <Lock className="w-5 h-5 text-rose-500" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 dark:text-white">Suscripción requerida</h3>
-                  <p className="text-xs text-slate-500">Tu plan venció. Renovalo para responder.</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowPaywall(true)}
-                className="w-full py-3 bg-brand hover:bg-brand-light text-white rounded-2xl font-bold flex items-center justify-center gap-2 transition-colors"
-              >
-                <Zap className="w-4 h-4" /> Renovar suscripción
-              </button>
-            </div>
-          )}
-
-          {!respondida && isActiva && (
-            <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-slate-100 dark:border-white/10 p-5">
-              <h3 className="font-bold text-lg mb-4">Responder a esta demanda</h3>
-
-              {submitOk && (
-                <div className="bg-brand/8 border border-brand/25 rounded-2xl p-4 flex items-center gap-3 mb-4">
-                  <CheckCircle className="w-5 h-5 text-brand-dark shrink-0" />
-                  <p className="text-sm font-semibold text-brand-dark">Respuesta enviada correctamente</p>
-                </div>
-              )}
-
-              <div className="space-y-4">
-                {/* Tipo de match */}
-                <MatchTypeSelector value={matchType} onChange={setMatchType} />
-
-                {/* Mensaje */}
-                <div>
-                  <label className="block font-semibold text-sm mb-2">Tu mensaje *</label>
-                  <textarea
-                    rows={3}
-                    value={msgRespuesta}
-                    onChange={e => setMsgRespuesta(e.target.value)}
-                    placeholder="Contale al cliente qué tenés, el estado del producto, disponibilidad, etc."
-                    className="w-full px-4 py-3 border-2 border-slate-200 dark:border-white/10 dark:bg-slate-800 dark:text-white rounded-2xl focus:outline-none focus:border-brand resize-none text-sm transition-colors"
-                  />
-                </div>
-
-                {/* Fotos / Videos del producto */}
-                <div>
-                  <label className="block font-semibold text-sm mb-2">
-                    Fotos o video del producto
-                    <span className="font-normal text-slate-400 ml-1">(opcional · hasta 4)</span>
-                  </label>
-
-                  <div className="grid grid-cols-4 gap-2">
-                    {adjuntosRespuesta.map((a, idx) => (
-                      <div key={idx} className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 dark:bg-white/8 group">
-                        {a.type === 'video'
-                          ? (
-                            <video src={a.preview} className="w-full h-full object-cover" muted playsInline />
-                          ) : (
-                            <img src={a.preview} alt="" className="w-full h-full object-cover" />
-                          )
-                        }
-                        {/* Badge tipo */}
-                        {a.type === 'video' && (
-                          <div className="absolute bottom-1 left-1 bg-black/60 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md">
-                            VIDEO
-                          </div>
-                        )}
-                        {/* Remove */}
-                        <button
-                          type="button"
-                          onClick={() => removeAdjunto(idx)}
-                          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-
-                    {adjuntosRespuesta.length < 4 && (
-                      <button
-                        type="button"
-                        onClick={() => adjuntosInputRef.current?.click()}
-                        className="aspect-square rounded-xl border-2 border-dashed border-slate-200 dark:border-white/15 flex flex-col items-center justify-center gap-1 text-slate-400 hover:border-brand hover:text-brand dark:hover:text-brand transition-colors"
-                      >
-                        <Camera className="w-5 h-5" />
-                        <span className="text-[10px] font-medium leading-none">Foto/Video</span>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Input oculto — acepta foto y video, con captura de cámara en móvil */}
-                  <input
-                    ref={adjuntosInputRef}
-                    type="file"
-                    accept="image/*,video/*"
-                    capture="environment"
-                    multiple
-                    className="hidden"
-                    onChange={handleAdjuntosChange}
-                  />
-
-                  <p className="text-xs text-slate-400 mt-1.5">
-                    En móvil: podés tomar foto o grabar video en el momento con la cámara
-                  </p>
-                </div>
-
-                {/* Precio */}
-                <div>
-                  <label className="block font-semibold text-sm mb-2">Precio <span className="font-normal text-slate-400">(opcional)</span></label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">$</span>
-                    <input
-                      type="number"
-                      value={precioRespuesta}
-                      onChange={e => setPrecioRespuesta(e.target.value)}
-                      placeholder="0"
-                      className="w-full pl-9 pr-4 py-3 border-2 border-slate-200 dark:border-white/10 dark:bg-slate-800 dark:text-white rounded-2xl focus:outline-none focus:border-brand transition-colors"
-                    />
-                  </div>
-                </div>
-
-                {submitError && (
-                  <div className="bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-2xl p-4 flex gap-3">
-                    <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
-                    <p className="text-sm text-rose-700 dark:text-rose-400">{submitError}</p>
-                  </div>
-                )}
-
-                <button onClick={handleResponder} disabled={!msgRespuesta.trim() || respondiendo}
-                  className="w-full py-4 bg-slate-900 dark:bg-brand text-white rounded-2xl font-bold disabled:opacity-40 flex items-center justify-center gap-2 hover:bg-slate-800 dark:hover:bg-brand-light transition-colors">
-                  {respondiendo
-                    ? <><Loader2 className="w-5 h-5 animate-spin" /> {adjuntosRespuesta.length > 0 ? 'Subiendo archivos...' : 'Enviando...'}</>
-                    : <><Send className="w-5 h-5" /> Enviar respuesta</>
-                  }
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ── Chat de seguimiento ────────────────────────────────────── */}
-          {respondida && miRespuesta && (
-            <ChatThread
-              respuestaId={miRespuesta.id}
-              initialMessages={miRespuesta.mensajes || []}
-            />
-          )}
-        </div>
-      </div>
-    );
-  };
 
   // ── Mensajes ───────────────────────────────────────────────────────────────
   const inboxSendReply = async () => {
@@ -2431,7 +1379,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inboxSelectedKey, _selectedMsgs]);
 
-  const AVATAR_COLORS = ['bg-violet-500','bg-brand','bg-emerald-500','bg-amber-500','bg-rose-500','bg-sky-500'];
+  const AVATAR_COLORS = ['bg-violet-500','bg-brand','bg-emerald-500','bg-amber-500','bg-rose-500','bg-fuchsia-500'];
   const avatarColor = (uid) => AVATAR_COLORS[(uid?.charCodeAt(0) || 0) % AVATAR_COLORS.length];
   const clientLabel = (uid) => uid ? `Cliente ···${uid.slice(-5)}` : 'Cliente';
   const fmtTime = (ts) => {
@@ -2448,19 +1396,17 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const _storeId = String(tienda?.id || tiendaData?.id || '');
   const allThreads = useMemo(() => {
     return inboxConvos.map(c => {
-      const ctx = c.context; // { type:'context', origin, demandaId, demandaTitulo, productoId, productoTitulo, laboralId, laboralTitulo, cvData, ... }
+      const ctx = c.context; // { type:'context', origin, productoId, productoTitulo, laboralId, laboralTitulo, cvData, ... }
       const origin = ctx?.origin || 'directa';
 
       // Determinar tipo visual
-      const type = origin === 'demanda' ? 'demanda'
-        : origin === 'producto'  ? 'producto'
+      const type = origin === 'producto'  ? 'producto'
         : origin === 'laboral'   ? 'laboral'
         : origin === 'cv'        ? 'cv'
         : 'chat';
 
       // Subtítulo contextual
-      const subtitle = origin === 'demanda'  ? (ctx.demandaTitulo  || 'Demanda del marketplace')
-        : origin === 'producto' ? `Producto: ${ctx.productoTitulo || ''}`.trim()
+      const subtitle = origin === 'producto' ? `Producto: ${ctx.productoTitulo || ''}`.trim()
         : origin === 'laboral'  ? `Búsqueda: ${ctx.laboralTitulo  || ''}`.trim()
         : origin === 'cv'       ? `CV: ${ctx.cvData?.nombre        || 'Candidato'}`
         : 'Consulta directa';
@@ -2480,8 +1426,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         repliedByStore: c.lastMessage?.from === _storeId,
         closed: closedConvos.has(c.key),
         // campos contextuales
-        demandaId:     ctx?.demandaId,
-        demandaTitulo: ctx?.demandaTitulo,
         productoId:    ctx?.productoId,
         productoTitulo:ctx?.productoTitulo,
         laboralId:     ctx?.laboralId,
@@ -2500,18 +1444,17 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     const storeId = _storeId;
 
     const TYPE_META = {
-      chat:     { label: 'Chat',     color: 'bg-blue-500',    textColor: 'text-blue-600 dark:text-blue-400',       bg: 'bg-blue-50 dark:bg-blue-500/10',       Icon: MessageSquare },
-      demanda:  { label: 'Demanda',  color: 'bg-amber-500',   textColor: 'text-amber-600 dark:text-amber-400',     bg: 'bg-amber-50 dark:bg-amber-500/10',     Icon: Package       },
+      chat:     { label: 'Chat',     color: 'bg-info',        textColor: 'text-info dark:text-info',               bg: 'bg-info-muted dark:bg-info/10',        Icon: MessageSquare },
       producto: { label: 'Producto', color: 'bg-violet-500',  textColor: 'text-violet-600 dark:text-violet-400',   bg: 'bg-violet-50 dark:bg-violet-500/10',   Icon: Tag           },
       laboral:  { label: 'Laboral',  color: 'bg-emerald-500', textColor: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-500/10', Icon: Zap           },
-      cv:       { label: 'CV',       color: 'bg-teal-500',    textColor: 'text-teal-600 dark:text-teal-400',       bg: 'bg-teal-50 dark:bg-teal-500/10',       Icon: Award         },
-      directa:  { label: 'Consulta', color: 'bg-blue-500',    textColor: 'text-blue-600 dark:text-blue-400',       bg: 'bg-blue-50 dark:bg-blue-500/10',       Icon: MessageSquare },
+      cv:       { label: 'CV',       color: 'bg-warn',        textColor: 'text-warn dark:text-warn',               bg: 'bg-warn-muted dark:bg-warn/10',        Icon: Award         },
+      directa:  { label: 'Consulta', color: 'bg-info',        textColor: 'text-info dark:text-info',               bg: 'bg-info-muted dark:bg-info/10',        Icon: MessageSquare },
     };
 
     const FILTERS = [
       { id: 'todos',    label: 'Todos',    types: null },
       { id: 'chats',    label: 'Chats',    types: ['chat', 'directa'] },
-      { id: 'contexto', label: 'Con contexto', types: ['demanda', 'producto', 'laboral', 'cv'] },
+      { id: 'contexto', label: 'Con contexto', types: ['producto', 'laboral', 'cv'] },
     ];
 
     const q = inboxSearch.toLowerCase();
@@ -2538,7 +1481,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
     // ── Panel izquierdo ────────────────────────────────────────────────────
     const ThreadList = () => (
-      <div className="flex flex-col h-full bg-white dark:bg-slate-900">
+      <div className="flex flex-col h-full bg-surface-card">
         {/* Header — solo visible en desktop (mobile usa StorePageHeader) */}
         <div className="px-4 pt-4 pb-3 border-b border-slate-100 dark:border-white/8 shrink-0">
           <div className="hidden lg:flex items-center justify-between mb-3">
@@ -2550,7 +1493,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 </span>
               )}
             </div>
-            <button onClick={fetchInbox} className="ui-icon-btn hover:bg-slate-100 dark:hover:bg-white/8 text-slate-400" title="Actualizar">
+            <button onClick={fetchInbox} className="ui-icon-btn hover:bg-surface-card-2 dark:hover:bg-white/8 text-ink-dim" title="Actualizar">
               <RotateCcw className={`w-4 h-4 ${inboxLoading ? 'animate-spin' : ''}`} />
             </button>
           </div>
@@ -2559,25 +1502,25 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           <div className="flex items-center gap-2 mt-1">
             {/* Búsqueda */}
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-dim" />
               <input value={inboxSearch} onChange={e => setInboxSearch(e.target.value)}
                 placeholder="Buscar conversación..."
-                className="w-full pl-8 pr-8 py-2 bg-slate-50 dark:bg-white/5 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand transition-all border border-transparent focus:border-brand/20" />
-              {inboxSearch && <button onClick={() => setInboxSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-3 h-3" /></button>}
+                className="w-full pl-8 pr-8 py-2 bg-surface-card-2 dark:bg-white/5 rounded-xl text-sm placeholder:text-ink-dim focus:outline-none focus:ring-2 focus:ring-brand transition-all border border-transparent focus:border-brand/20" />
+              {inboxSearch && <button onClick={() => setInboxSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-dim hover:text-ink-dim"><X className="w-3 h-3" /></button>}
             </div>
 
             {/* Filtro tipo — dropdown igual que sort de productos */}
             <div className="relative group shrink-0">
-              <button className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${msgFilter !== 'todos' ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-white/8 text-slate-500'}`}
+              <button className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${msgFilter !== 'todos' ? 'bg-brand text-white' : 'bg-surface-card-2 dark:bg-white/8 text-ink-dim'}`}
                 title="Filtrar por tipo">
                 <ListFilter className="w-3.5 h-3.5" />
               </button>
-              <div className="absolute right-0 top-full mt-1.5 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-100 dark:border-white/10 overflow-hidden z-50 min-w-[170px] hidden group-focus-within:block animate-dropdown-in">
+              <div className="absolute right-0 top-full mt-1.5 bg-surface-card rounded-2xl shadow-xl border border-slate-100 dark:border-white/10 overflow-hidden z-50 min-w-[170px] hidden group-focus-within:block animate-dropdown-in">
                 {FILTERS.map(f => {
                   const count = allThreads.filter(t => !t.closed && t.unread > 0 && (!f.types || f.types.includes(t.type))).length;
                   return (
                     <button key={f.id} onClick={() => setMsgFilter(f.id)}
-                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-xs transition-colors text-left ${msgFilter === f.id ? 'bg-slate-50 dark:bg-white/5 font-bold text-brand' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'}`}>
+                      className={`w-full flex items-center gap-2 px-4 py-2.5 text-xs transition-colors text-left ${msgFilter === f.id ? 'bg-surface-card-2 dark:bg-white/5 font-bold text-brand' : 'text-ink-dim dark:text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/5'}`}>
                       {msgFilter === f.id && <CheckCircle className="w-3 h-3 text-brand shrink-0" />}
                       <span className={msgFilter === f.id ? '' : 'pl-4'}>{f.label}</span>
                       {count > 0 && <span className="ml-auto text-[9px] font-black bg-brand/10 text-brand px-1.5 py-0.5 rounded-full">{count}</span>}
@@ -2600,14 +1543,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             <div className="px-3 pt-3"><SkeletonInbox count={6} /></div>
           ) : visibleThreads.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 px-6 text-center gap-3">
-              <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-white/8 flex items-center justify-center">
-                <MessageSquare className="w-8 h-8 text-slate-300 dark:text-slate-600" />
+              <div className="w-16 h-16 rounded-2xl bg-surface-card-2 dark:bg-white/8 flex items-center justify-center">
+                <MessageSquare className="w-8 h-8 text-ink-dim dark:text-ink-dim" />
               </div>
-              <p className="font-bold text-slate-500 dark:text-slate-400">
+              <p className="font-bold text-ink-dim">
                 {inboxSearch ? 'Sin resultados' : 'Sin comunicaciones'}
               </p>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                {inboxSearch ? 'Probá con otro término.' : 'Los chats de clientes y respuestas a demandas aparecerán acá.'}
+              <p className="text-xs text-ink-dim leading-relaxed">
+                {inboxSearch ? 'Probá con otro término.' : 'Los chats con tus clientes aparecerán acá.'}
               </p>
             </div>
           ) : <div className="stagger-in">{visibleThreads.map((t, idx) => {
@@ -2617,7 +1560,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
             return (
               <div key={t.key}
-                className={`group relative flex items-start gap-3 px-4 py-3.5 lg:px-5 lg:py-4 transition-colors cursor-pointer border-l-2 ${isSelected ? 'bg-brand/8 dark:bg-brand/12 border-brand' : t.unread > 0 ? 'border-brand/60' : 'border-transparent hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                className={`group relative flex items-start gap-3 px-4 py-3.5 lg:px-5 lg:py-4 transition-colors cursor-pointer border-l-2 ${isSelected ? 'bg-brand/8 dark:bg-brand/12 border-brand' : t.unread > 0 ? 'border-brand/60' : 'border-transparent hover:bg-surface-card-2 dark:hover:bg-white/5'}`}
                 onClick={() => { setInboxSelectedKey(t.key); setInboxMobileView('chat'); }}>
 
                 {/* Avatar */}
@@ -2633,39 +1576,39 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 {/* Contenido */}
                 <div className="flex-1 min-w-0">
                   {/* Fila 1: título */}
-                  <p className={`text-sm leading-tight truncate mb-1 ${t.unread > 0 ? 'font-bold text-slate-900 dark:text-white' : 'font-semibold text-slate-700 dark:text-slate-200'}`}>
+                  <p className={`text-sm leading-tight truncate mb-1 ${t.unread > 0 ? 'font-bold text-ink' : 'font-semibold text-ink dark:text-ink-dim'}`}>
                     {t.title}
                   </p>
 
                   {/* Fila 2: chip tipo + subtítulo */}
                   <div className="flex items-center gap-1.5 mb-1.5">
                     <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${meta.bg} ${meta.textColor}`}>{meta.label}</span>
-                    {t.subtitle && <p className="text-[11px] text-slate-400 truncate">{t.subtitle}</p>}
+                    {t.subtitle && <p className="text-[11px] text-ink-dim truncate">{t.subtitle}</p>}
                     {t.price > 0 && <p className="text-[11px] font-bold text-brand shrink-0">${t.price.toLocaleString('es')}</p>}
                   </div>
 
                   {/* Fila 3: último mensaje */}
-                  <p className={`text-xs truncate ${t.unread > 0 ? 'text-slate-700 dark:text-slate-300 font-medium' : 'text-slate-400'}`}>
-                    {t.repliedByStore && !t.unread ? <span className="text-slate-400">Tú: </span> : null}
+                  <p className={`text-xs truncate ${t.unread > 0 ? 'text-ink dark:text-ink-dim font-medium' : 'text-ink-dim'}`}>
+                    {t.repliedByStore && !t.unread ? <span className="text-ink-dim">Tú: </span> : null}
                     {t.lastText || <span className="italic">Sin mensajes aún</span>}
                   </p>
                 </div>
 
                 {/* Columna derecha: hora arriba, badge/acciones abajo */}
                 <div className="flex flex-col items-end shrink-0 self-stretch justify-between pt-0.5">
-                  <span className="text-[11px] text-slate-400">{fmtTime(t.lastTs)}</span>
+                  <span className="text-[11px] text-ink-dim">{fmtTime(t.lastTs)}</span>
                   {t.unread > 0 && (
                     <span className="w-5 h-5 bg-brand rounded-full text-white text-[10px] font-black flex items-center justify-center">{t.unread > 9 ? '9+' : t.unread}</span>
                   )}
                   <div className="flex flex-col items-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button title="Chat flotante"
                       onClick={e => { e.stopPropagation(); if (floatingChats.find(c => c.key === t.key)) { closeFloatingChat(t.key); } else { openFloatingChat(t.key); } }}
-                      className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${floatingChats.find(c => c.key === t.key) ? 'bg-brand/15 text-brand' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/8'}`}>
+                      className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${floatingChats.find(c => c.key === t.key) ? 'bg-brand/15 text-brand' : 'text-ink-dim hover:text-ink dark:hover:text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8'}`}>
                       <ExternalLink className="w-3 h-3" />
                     </button>
                     <button title={t.closed ? 'Desarchivar' : 'Archivar'}
                       onClick={e => { e.stopPropagation(); toggleClose(t.key); }}
-                      className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${t.closed ? 'text-amber-500' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/8'}`}>
+                      className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${t.closed ? 'text-amber-500' : 'text-ink-dim hover:text-ink dark:hover:text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8'}`}>
                       <Archive className="w-3 h-3" />
                     </button>
                   </div>
@@ -2681,14 +1624,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
               {/* Botón / cabecera archivados */}
               <button
                 onClick={() => setShowClosed(v => !v)}
-                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-card-2 dark:hover:bg-white/5 transition-colors"
               >
-                <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-white/8 flex items-center justify-center shrink-0">
-                  <Archive className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                <div className="w-9 h-9 rounded-xl bg-surface-card-2 dark:bg-white/8 flex items-center justify-center shrink-0">
+                  <Archive className="w-4 h-4 text-ink-dim" />
                 </div>
-                <span className="flex-1 text-left text-sm font-semibold text-slate-600 dark:text-slate-300">Archivadas</span>
-                <span className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-1">{archivedThreads.length}</span>
-                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${showClosed ? 'rotate-180' : ''}`} />
+                <span className="flex-1 text-left text-sm font-semibold text-ink-dim dark:text-ink-dim">Archivadas</span>
+                <span className="text-xs font-bold text-ink-dim mr-1">{archivedThreads.length}</span>
+                <ChevronDown className={`w-4 h-4 text-ink-dim transition-transform duration-200 ${showClosed ? 'rotate-180' : ''}`} />
               </button>
 
               {/* Lista expandida de archivados */}
@@ -2700,7 +1643,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                     const TypeIcon = meta.Icon;
                     return (
                       <div key={t.key}
-                        className={`group flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${isSelected ? 'bg-brand/8 dark:bg-brand/12' : 'opacity-60 hover:opacity-100 hover:bg-slate-50 dark:hover:bg-white/5'}`}
+                        className={`group flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${isSelected ? 'bg-brand/8 dark:bg-brand/12' : 'opacity-60 hover:opacity-100 hover:bg-surface-card-2 dark:hover:bg-white/5'}`}
                         onClick={() => { setInboxSelectedKey(t.key); setInboxMobileView('chat'); }}>
                         <div className="relative shrink-0">
                           <div className={`w-10 h-10 rounded-xl ${t.partnerUid ? avatarColor(t.partnerUid) : meta.bg} flex items-center justify-center font-bold text-xs`}>
@@ -2712,17 +1655,17 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2 mb-0.5">
-                            <p className="text-sm font-semibold text-slate-600 dark:text-slate-400 truncate">{t.title}</p>
-                            <span className="text-[10px] text-slate-400 shrink-0">{fmtTime(t.lastTs)}</span>
+                            <p className="text-sm font-semibold text-ink-dim truncate">{t.title}</p>
+                            <span className="text-[10px] text-ink-dim shrink-0">{fmtTime(t.lastTs)}</span>
                           </div>
-                          <p className="text-xs text-slate-400 truncate">
-                            {t.repliedByStore && <span className="text-slate-300">Tú: </span>}
+                          <p className="text-xs text-ink-dim truncate">
+                            {t.repliedByStore && <span className="text-ink-dim">Tú: </span>}
                             {t.lastText || <span className="italic">Sin mensajes</span>}
                           </p>
                         </div>
                         <button title="Desarchivar"
                           onClick={e => { e.stopPropagation(); toggleClose(t.key); }}
-                          className="w-6 h-6 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 transition-all shrink-0">
+                          className="w-6 h-6 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center hover:bg-surface-card-2 dark:hover:bg-white/10 text-ink-dim transition-all shrink-0">
                           <RotateCcw className="w-3 h-3" />
                         </button>
                       </div>
@@ -2744,8 +1687,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       return (
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 dark:border-white/8 shrink-0 bg-white dark:bg-slate-900">
-            <button onClick={() => setInboxMobileView('list')} className="lg:hidden ui-icon-btn hover:bg-slate-100 dark:hover:bg-white/8">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 dark:border-white/8 shrink-0 bg-surface-card">
+            <button onClick={() => setInboxMobileView('list')} className="lg:hidden ui-icon-btn hover:bg-surface-card-2 dark:hover:bg-white/8">
               <ArrowLeft className="w-5 h-5" />
             </button>
             {selectedThread ? (
@@ -2760,48 +1703,47 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                   <div className="flex items-center gap-2">
                     <p className="font-bold text-sm truncate">{selectedThread.title}</p>
                     <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full shrink-0 ${meta.color} text-white`}>{meta.label}</span>
-                    {selectedThread.closed && <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-slate-200 dark:bg-white/10 text-slate-500 shrink-0">CERRADA</span>}
+                    {selectedThread.closed && <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-surface-card-2 dark:bg-white/10 text-ink-dim shrink-0">CERRADA</span>}
                   </div>
-                  <p className="text-xs text-slate-400">{selectedThread.subtitle}</p>
+                  <p className="text-xs text-ink-dim">{selectedThread.subtitle}</p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   {selectedThread.type === 'chat' && (
                     <button title="Chat flotante"
                       onClick={() => { if (floatingChats.find(c => c.key === selectedThread.key)) { closeFloatingChat(selectedThread.key); } else { openFloatingChat(selectedThread.key); } }}
-                      className={`ui-icon-btn transition-colors ${floatingChats.find(c => c.key === selectedThread.key) ? 'text-brand bg-brand/10' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8'}`}>
+                      className={`ui-icon-btn transition-colors ${floatingChats.find(c => c.key === selectedThread.key) ? 'text-brand bg-brand/10' : 'text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8'}`}>
                       <ExternalLink className="w-4 h-4" />
                     </button>
                   )}
                   <button title="Info del cliente" onClick={() => setInboxInfoOpen(v => !v)}
-                    className={`ui-icon-btn transition-colors ${inboxInfoOpen ? 'text-brand bg-brand/10' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8'}`}>
+                    className={`ui-icon-btn transition-colors ${inboxInfoOpen ? 'text-brand bg-brand/10' : 'text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8'}`}>
                     <User className="w-4 h-4" />
                   </button>
                 </div>
               </>
             ) : (
-              <p className="font-bold text-slate-400 text-sm">Seleccioná una conversación</p>
+              <p className="font-bold text-ink-dim text-sm">Seleccioná una conversación</p>
             )}
           </div>
 
           {/* Cuerpo */}
-          <div ref={scrollRef || null} className="flex-1 overflow-y-auto p-4 bg-slate-50 dark:bg-slate-950" onClick={() => setSwipedMsgId(null)}>
+          <div ref={scrollRef || null} className="flex-1 overflow-y-auto p-4 bg-surface-card-2 dark:bg-surface-card-2" onClick={() => setSwipedMsgId(null)}>
             {!selectedThread ? (
               <div className="flex flex-col items-center justify-center h-full text-center gap-4">
-                <div className="w-20 h-20 rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-white/8 flex items-center justify-center shadow-sm">
-                  <MessageSquare className="w-10 h-10 text-slate-300 dark:text-slate-600" />
+                <div className="w-20 h-20 rounded-3xl bg-surface-card border border-slate-100 dark:border-white/8 flex items-center justify-center shadow-sm">
+                  <MessageSquare className="w-10 h-10 text-ink-dim dark:text-ink-dim" />
                 </div>
-                <p className="font-bold text-slate-500 dark:text-slate-400">Seleccioná una conversación</p>
-                <p className="text-xs text-slate-400 dark:text-slate-500">Chats directos y respuestas a demandas aparecen a la izquierda.</p>
+                <p className="font-bold text-ink-dim">Seleccioná una conversación</p>
+                <p className="text-xs text-ink-dim">Los chats directos con clientes aparecen a la izquierda.</p>
               </div>
 
             ) : (
               /* Chat unificado — con header de contexto si aplica */
               <div className="space-y-3">
-                {/* Header de contexto (demanda, producto, laboral, cv) */}
+                {/* Header de contexto (producto, laboral, cv) */}
                 {selectedThread.type !== 'chat' && selectedThread.type !== 'directa' && (() => {
                   const cm = TYPE_META[selectedThread.type] || TYPE_META.chat;
                   const CIcon = cm.Icon;
-                  const demandaObj = selectedThread.demandaId ? demandas.find(d => String(d.id) === String(selectedThread.demandaId)) : null;
                   return (
                     <div className={`rounded-2xl border p-3.5 flex items-start gap-3 ${cm.bg} border-current/10`}>
                       <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${cm.bg}`}>
@@ -2809,25 +1751,18 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className={`text-[10px] font-black uppercase tracking-wide mb-0.5 ${cm.textColor}`}>{cm.label}</p>
-                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">{selectedThread.subtitle}</p>
+                        <p className="text-sm font-semibold text-ink dark:text-ink-dim truncate">{selectedThread.subtitle}</p>
                         {selectedThread.price > 0 && (
                           <p className={`text-sm font-black mt-1 ${cm.textColor}`}>$ {selectedThread.price.toLocaleString()}</p>
                         )}
-                        {selectedThread.matchType && <MatchTypeBadge type={selectedThread.matchType} className="mt-1.5" />}
                       </div>
-                      {demandaObj && (
-                        <button onClick={() => { setSelectedDemanda(demandaObj); setMatchTypeStep('root'); setScreen('demanda-detail'); }}
-                          className="shrink-0 text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 flex items-center gap-0.5 transition-colors">
-                          Ver <ChevronRight className="w-3 h-3" />
-                        </button>
-                      )}
                     </div>
                   );
                 })()}
                 {messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-center gap-3">
-                    <MessageSquare className="w-10 h-10 text-slate-200 dark:text-slate-700" />
-                    <p className="text-sm text-slate-400">Iniciá la conversación</p>
+                    <MessageSquare className="w-10 h-10 text-ink-dim dark:text-ink" />
+                    <p className="text-sm text-ink-dim">Iniciá la conversación</p>
                   </div>
                 ) : messages.filter(m => m.attachment?.type !== 'context').map(msg => {
                   const isStore = msg.from === storeId;
@@ -2843,7 +1778,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                         let attContent = null;
                         if (att.type === 'product' || att.type === 'producto') {
                           const fullProd = misProductos.find(p => String(p.id) === String(att.productoId));
-                          const foto = att.foto || fullProd?.fotos?.[0] || fullProd?.foto || null;
+                          const foto = att.foto || fullProd?.fotos?.[0] || fullProd?.foto || fullProd?.imageUrl || null;
                           const nombre = att.nombre || fullProd?.titulo || fullProd?.nombre || 'Producto';
                           const precio = att.precio ?? fullProd?.precio ?? null;
                           const precioOrig = fullProd?.precioOriginal ?? null;
@@ -2851,18 +1786,18 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                           const stock = fullProd?.stock ?? null;
                           attContent = (
                             <button onClick={() => { if (fullProd) { setProductoEditing(fullProd); setProductoShowForm(true); setScreen('productos'); } }}
-                              className="w-52 rounded-2xl border overflow-hidden text-left transition-opacity hover:opacity-80 active:opacity-60 bg-white dark:bg-slate-800 border-slate-100 dark:border-white/10 shadow-sm">
-                              <div className="aspect-square w-full bg-slate-100 dark:bg-white/8 flex items-center justify-center overflow-hidden">
-                                {foto ? <img src={foto} alt={nombre} className="w-full h-full object-cover" /> : <ShoppingBag className="w-10 h-10 text-slate-300 dark:text-slate-600" />}
+                              className="w-52 rounded-2xl border overflow-hidden text-left transition-opacity hover:opacity-80 active:opacity-60 bg-surface-card border-slate-100 dark:border-white/10 shadow-sm">
+                              <div className="aspect-square w-full bg-surface-card-2 dark:bg-white/8 flex items-center justify-center overflow-hidden">
+                                {foto ? <img src={foto} alt={nombre} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : <ShoppingBag className="w-10 h-10 text-ink-dim dark:text-ink-dim" />}
                               </div>
                               <div className="px-3 py-2.5">
                                 <p className="text-[10px] font-bold text-emerald-600 mb-0.5">Producto</p>
-                                <p className="text-sm font-bold line-clamp-2 text-slate-800 dark:text-slate-100">{nombre}</p>
-                                {descripcion && <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">{descripcion}</p>}
+                                <p className="text-sm font-bold line-clamp-2 text-ink dark:text-ink-dim">{nombre}</p>
+                                {descripcion && <p className="text-[11px] text-ink-dim line-clamp-1 mt-0.5">{descripcion}</p>}
                                 <div className="flex items-center gap-2 mt-1.5">
                                   {precio != null && <span className="text-sm font-black text-brand-dark dark:text-brand">${Number(precio).toLocaleString('es')}</span>}
-                                  {precioOrig && precio && Number(precioOrig) > Number(precio) && <span className="text-xs text-slate-400 line-through">${Number(precioOrig).toLocaleString('es')}</span>}
-                                  {stock != null && <span className="text-[10px] text-slate-400 ml-auto">Stock: {stock}</span>}
+                                  {precioOrig && precio && Number(precioOrig) > Number(precio) && <span className="text-xs text-ink-dim line-through">${Number(precioOrig).toLocaleString('es')}</span>}
+                                  {stock != null && <span className="text-[10px] text-ink-dim ml-auto">Stock: {stock}</span>}
                                 </div>
                               </div>
                             </button>
@@ -2874,19 +1809,19 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                           const storeFoto = tiendaInfo?.foto || null;
                           attContent = (
                             <a href={mapsUrl || '#'} target={mapsUrl ? '_blank' : undefined} rel="noopener noreferrer"
-                              className="block w-52 rounded-2xl border overflow-hidden text-left transition-opacity hover:opacity-80 bg-white dark:bg-slate-800 border-slate-100 dark:border-white/10 shadow-sm">
-                              <div className="h-28 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 flex items-center justify-center relative overflow-hidden">
-                                <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 20px,#94a3b8 20px,#94a3b8 21px),repeating-linear-gradient(90deg,transparent,transparent 20px,#94a3b8 20px,#94a3b8 21px)' }} />
-                                <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-xl ring-4 ring-white/40 relative bg-slate-200 dark:bg-slate-600 flex items-center justify-center">
+                              className="block w-52 rounded-2xl border overflow-hidden text-left transition-opacity hover:opacity-80 bg-surface-card border-slate-100 dark:border-white/10 shadow-sm">
+                              <div className="h-28 bg-gradient-to-br from-surface-card-2 to-surface-card-2 dark:from-surface-card-2 dark:to-surface-card-2 flex items-center justify-center relative overflow-hidden">
+                                <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 20px,#a3a3a3 20px,#a3a3a3 21px),repeating-linear-gradient(90deg,transparent,transparent 20px,#a3a3a3 20px,#a3a3a3 21px)' }} />
+                                <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-xl ring-4 ring-white/40 relative bg-surface-card-2 dark:bg-surface-card-2 flex items-center justify-center">
                                   {storeFoto
-                                    ? <img src={storeFoto} alt="" className="w-full h-full object-cover" />
-                                    : <MapPin className="w-5 h-5 text-slate-400" />}
+                                    ? <img src={storeFoto} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                                    : <MapPin className="w-5 h-5 text-ink-dim" />}
                                 </div>
                               </div>
                               <div className="px-3 py-2.5">
-                                <p className="text-[10px] text-slate-500 font-bold mb-0.5 flex items-center gap-1">Ubicación <ExternalLink className="w-2.5 h-2.5" /></p>
+                                <p className="text-[10px] text-ink-dim font-bold mb-0.5 flex items-center gap-1">Ubicación <ExternalLink className="w-2.5 h-2.5" /></p>
                                 {att.nombre && <p className="text-xs font-semibold truncate">{att.nombre}</p>}
-                                {att.direccion && <p className="text-[11px] text-slate-500 truncate">{att.direccion}{att.ciudad ? `, ${att.ciudad}` : ''}</p>}
+                                {att.direccion && <p className="text-[11px] text-ink-dim truncate">{att.direccion}{att.ciudad ? `, ${att.ciudad}` : ''}</p>}
                               </div>
                             </a>
                           );
@@ -2908,8 +1843,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                                 </div>
                               </div>
                               {/* Footer */}
-                              <div className="bg-white dark:bg-slate-800 px-3 py-2 flex items-center justify-between">
-                                <p className="text-[11px] text-slate-500">{att.telefono || 'Ver contacto'}</p>
+                              <div className="bg-surface-card px-3 py-2 flex items-center justify-between">
+                                <p className="text-[11px] text-ink-dim">{att.telefono || 'Ver contacto'}</p>
                                 <ExternalLink className="w-3 h-3 text-[#25D366] shrink-0" />
                               </div>
                             </a>
@@ -2925,8 +1860,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                                   <p className="text-sm font-bold text-white truncate">{att.nombre}</p>
                                 </div>
                               </div>
-                              <div className="bg-white dark:bg-slate-800 px-3 py-2 flex items-center justify-between">
-                                <p className="text-[11px] text-slate-500 truncate">{att.url?.replace(/^https?:\/\//, '')}</p>
+                              <div className="bg-surface-card px-3 py-2 flex items-center justify-between">
+                                <p className="text-[11px] text-ink-dim truncate">{att.url?.replace(/^https?:\/\//, '')}</p>
                                 <ExternalLink className="w-3 h-3 text-brand shrink-0" />
                               </div>
                             </a>
@@ -2948,14 +1883,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                                   {att.nombre && <p className="text-xs font-bold text-white truncate">{att.nombre}</p>}
                                 </div>
                               </div>
-                              <div className="bg-white dark:bg-slate-800 px-3 py-2.5 flex flex-col gap-1">
+                              <div className="bg-surface-card px-3 py-2.5 flex flex-col gap-1">
                                 {rows.length > 0 ? rows.map((r, i) => (
                                   <div key={i} className="flex justify-between gap-2 text-[11px]">
-                                    <span className="text-slate-500 capitalize">{r.label}</span>
-                                    {r.value && <span className="font-semibold text-slate-700 dark:text-slate-200 shrink-0">{r.value}</span>}
+                                    <span className="text-ink-dim capitalize">{r.label}</span>
+                                    {r.value && <span className="font-semibold text-ink dark:text-ink-dim shrink-0">{r.value}</span>}
                                   </div>
                                 )) : (
-                                  <p className="text-[11px] text-slate-400">Sin horarios configurados</p>
+                                  <p className="text-[11px] text-ink-dim">Sin horarios configurados</p>
                                 )}
                               </div>
                             </div>
@@ -2968,7 +1903,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                             <div className={`absolute right-full top-1/2 -translate-y-1/2 mr-1.5 transition-opacity duration-150
                               opacity-0 pointer-events-none group-hover/msg:opacity-100 group-hover/msg:pointer-events-auto`}>
                               <button onClick={delAtt}
-                                className="w-7 h-7 rounded-xl flex items-center justify-center bg-slate-100 dark:bg-white/8 text-slate-400 hover:text-rose-500 transition-colors"
+                                className="w-7 h-7 rounded-xl flex items-center justify-center bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:text-rose-500 transition-colors"
                                 title="Quitar adjunto">
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -2981,7 +1916,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                         const att = msg.attachment;
                         if (att.type === 'product' || att.type === 'producto') {
                           const fullProd = misProductos.find(p => String(p.id) === String(att.productoId));
-                          const foto = att.foto || fullProd?.fotos?.[0] || fullProd?.foto || null;
+                          const foto = att.foto || fullProd?.fotos?.[0] || fullProd?.foto || fullProd?.imageUrl || null;
                           const nombre = att.nombre || fullProd?.titulo || fullProd?.nombre || 'Producto';
                           const precio = att.precio ?? fullProd?.precio ?? null;
                           const precioOrig = fullProd?.precioOriginal ?? null;
@@ -2989,18 +1924,18 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                           const stock = fullProd?.stock ?? null;
                           return (
                             <button onClick={() => { if (fullProd) { setProductoEditing(fullProd); setProductoShowForm(true); setScreen('productos'); } }}
-                              className="w-52 rounded-2xl border overflow-hidden text-left transition-opacity hover:opacity-80 active:opacity-60 bg-white dark:bg-slate-800 border-slate-100 dark:border-white/10 shadow-sm">
-                              <div className="aspect-square w-full bg-slate-100 dark:bg-white/8 flex items-center justify-center overflow-hidden">
-                                {foto ? <img src={foto} alt={nombre} className="w-full h-full object-cover" /> : <ShoppingBag className="w-10 h-10 text-slate-300 dark:text-slate-600" />}
+                              className="w-52 rounded-2xl border overflow-hidden text-left transition-opacity hover:opacity-80 active:opacity-60 bg-surface-card border-slate-100 dark:border-white/10 shadow-sm">
+                              <div className="aspect-square w-full bg-surface-card-2 dark:bg-white/8 flex items-center justify-center overflow-hidden">
+                                {foto ? <img src={foto} alt={nombre} loading="lazy" decoding="async" className="w-full h-full object-cover" /> : <ShoppingBag className="w-10 h-10 text-ink-dim dark:text-ink-dim" />}
                               </div>
                               <div className="px-3 py-2.5">
                                 <p className="text-[10px] font-bold text-emerald-600 mb-0.5">Producto</p>
-                                <p className="text-sm font-bold line-clamp-2 text-slate-800 dark:text-slate-100">{nombre}</p>
-                                {descripcion && <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">{descripcion}</p>}
+                                <p className="text-sm font-bold line-clamp-2 text-ink dark:text-ink-dim">{nombre}</p>
+                                {descripcion && <p className="text-[11px] text-ink-dim line-clamp-1 mt-0.5">{descripcion}</p>}
                                 <div className="flex items-center gap-2 mt-1.5">
                                   {precio != null && <span className="text-sm font-black text-brand-dark dark:text-brand">${Number(precio).toLocaleString('es')}</span>}
-                                  {precioOrig && precio && Number(precioOrig) > Number(precio) && <span className="text-xs text-slate-400 line-through">${Number(precioOrig).toLocaleString('es')}</span>}
-                                  {stock != null && <span className="text-[10px] text-slate-400 ml-auto">Stock: {stock}</span>}
+                                  {precioOrig && precio && Number(precioOrig) > Number(precio) && <span className="text-xs text-ink-dim line-through">${Number(precioOrig).toLocaleString('es')}</span>}
+                                  {stock != null && <span className="text-[10px] text-ink-dim ml-auto">Stock: {stock}</span>}
                                 </div>
                               </div>
                             </button>
@@ -3011,17 +1946,17 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                           const storeFoto = tiendaInfo?.foto || null;
                           return (
                             <a href={mapsUrl || '#'} target={mapsUrl ? '_blank' : undefined} rel="noopener noreferrer"
-                              className="block w-52 rounded-2xl border overflow-hidden text-left transition-opacity hover:opacity-80 bg-white dark:bg-slate-800 border-slate-100 dark:border-white/10 shadow-sm">
-                              <div className="h-28 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 flex items-center justify-center relative overflow-hidden">
-                                <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 20px,#94a3b8 20px,#94a3b8 21px),repeating-linear-gradient(90deg,transparent,transparent 20px,#94a3b8 20px,#94a3b8 21px)' }} />
-                                <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-xl ring-4 ring-white/40 relative bg-slate-200 dark:bg-slate-600 flex items-center justify-center">
-                                  {storeFoto ? <img src={storeFoto} alt="" className="w-full h-full object-cover" /> : <MapPin className="w-5 h-5 text-slate-400" />}
+                              className="block w-52 rounded-2xl border overflow-hidden text-left transition-opacity hover:opacity-80 bg-surface-card border-slate-100 dark:border-white/10 shadow-sm">
+                              <div className="h-28 bg-gradient-to-br from-surface-card-2 to-surface-card-2 dark:from-surface-card-2 dark:to-surface-card-2 flex items-center justify-center relative overflow-hidden">
+                                <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 20px,#a3a3a3 20px,#a3a3a3 21px),repeating-linear-gradient(90deg,transparent,transparent 20px,#a3a3a3 20px,#a3a3a3 21px)' }} />
+                                <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-xl ring-4 ring-white/40 relative bg-surface-card-2 dark:bg-surface-card-2 flex items-center justify-center">
+                                  {storeFoto ? <img src={storeFoto} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : <MapPin className="w-5 h-5 text-ink-dim" />}
                                 </div>
                               </div>
                               <div className="px-3 py-2.5">
-                                <p className="text-[10px] text-slate-500 font-bold mb-0.5 flex items-center gap-1">Ubicación <ExternalLink className="w-2.5 h-2.5" /></p>
+                                <p className="text-[10px] text-ink-dim font-bold mb-0.5 flex items-center gap-1">Ubicación <ExternalLink className="w-2.5 h-2.5" /></p>
                                 {att.nombre && <p className="text-xs font-semibold truncate">{att.nombre}</p>}
-                                {att.direccion && <p className="text-[11px] text-slate-500 truncate">{att.direccion}{att.ciudad ? `, ${att.ciudad}` : ''}</p>}
+                                {att.direccion && <p className="text-[11px] text-ink-dim truncate">{att.direccion}{att.ciudad ? `, ${att.ciudad}` : ''}</p>}
                               </div>
                             </a>
                           );
@@ -3042,8 +1977,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                                   <p className="text-sm font-bold text-white truncate">{att.nombre || 'Contactar'}</p>
                                 </div>
                               </div>
-                              <div className="bg-white dark:bg-slate-800 px-3 py-2 flex items-center justify-between">
-                                <p className="text-[11px] text-slate-500">{att.telefono || 'Ver contacto'}</p>
+                              <div className="bg-surface-card px-3 py-2 flex items-center justify-between">
+                                <p className="text-[11px] text-ink-dim">{att.telefono || 'Ver contacto'}</p>
                                 <ExternalLink className="w-3 h-3 text-[#25D366] shrink-0" />
                               </div>
                             </a>
@@ -3059,8 +1994,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                                 <p className="text-sm font-bold text-white truncate">{att.nombre}</p>
                               </div>
                             </div>
-                            <div className="bg-white dark:bg-slate-800 px-3 py-2 flex items-center justify-between">
-                              <p className="text-[11px] text-slate-500 truncate">{att.url?.replace(/^https?:\/\//, '')}</p>
+                            <div className="bg-surface-card px-3 py-2 flex items-center justify-between">
+                              <p className="text-[11px] text-ink-dim truncate">{att.url?.replace(/^https?:\/\//, '')}</p>
                               <ExternalLink className="w-3 h-3 text-brand shrink-0" />
                             </div>
                           </a>
@@ -3082,14 +2017,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                                   {att.nombre && <p className="text-xs font-bold text-white truncate">{att.nombre}</p>}
                                 </div>
                               </div>
-                              <div className="bg-white dark:bg-slate-800 px-3 py-2.5 flex flex-col gap-1">
+                              <div className="bg-surface-card px-3 py-2.5 flex flex-col gap-1">
                                 {rows.length > 0 ? rows.map((r, i) => (
                                   <div key={i} className="flex justify-between gap-2 text-[11px]">
-                                    <span className="text-slate-500 capitalize">{r.label}</span>
-                                    {r.value && <span className="font-semibold text-slate-700 dark:text-slate-200 shrink-0">{r.value}</span>}
+                                    <span className="text-ink-dim capitalize">{r.label}</span>
+                                    {r.value && <span className="font-semibold text-ink dark:text-ink-dim shrink-0">{r.value}</span>}
                                   </div>
                                 )) : (
-                                  <p className="text-[11px] text-slate-400">Sin horarios configurados</p>
+                                  <p className="text-[11px] text-ink-dim">Sin horarios configurados</p>
                                 )}
                               </div>
                             </div>
@@ -3139,13 +2074,13 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                                 ${swiped ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none group-hover/msg:opacity-100 group-hover/msg:pointer-events-auto'}`}>
                                 <button
                                   onClick={() => { setEditingMsg({ id: msgKey, text: msg.text }); setInboxReply(msg.text); setSwipedMsgId(null); }}
-                                  className="w-7 h-7 rounded-xl flex items-center justify-center bg-slate-100 dark:bg-white/8 text-slate-400 hover:text-brand transition-colors"
+                                  className="w-7 h-7 rounded-xl flex items-center justify-center bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:text-brand transition-colors"
                                   title="Editar">
                                   <Edit3 className="w-3.5 h-3.5" />
                                 </button>
-                                <button onClick={doDelete}
-                                  className="w-7 h-7 rounded-xl flex items-center justify-center bg-slate-100 dark:bg-white/8 text-slate-400 hover:text-rose-500 transition-colors"
-                                  title="Borrar">
+                                <button onClick={() => { setConfirmDeleteMsg({ key: msgKey, doDelete }); setSwipedMsgId(null); }}
+                                  className="w-7 h-7 rounded-xl flex items-center justify-center bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:text-rose-500 transition-colors"
+                                  aria-label="Borrar mensaje" title="Borrar">
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               </div>
@@ -3153,7 +2088,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
                             <div {...longPressHandlers}
                               className={`rounded-2xl px-4 py-2.5 select-none
-                                ${isStore ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 shadow-sm text-slate-800 dark:text-slate-200'}
+                                ${isStore ? 'bg-brand text-white' : 'bg-surface-card shadow-sm text-ink dark:text-ink-dim'}
                                 ${isEditing ? 'ring-2 ring-brand/50 ring-offset-1' : ''}`}>
                               <p className="text-sm">{msg.text}</p>
                             </div>
@@ -3162,16 +2097,16 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                         );
                       })()}
                       <div className={`flex items-center gap-1 px-1 ${isStore ? 'justify-end' : 'justify-start'}`}>
-                        <p className="text-[10px] text-slate-400">{fmtTime(msg.ts)}</p>
+                        <p className="text-[10px] text-ink-dim">{fmtTime(msg.ts)}</p>
                         {isStore && (
-                          <span className="text-[10px] text-slate-400">
+                          <span className="text-[10px] text-ink-dim">
                             {msg.seen ? (
                               <svg viewBox="0 0 16 11" className="w-4 h-2.5 fill-brand inline" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M11.071.336a1 1 0 0 1 1.415 1.415l-6.364 6.364a1 1 0 0 1-1.415 0L1.293 4.7a1 1 0 1 1 1.414-1.414l2.707 2.707L11.07.336z"/>
                                 <path d="M15.071.336a1 1 0 0 1 1.415 1.415L10.122 8.115a1 1 0 0 1-1.415 0" opacity=".5"/>
                               </svg>
                             ) : (
-                              <svg viewBox="0 0 16 11" className="w-4 h-2.5 fill-slate-400 inline" xmlns="http://www.w3.org/2000/svg">
+                              <svg viewBox="0 0 16 11" className="w-4 h-2.5 fill-ink-dim inline" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M11.071.336a1 1 0 0 1 1.415 1.415l-6.364 6.364a1 1 0 0 1-1.415 0L1.293 4.7a1 1 0 1 1 1.414-1.414l2.707 2.707L11.07.336z"/>
                               </svg>
                             )}
@@ -3186,12 +2121,12 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             {/* Indicador "escribiendo..." */}
             {storeTyping && (
               <div className="flex items-center gap-2 px-2 pt-1 pb-0">
-                <div className="flex items-center gap-1 bg-white dark:bg-slate-800 rounded-2xl px-3 py-2 shadow-sm">
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:0ms]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:150ms]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:300ms]" />
+                <div className="flex items-center gap-1 bg-surface-card rounded-2xl px-3 py-2 shadow-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-ink-dim animate-bounce [animation-delay:0ms]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-ink-dim animate-bounce [animation-delay:150ms]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-ink-dim animate-bounce [animation-delay:300ms]" />
                 </div>
-                <p className="text-[10px] text-slate-400">Escribiendo...</p>
+                <p className="text-[10px] text-ink-dim">Escribiendo...</p>
               </div>
             )}
             <div ref={inboxBottomRef} />
@@ -3243,15 +2178,17 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
               },
             ];
 
-            // Opciones de productos (hasta 5 más recientes)
+            // Opciones de productos/ofertas (hasta 20 más recientes) — tolera
+            // ambos modelos de datos: catálogo (titulo/precio/fotos[]) y
+            // ofertas (nombre/imageUrl), según qué módulo tenga activo la tienda.
             const prodOpts = (misProductos || []).slice(0, 20).map(p => ({
               id: `prod-${p.id}`,
               icon: ShoppingBag,
-              label: p.nombre || 'Producto',
+              label: p.titulo || p.nombre || 'Producto',
               desc: p.precio ? `$${Number(p.precio).toLocaleString('es')}` : 'Sin precio',
               color: 'text-emerald-600',
               bg: 'bg-emerald-50 dark:bg-emerald-900/20',
-              build: () => ({ type: 'producto', productoId: String(p.id), nombre: p.nombre, precio: p.precio, foto: p.fotos?.[0] || null }),
+              build: () => ({ type: 'producto', productoId: String(p.id), nombre: p.titulo || p.nombre, precio: p.precio, foto: p.fotos?.[0] || p.imageUrl || null }),
             }));
 
             const allOpts = [...ATTACH_OPTS, ...prodOpts];
@@ -3261,11 +2198,11 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             }) : null;
 
             return (
-              <div className="shrink-0 border-t border-slate-100 dark:border-white/8 bg-white dark:bg-slate-900" style={{ paddingBottom: 'max(0rem, env(safe-area-inset-bottom))' }}>
+              <div className="shrink-0 border-t border-slate-100 dark:border-white/8 bg-surface-card" style={{ paddingBottom: 'max(0rem, env(safe-area-inset-bottom))' }}>
                 {/* Panel adjuntos */}
                 {attachOpen && (
                   <div className="border-b border-slate-100 dark:border-white/8 px-3 py-3">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Adjuntar</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-ink-dim mb-2">Adjuntar</p>
                     {/* Opciones de tienda — fila única, ancho fraccionado */}
                     <div className="flex gap-1.5 mb-2">
                       {ATTACH_OPTS.map(opt => {
@@ -3273,9 +2210,9 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                         return (
                           <button key={opt.id} disabled={opt.disabled}
                             onClick={() => setChatAttachment(isOn ? null : opt.build())}
-                            className={`flex-1 flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl border transition-colors disabled:opacity-40 ${isOn ? `border-transparent ${opt.bg}` : 'border-slate-200 dark:border-white/8 bg-slate-50 dark:bg-white/4'}`}>
-                            <opt.icon className={`w-4 h-4 ${isOn ? opt.color : 'text-slate-400'}`} />
-                            <p className={`text-[10px] font-bold text-center leading-tight ${isOn ? opt.color : 'text-slate-600 dark:text-slate-300'}`}>{opt.label}</p>
+                            className={`flex-1 flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl border transition-colors disabled:opacity-40 ${isOn ? `border-transparent ${opt.bg}` : 'border-slate-200 dark:border-white/8 bg-surface-card-2 dark:bg-white/4'}`}>
+                            <opt.icon className={`w-4 h-4 ${isOn ? opt.color : 'text-ink-dim'}`} />
+                            <p className={`text-[10px] font-bold text-center leading-tight ${isOn ? opt.color : 'text-ink-dim dark:text-ink-dim'}`}>{opt.label}</p>
                           </button>
                         );
                       })}
@@ -3283,17 +2220,17 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                     {/* Productos */}
                     {prodOpts.length > 0 && (
                       <>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Mis productos</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-ink-dim mb-1.5">Mis productos</p>
                         <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
                           {prodOpts.map(opt => {
                             const isOn = chatAttachment?.type === 'producto' && String(chatAttachment.productoId) === opt.id.replace('prod-', '');
                             return (
                               <button key={opt.id}
                                 onClick={() => setChatAttachment(isOn ? null : opt.build())}
-                                className={`shrink-0 flex flex-col items-center gap-1 px-3 py-2 rounded-xl border transition-colors min-w-[80px] ${isOn ? `border-transparent ${opt.bg}` : 'border-slate-200 dark:border-white/8 bg-slate-50 dark:bg-white/4'}`}>
-                                <ShoppingBag className={`w-4 h-4 ${isOn ? opt.color : 'text-slate-400'}`} />
-                                <p className={`text-[10px] font-bold text-center leading-tight line-clamp-2 ${isOn ? opt.color : 'text-slate-600 dark:text-slate-300'}`}>{opt.label}</p>
-                                <p className={`text-[9px] ${isOn ? 'text-emerald-500' : 'text-slate-400'}`}>{opt.desc}</p>
+                                className={`shrink-0 flex flex-col items-center gap-1 px-3 py-2 rounded-xl border transition-colors min-w-[80px] ${isOn ? `border-transparent ${opt.bg}` : 'border-slate-200 dark:border-white/8 bg-surface-card-2 dark:bg-white/4'}`}>
+                                <ShoppingBag className={`w-4 h-4 ${isOn ? opt.color : 'text-ink-dim'}`} />
+                                <p className={`text-[10px] font-bold text-center leading-tight line-clamp-2 ${isOn ? opt.color : 'text-ink-dim dark:text-ink-dim'}`}>{opt.label}</p>
+                                <p className={`text-[9px] ${isOn ? 'text-emerald-500' : 'text-ink-dim'}`}>{opt.desc}</p>
                               </button>
                             );
                           })}
@@ -3305,11 +2242,11 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 {/* Adjunto seleccionado preview */}
                 {chatAttachment && !attachOpen && (
                   <div className="flex items-center gap-2 px-3 pt-2">
-                    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold ${selectedOpt?.bg || 'bg-slate-100 dark:bg-white/8'} ${selectedOpt?.color || 'text-slate-600'}`}>
+                    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold ${selectedOpt?.bg || 'bg-surface-card-2 dark:bg-white/8'} ${selectedOpt?.color || 'text-ink-dim'}`}>
                       {selectedOpt && <selectedOpt.icon className="w-3 h-3" />}
                       <span>{selectedOpt?.label || 'Adjunto'}</span>
                     </div>
-                    <button onClick={() => setChatAttachment(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                    <button onClick={() => setChatAttachment(null)} className="text-ink-dim hover:text-ink-dim transition-colors">
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -3320,7 +2257,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                     <Edit3 className="w-3.5 h-3.5 text-brand shrink-0" />
                     <p className="flex-1 text-[11px] font-semibold text-brand">Editando mensaje</p>
                     <button onClick={() => { setEditingMsg(null); setInboxReply(''); }}
-                      className="w-6 h-6 rounded-xl flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/8 text-slate-400 shrink-0 transition-colors">
+                      className="w-6 h-6 rounded-xl flex items-center justify-center hover:bg-surface-card-2 dark:hover:bg-white/8 text-ink-dim shrink-0 transition-colors">
                       <X className="w-3 h-3" />
                     </button>
                   </div>
@@ -3331,7 +2268,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                     <div className="relative w-fit">
                       <img src={chatImagePreview} alt="" className="h-20 rounded-xl object-cover shadow-sm" />
                       <button onClick={() => setChatImagePreview(null)}
-                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-slate-800/80 text-white flex items-center justify-center">
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-ink/80 text-white flex items-center justify-center">
                         <X className="w-3 h-3" />
                       </button>
                     </div>
@@ -3341,22 +2278,22 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                   <input ref={chatImageInputRef} type="file" accept="image/*" className="hidden"
                     onChange={e => { const f = e.target.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = ev => setChatImagePreview(ev.target.result); r.readAsDataURL(f); e.target.value = ''; }} />
                   <button onClick={() => chatImageInputRef.current?.click()}
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${chatImagePreview ? 'bg-brand/10 text-brand' : 'bg-slate-100 dark:bg-white/8 text-slate-400 hover:text-slate-600'}`}>
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${chatImagePreview ? 'bg-brand/10 text-brand' : 'bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:text-ink-dim'}`}>
                     <Camera className="w-4 h-4" />
                   </button>
                   <button onClick={() => setAttachOpen(v => !v)}
-                    className={`relative w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${attachOpen || chatAttachment ? 'bg-brand/10 text-brand' : 'bg-slate-100 dark:bg-white/8 text-slate-400 hover:text-slate-600'}`}>
+                    className={`relative w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${attachOpen || chatAttachment ? 'bg-brand/10 text-brand' : 'bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:text-ink-dim'}`}>
                     <Paperclip className="w-4 h-4" />
                     {chatAttachment && (
                       <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-brand text-white text-[8px] font-bold flex items-center justify-center">1</span>
                     )}
                   </button>
-                  <div className="flex-1 bg-slate-100 dark:bg-white/8 rounded-2xl px-4 py-2.5 min-h-[40px] flex items-center">
+                  <div className="flex-1 bg-surface-card-2 dark:bg-white/8 rounded-2xl px-4 py-2.5 min-h-[40px] flex items-center">
                     <textarea value={inboxReply} onChange={e => { setInboxReply(e.target.value); setStoreTyping(true); clearTimeout(window._storeTypingTimer); window._storeTypingTimer = setTimeout(() => setStoreTyping(false), 2000); }}
                       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); inboxSendReply(); setStoreTyping(false); } }}
                       placeholder="Escribí tu respuesta..."
                       rows={1}
-                      className="bg-transparent text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none w-full resize-none" />
+                      className="bg-transparent text-sm text-ink dark:text-ink-dim placeholder:text-ink-dim focus:outline-none w-full resize-none" />
                   </div>
                   <button onClick={inboxSendReply} disabled={(!inboxReply.trim() && !chatAttachment) || inboxSending}
                     className="w-10 h-10 bg-brand hover:bg-brand-dark rounded-xl flex items-center justify-center disabled:opacity-40 transition-colors shrink-0">
@@ -3365,7 +2302,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 </div>
                 {/* Barra sutil archivar */}
                 <button onClick={() => toggleClose(selectedThread.key)}
-                  className="w-full flex items-center justify-center gap-1.5 pt-0 pb-2 text-[11px] font-semibold text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 transition-colors">
+                  className="w-full flex items-center justify-center gap-1.5 pt-0 pb-2 text-[11px] font-semibold text-ink-dim dark:text-ink-dim hover:text-ink-dim dark:hover:text-ink-dim transition-colors">
                   <Archive className="w-3 h-3" />
                   Archivar conversación
                 </button>
@@ -3373,8 +2310,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             );
           })()}
           {selectedThread?.closed && (
-            <div className="shrink-0 border-t border-slate-100 dark:border-white/8 bg-white dark:bg-slate-900 px-4 py-3 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-slate-400">
+            <div className="shrink-0 border-t border-slate-100 dark:border-white/8 bg-surface-card px-4 py-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-ink-dim">
                 <Archive className="w-3.5 h-3.5" />
                 <p className="text-xs">Archivada</p>
               </div>
@@ -3397,11 +2334,11 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       const uid = selectedThread.partnerUid;
 
       return (
-        <div className="w-64 xl:w-72 border-l border-slate-100 dark:border-white/8 flex flex-col bg-white dark:bg-slate-900 overflow-y-auto">
+        <div className="w-64 xl:w-72 border-l border-slate-100 dark:border-white/8 flex flex-col bg-surface-card overflow-y-auto">
           {/* Header */}
           <div className="px-4 pt-4 pb-3 border-b border-slate-100 dark:border-white/8 shrink-0 flex items-center justify-between">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Info del cliente</p>
-            <button onClick={() => setInboxInfoOpen(false)} className="ui-icon-btn text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8">
+            <p className="text-xs font-bold uppercase tracking-wider text-ink-dim">Info del cliente</p>
+            <button onClick={() => setInboxInfoOpen(false)} className="ui-icon-btn text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8">
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -3409,7 +2346,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           <div className="p-4 flex flex-col gap-4">
             {/* Avatar + nombre */}
             <div className="flex flex-col items-center gap-2 pt-2">
-              <div className={`w-16 h-16 rounded-2xl ${uid ? avatarColor(uid) : 'bg-slate-200'} flex items-center justify-center font-black text-xl text-white shadow-sm`}>
+              <div className={`w-16 h-16 rounded-2xl ${uid ? avatarColor(uid) : 'bg-surface-card-2'} flex items-center justify-center font-black text-xl text-white shadow-sm`}>
                 {uid ? uid.slice(-2).toUpperCase() : <User className="w-7 h-7" />}
               </div>
               <div className="text-center">
@@ -3423,64 +2360,64 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
             {/* ID del usuario */}
             {uid && (
-              <div className="rounded-2xl bg-slate-50 dark:bg-white/5 px-3 py-2.5 flex items-center gap-2.5">
-                <Hash className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <div className="rounded-2xl bg-surface-card-2 dark:bg-white/5 px-3 py-2.5 flex items-center gap-2.5">
+                <Hash className="w-3.5 h-3.5 text-ink-dim shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-[10px] text-slate-400 font-medium">ID de usuario</p>
-                  <p className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-300 truncate">{uid}</p>
+                  <p className="text-[10px] text-ink-dim font-medium">ID de usuario</p>
+                  <p className="text-xs font-mono font-semibold text-ink dark:text-ink-dim truncate">{uid}</p>
                 </div>
               </div>
             )}
 
             {/* Contexto del hilo */}
             {selectedThread.subtitle && (
-              <div className="rounded-2xl bg-slate-50 dark:bg-white/5 px-3 py-2.5 flex items-start gap-2.5">
-                <MessageCircle className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+              <div className="rounded-2xl bg-surface-card-2 dark:bg-white/5 px-3 py-2.5 flex items-start gap-2.5">
+                <MessageCircle className="w-3.5 h-3.5 text-ink-dim shrink-0 mt-0.5" />
                 <div className="min-w-0">
-                  <p className="text-[10px] text-slate-400 font-medium">Contexto</p>
-                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 line-clamp-2">{selectedThread.subtitle}</p>
+                  <p className="text-[10px] text-ink-dim font-medium">Contexto</p>
+                  <p className="text-xs font-semibold text-ink dark:text-ink-dim line-clamp-2">{selectedThread.subtitle}</p>
                 </div>
               </div>
             )}
 
             {/* Stats mensajes */}
             <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-2xl bg-slate-50 dark:bg-white/5 px-3 py-2.5 text-center">
-                <p className="text-lg font-black text-slate-800 dark:text-slate-100">{msgCount}</p>
-                <p className="text-[10px] text-slate-400 font-medium">mensajes</p>
+              <div className="rounded-2xl bg-surface-card-2 dark:bg-white/5 px-3 py-2.5 text-center">
+                <p className="text-lg font-black text-ink dark:text-ink-dim">{msgCount}</p>
+                <p className="text-[10px] text-ink-dim font-medium">mensajes</p>
               </div>
-              <div className="rounded-2xl bg-slate-50 dark:bg-white/5 px-3 py-2.5 text-center">
-                <p className="text-lg font-black text-slate-800 dark:text-slate-100">{selectedThread.unread || 0}</p>
-                <p className="text-[10px] text-slate-400 font-medium">sin leer</p>
+              <div className="rounded-2xl bg-surface-card-2 dark:bg-white/5 px-3 py-2.5 text-center">
+                <p className="text-lg font-black text-ink dark:text-ink-dim">{selectedThread.unread || 0}</p>
+                <p className="text-[10px] text-ink-dim font-medium">sin leer</p>
               </div>
             </div>
 
             {/* Fechas */}
             {(firstMsg || lastMsg) && (
-              <div className="rounded-2xl bg-slate-50 dark:bg-white/5 px-3 py-2.5 flex flex-col gap-1.5">
+              <div className="rounded-2xl bg-surface-card-2 dark:bg-white/5 px-3 py-2.5 flex flex-col gap-1.5">
                 <div className="flex items-center gap-2">
-                  <CalendarClock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <p className="text-[10px] text-slate-400 font-medium">Actividad</p>
+                  <CalendarClock className="w-3.5 h-3.5 text-ink-dim shrink-0" />
+                  <p className="text-[10px] text-ink-dim font-medium">Actividad</p>
                 </div>
                 {firstMsg?.ts && (
                   <div className="flex justify-between items-center">
-                    <p className="text-[10px] text-slate-400">Primer mensaje</p>
-                    <p className="text-[10px] font-semibold text-slate-600 dark:text-slate-400">{fmtTime(firstMsg.ts)}</p>
+                    <p className="text-[10px] text-ink-dim">Primer mensaje</p>
+                    <p className="text-[10px] font-semibold text-ink-dim">{fmtTime(firstMsg.ts)}</p>
                   </div>
                 )}
                 {lastMsg?.ts && (
                   <div className="flex justify-between items-center">
-                    <p className="text-[10px] text-slate-400">Último mensaje</p>
-                    <p className="text-[10px] font-semibold text-slate-600 dark:text-slate-400">{fmtTime(lastMsg.ts)}</p>
+                    <p className="text-[10px] text-ink-dim">Último mensaje</p>
+                    <p className="text-[10px] font-semibold text-ink-dim">{fmtTime(lastMsg.ts)}</p>
                   </div>
                 )}
               </div>
             )}
 
             {/* Estado */}
-            <div className={`rounded-2xl px-3 py-2.5 flex items-center gap-2 ${selectedThread.closed ? 'bg-slate-100 dark:bg-white/5' : 'bg-ok/8 dark:bg-ok/10'}`}>
-              <div className={`w-2 h-2 rounded-full shrink-0 ${selectedThread.closed ? 'bg-slate-400' : 'bg-ok'}`} />
-              <p className={`text-xs font-bold ${selectedThread.closed ? 'text-slate-500' : 'text-ok-dark dark:text-ok'}`}>
+            <div className={`rounded-2xl px-3 py-2.5 flex items-center gap-2 ${selectedThread.closed ? 'bg-surface-card-2 dark:bg-white/5' : 'bg-ok/8 dark:bg-ok/10'}`}>
+              <div className={`w-2 h-2 rounded-full shrink-0 ${selectedThread.closed ? 'bg-ink-dim' : 'bg-ok'}`} />
+              <p className={`text-xs font-bold ${selectedThread.closed ? 'text-ink-dim' : 'text-ok-dark dark:text-ok'}`}>
                 {selectedThread.closed ? 'Conversación cerrada' : 'Conversación activa'}
               </p>
             </div>
@@ -3503,16 +2440,16 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       return (
         <div className="fixed inset-0 z-50 flex flex-col justify-end lg:hidden" onClick={() => setInboxInfoOpen(false)}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative bg-white dark:bg-slate-900 rounded-t-3xl p-5 flex flex-col gap-4 max-h-[80vh] overflow-y-auto animate-fade-in"
+          <div className="relative bg-surface-card rounded-t-3xl p-5 flex flex-col gap-4 max-h-[80vh] overflow-y-auto animate-fade-in"
             onClick={e => e.stopPropagation()}>
-            <div className="w-10 h-1 rounded-full bg-slate-200 dark:bg-white/15 mx-auto mb-1" />
+            <div className="w-10 h-1 rounded-full bg-surface-card-2 dark:bg-white/15 mx-auto mb-1" />
             <div className="flex items-center justify-between">
               <p className="font-bold">Info del cliente</p>
-              <button onClick={() => setInboxInfoOpen(false)} className="ui-icon-btn text-slate-400"><X className="w-4 h-4" /></button>
+              <button onClick={() => setInboxInfoOpen(false)} className="ui-icon-btn text-ink-dim"><X className="w-4 h-4" /></button>
             </div>
 
             <div className="flex items-center gap-3">
-              <div className={`w-14 h-14 rounded-2xl ${uid ? avatarColor(uid) : 'bg-slate-200'} flex items-center justify-center font-black text-lg text-white`}>
+              <div className={`w-14 h-14 rounded-2xl ${uid ? avatarColor(uid) : 'bg-surface-card-2'} flex items-center justify-center font-black text-lg text-white`}>
                 {uid ? uid.slice(-2).toUpperCase() : <User className="w-6 h-6" />}
               </div>
               <div>
@@ -3524,36 +2461,36 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             </div>
 
             {uid && (
-              <div className="rounded-2xl bg-slate-50 dark:bg-white/5 px-3 py-2.5 flex items-center gap-2.5">
-                <Hash className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <div className="rounded-2xl bg-surface-card-2 dark:bg-white/5 px-3 py-2.5 flex items-center gap-2.5">
+                <Hash className="w-3.5 h-3.5 text-ink-dim shrink-0" />
                 <div>
-                  <p className="text-[10px] text-slate-400 font-medium">ID de usuario</p>
-                  <p className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-300">{uid}</p>
+                  <p className="text-[10px] text-ink-dim font-medium">ID de usuario</p>
+                  <p className="text-xs font-mono font-semibold text-ink dark:text-ink-dim">{uid}</p>
                 </div>
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-2xl bg-slate-50 dark:bg-white/5 px-3 py-3 text-center">
-                <p className="text-xl font-black text-slate-800 dark:text-slate-100">{msgCount}</p>
-                <p className="text-[10px] text-slate-400 font-medium">mensajes</p>
+              <div className="rounded-2xl bg-surface-card-2 dark:bg-white/5 px-3 py-3 text-center">
+                <p className="text-xl font-black text-ink dark:text-ink-dim">{msgCount}</p>
+                <p className="text-[10px] text-ink-dim font-medium">mensajes</p>
               </div>
-              <div className="rounded-2xl bg-slate-50 dark:bg-white/5 px-3 py-3 text-center">
-                <p className="text-xl font-black text-slate-800 dark:text-slate-100">{selectedThread.unread || 0}</p>
-                <p className="text-[10px] text-slate-400 font-medium">sin leer</p>
+              <div className="rounded-2xl bg-surface-card-2 dark:bg-white/5 px-3 py-3 text-center">
+                <p className="text-xl font-black text-ink dark:text-ink-dim">{selectedThread.unread || 0}</p>
+                <p className="text-[10px] text-ink-dim font-medium">sin leer</p>
               </div>
             </div>
 
             {selectedThread.subtitle && (
-              <div className="rounded-2xl bg-slate-50 dark:bg-white/5 px-3 py-2.5">
-                <p className="text-[10px] text-slate-400 font-medium mb-1">Contexto</p>
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{selectedThread.subtitle}</p>
+              <div className="rounded-2xl bg-surface-card-2 dark:bg-white/5 px-3 py-2.5">
+                <p className="text-[10px] text-ink-dim font-medium mb-1">Contexto</p>
+                <p className="text-sm font-semibold text-ink dark:text-ink-dim">{selectedThread.subtitle}</p>
               </div>
             )}
 
-            <div className={`rounded-2xl px-3 py-2.5 flex items-center gap-2 ${selectedThread.closed ? 'bg-slate-100 dark:bg-white/5' : 'bg-ok/8 dark:bg-ok/10'}`}>
-              <div className={`w-2 h-2 rounded-full ${selectedThread.closed ? 'bg-slate-400' : 'bg-ok'}`} />
-              <p className={`text-sm font-bold ${selectedThread.closed ? 'text-slate-500' : 'text-ok-dark dark:text-ok'}`}>
+            <div className={`rounded-2xl px-3 py-2.5 flex items-center gap-2 ${selectedThread.closed ? 'bg-surface-card-2 dark:bg-white/5' : 'bg-ok/8 dark:bg-ok/10'}`}>
+              <div className={`w-2 h-2 rounded-full ${selectedThread.closed ? 'bg-ink-dim' : 'bg-ok'}`} />
+              <p className={`text-sm font-bold ${selectedThread.closed ? 'text-ink-dim' : 'text-ok-dark dark:text-ok'}`}>
                 {selectedThread.closed ? 'Conversación cerrada' : 'Conversación activa'}
               </p>
             </div>
@@ -3563,14 +2500,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     };
 
     return (
-      <div className="h-[100dvh] flex flex-col bg-white dark:bg-slate-900">
+      <div className="h-[100dvh] flex flex-col bg-surface-card">
         {/* Header mobile — desktop usa el header interno del ThreadList */}
         <div className="lg:hidden shrink-0">
           <StorePageHeader
             title="Mensajes"
             subtitle={unreadTotal > 0 ? `${unreadTotal} sin leer` : `${allThreads.length} conversación${allThreads.length !== 1 ? 'es' : ''}`}
             actionSlot={
-              <button onClick={fetchInbox} className="ui-icon-btn hover:bg-slate-100 dark:hover:bg-white/8 text-slate-400" title="Actualizar">
+              <button onClick={fetchInbox} className="ui-icon-btn hover:bg-surface-card-2 dark:hover:bg-white/8 text-ink-dim" title="Actualizar">
                 <RotateCcw className={`w-4 h-4 ${inboxLoading ? 'animate-spin' : ''}`} />
               </button>
             }
@@ -3591,6 +2528,26 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           {inboxMobileView === 'list' ? ThreadList() : ChatPanel({ scrollRef: inboxMobileScrollRef })}
         </div>
         {ClientInfoSheet()}
+
+        {/* Modal confirmar borrado de mensaje — mismo patrón que
+            productos/ofertas, único punto donde faltaba (antes borraba
+            directo con un solo tap). */}
+        {confirmDeleteMsg && (
+          <div className="fixed inset-0 z-[9000] flex items-center justify-center p-4" onClick={() => setConfirmDeleteMsg(null)}>
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+            <div className="relative bg-surface-card rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-fade-in" onClick={e => e.stopPropagation()}>
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="w-6 h-6 text-rose-500" />
+              </div>
+              <h3 className="font-black text-lg text-center mb-1">¿Borrar mensaje?</h3>
+              <p className="text-sm text-ink-dim text-center mb-6">Esta acción no se puede deshacer.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setConfirmDeleteMsg(null)} className="flex-1 py-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-sm font-bold text-ink-dim dark:text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/5 transition-colors">Cancelar</button>
+                <button onClick={() => { confirmDeleteMsg.doDelete(); setConfirmDeleteMsg(null); }} className="flex-1 py-2.5 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold transition-colors">Borrar</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -3601,7 +2558,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const inicioNavigate = (dest) => {
     if (dest === 'product-detail') setInicioSubScreen('producto');
     else if (dest === 'tienda-detail') setInicioSubScreen('tienda');
-    else if (dest === 'detalle') setInicioSubScreen('demanda');
     else setInicioSubScreen(null);
   };
   const inicioGoBack = () => setInicioSubScreen(null);
@@ -3616,21 +2572,19 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     const commonProps = {
       visibleOfertas: inicioOfertas,
       tiendas: inicioTiendas,
-      allDemandas: demandas,
       allCategories,
       firebaseUser,
       navigate: inicioNavigate,
       goBack: inicioGoBack,
       setSelectedProduct: setInicioSelectedProduct,
       setSelectedTienda: setInicioSelectedTienda,
-      setSelectedDemanda: setInicioSelectedDemanda,
       openChat: () => {},          // noop: tienda no chatea con otras tiendas desde acá
       openNotifications: () => {},
       unreadCount: 0,
     };
 
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24 lg:pb-8">
+      <div className="min-h-screen bg-surface-card-2 dark:bg-surface-card-2 pb-24 lg:pb-8">
         {/* Banner "Vista marketplace" */}
         <div className="bg-brand/8 dark:bg-brand/12 border-b border-brand/15 px-4 py-2.5 flex items-center gap-2.5 sticky top-0 z-20">
           <div className="w-2 h-2 rounded-full bg-brand shrink-0" />
@@ -3659,13 +2613,10 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             homeActiveCat={homeActiveCat}
             setHomeActiveCat={setHomeActiveCat}
             loadingOfertas={inicioLoadingOfertas}
-            loadingDemandas={false}
-            demandasActivas={demandas.filter(d => d.estado !== 'resuelto')}
             addRecentSearch={addRecentSearch}
             recentSearches={recentSearches}
             clearRecentSearches={() => setRecentSearches([])}
             navigateSearch={() => {}}
-            setEditingDemanda={() => {}}
             VENTAJA_CONFIG={{}}
           />
         )}
@@ -3692,7 +2643,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     const trialHasta = suscripcion?.trialHasta ? new Date(suscripcion.trialHasta) : null;
 
     const handlePagarMP = async (plan) => {
-      setCheckoutLoading(true);
+      setCheckoutLoading(plan);
+      setCheckoutError(null);
       try {
         const res = await apiFetch(`${API_BASE}/mp-checkout`, {
           method: 'POST',
@@ -3701,20 +2653,16 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           body: JSON.stringify({ plan, tiendaId: tiendaData?.id }),
         });
         const data = await res.json();
-        if (data.initPoint) {
-          window.location.href = data.initPoint;
-        } else {
-          alert('Error al crear el pago');
-        }
+        if (!res.ok || !data.initPoint) throw new Error(data.error || 'No pudimos iniciar el pago. Probá de nuevo.');
+        window.location.href = data.initPoint;
       } catch (err) {
-        alert('Error: ' + err.message);
-      } finally {
-        setCheckoutLoading(false);
+        setCheckoutError(err.message);
+        setCheckoutLoading(null);
       }
     };
 
     return (
-      <div className="h-[100dvh] flex flex-col bg-slate-50 dark:bg-slate-950">
+      <div className="h-[100dvh] flex flex-col bg-surface-card-2 dark:bg-surface-card-2">
         <StorePageHeader title="Suscripción" subtitle="Gestioná tu plan y facturación" onBack={() => setScreen('perfil')} />
         <div className="flex-1 overflow-y-auto">
         <SuscripcionContent
@@ -3730,6 +2678,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           historialPagos={historialPagos}
           loadingHistorial={loadingHistorial}
           checkoutLoading={checkoutLoading}
+          checkoutError={checkoutError}
           renovando={renovando}
           onPagar={handlePagarMP}
           onTransferencia={(plan) => { setTransferenciaPlan(plan); setShowTransferenciaModal(true); }}
@@ -3738,235 +2687,11 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         </div>
       </div>
     );
-    // ── Old SuscripcionScreen (reemplazada) ──
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-        <StorePageHeader title="Suscripción" subtitle="Gestioná tu plan y facturación" onBack={() => setScreen('perfil')} />
-
-        <div className="p-4 lg:p-8 space-y-6 max-w-lg mx-auto">
-          {/* Estado actual */}
-          <div className={`rounded-3xl p-6 text-white relative overflow-hidden ${isActiva ? 'bg-gradient-to-br from-brand to-brand-dark' : 'bg-gradient-to-br from-rose-500 to-rose-700'}`}>
-            <div className="relative z-10">
-              <div className="flex items-center gap-2 mb-2">
-                {isActiva ? <CheckCircle className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
-                <span className="font-bold text-sm uppercase tracking-wide">{isActiva ? 'Activa' : 'Vencida'}</span>
-              </div>
-              <h2 className="font-black text-2xl mb-1">
-                {planActual === 'premium' ? 'Plan Premium' : 'Plan Empresa'}
-              </h2>
-              {vence && (
-                <p className="text-white/80 text-sm">
-                  Vence el {vence.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                </p>
-              )}
-              {trial && trialHasta && (
-                <p className="text-white/80 text-sm mt-1">
-                  🎁 Trial activo hasta {trialHasta.toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })}
-                </p>
-              )}
-              {dias !== null && dias > 0 && dias <= 7 && (
-                <p className="text-amber-200 text-sm font-semibold mt-2">
-                  ⚠️ Vence en {dias} día{dias === 1 ? '' : 's'}
-                </p>
-              )}
-            </div>
-            {/* Decoración */}
-            <div className="absolute -bottom-8 -right-8 w-32 h-32 bg-white/10 rounded-full" />
-            <div className="absolute -top-4 -right-4 w-20 h-20 bg-white/5 rounded-full" />
-          </div>
-
-          {/* Qué incluye mi plan */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-white/8 p-5">
-            <h3 className="font-bold text-slate-900 dark:text-white mb-3">Tu plan incluye</h3>
-            <div className="space-y-2">
-              {[
-                // Emprendimiento (base)
-                { text: 'Vendé hasta 5 productos', emprendimiento: true },
-                { text: 'Página pública en listados', emprendimiento: true },
-                { text: 'Ver demandas (sin responder)', emprendimiento: true },
-                { text: '1 búsqueda laboral activa', emprendimiento: true },
-                { text: 'Aparecé en el mapa', emprendimiento: true },
-                // Empresa Básico (extras)
-                { text: 'Vendé hasta 20 productos', basico: true },
-                { text: 'Respondé demandas de clientes', basico: true },
-                { text: 'Estadísticas básicas', basico: true },
-                { text: 'Feed completo de demandas', basico: true },
-                { text: 'Badge verificada', basico: true },
-                { text: '3 búsquedas laborales', basico: true },
-                // Premium (extras)
-                { text: 'Productos ilimitados', premium: true },
-                { text: 'IA Insights y consejos', premium: true },
-                { text: 'Prioridad en búsquedas', premium: true },
-                { text: 'Badge premium dorada', premium: true },
-                { text: 'Estadísticas avanzadas', premium: true },
-                { text: 'Búsquedas laborales ilimitadas', premium: true },
-                { text: 'Soporte prioritario', premium: true },
-              ]
-                .filter(f => {
-                  if (isPremium) return f.emprendimiento || f.basico || f.premium;
-                  if (isEmpresa) return f.emprendimiento || f.basico;
-                  return f.emprendimiento;
-                })
-                .map(({ text }) => (
-                  <div key={text} className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-white/8 flex items-center justify-center shrink-0">
-                      <CheckCircle className="w-4 h-4 text-emerald-500" />
-                    </div>
-                    <span className="text-sm text-slate-700 dark:text-slate-300">{text}</span>
-                  </div>
-                ))}
-            </div>
-          </div>
-
-          {/* Historial de pagos */}
-          {historialPagos.length > 0 && (
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-white/8 p-5">
-              <h3 className="font-bold text-slate-900 dark:text-white mb-3">Historial de pagos</h3>
-              <div className="space-y-2">
-                {historialPagos.map((pago, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-white/5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-500/15 flex items-center justify-center shrink-0">
-                        <CheckCircle className="w-4 h-4 text-emerald-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900 dark:text-white capitalize">{pago.plan}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {new Date(pago.fecha).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      {pago.monto && (
-                        <p className="text-sm font-bold text-slate-900 dark:text-white">${Number(pago.monto).toLocaleString()}</p>
-                      )}
-                      <p className="text-[10px] text-slate-400">MP #{String(pago.paymentId).slice(-6)}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {loadingHistorial && historialPagos.length === 0 && (
-            <div className="flex items-center justify-center gap-2 text-slate-500 text-sm py-4">
-              <Loader2 className="w-4 h-4 animate-spin" /> Cargando historial...
-            </div>
-          )}
-
-          {/* Upgrade / Renovar */}
-          {planActual !== 'premium' && (
-            <div className="bg-amber-50 dark:bg-amber-500/10 rounded-2xl border-2 border-amber-200 dark:border-amber-500/20 p-5">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 dark:text-white">Upgrade a Premium</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Desbloqueá todo el potencial</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowPremiumModal(true)}
-                className="w-full py-3 rounded-2xl font-bold text-sm bg-amber-500 hover:bg-amber-600 text-white transition-colors"
-              >
-                Ver beneficios Premium
-              </button>
-            </div>
-          )}
-
-          {/* Renovar suscripción */}
-          {(!isActiva || (dias !== null && dias <= 7)) && (
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-white/8 p-5">
-              <h3 className="font-bold text-slate-900 dark:text-white mb-3">Renovar suscripción</h3>
-              <div className="space-y-3">
-                {/* Plan Mensual */}
-                <div className="p-4 rounded-2xl border-2 border-slate-200 dark:border-white/10">
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <p className="font-bold text-slate-900 dark:text-white">Plan Mensual</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">1 mes + 1 de regalo al activar</p>
-                    </div>
-                    <p className="font-black text-xl">${PRECIO_MENSUAL.toLocaleString()}</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => { setTransferenciaPlan('mensual'); setShowTransferenciaModal(true); }}
-                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
-                    >
-                      <CreditCard className="w-4 h-4" />
-                      Transferencia
-                    </button>
-                    <button
-                      onClick={() => handlePagarMP('mensual')}
-                      disabled={checkoutLoading}
-                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-sm bg-[#009EE3] hover:bg-[#007EB5] text-white transition-colors disabled:opacity-50"
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h-2v-2h2v2zm0-4h-2V7h2v6zm4 4h-2v-2h2v2zm0-4h-2V7h2v6z"/>
-                      </svg>
-                      MercadoPago
-                    </button>
-                  </div>
-                </div>
-
-                {/* Plan Anual */}
-                <div className="p-4 rounded-2xl border-2 border-brand bg-brand/5 relative">
-                  <div className="absolute -top-2.5 left-4 bg-brand text-white text-[10px] font-black px-2.5 py-0.5 rounded-full">
-                    AHORRÁS 20%
-                  </div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <p className="font-bold text-slate-900 dark:text-white">Plan Anual</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">13 meses de acceso</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-black text-xl text-brand">${PRECIO_ANUAL_MES.toLocaleString()}</p>
-                      <p className="text-[10px] text-slate-400">ARS/mes · Total ${PRECIO_ANUAL.toLocaleString()}</p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => { setTransferenciaPlan('anual'); setShowTransferenciaModal(true); }}
-                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
-                    >
-                      <CreditCard className="w-4 h-4" />
-                      Transferencia
-                    </button>
-                    <button
-                      onClick={() => handlePagarMP('anual')}
-                      disabled={checkoutLoading}
-                      className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-bold text-sm bg-[#009EE3] hover:bg-[#007EB5] text-white transition-colors disabled:opacity-50"
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h-2v-2h2v2zm0-4h-2V7h2v6zm4 4h-2v-2h2v2zm0-4h-2V7h2v6z"/>
-                      </svg>
-                      MercadoPago
-                    </button>
-                  </div>
-                </div>
-              </div>
-              {checkoutLoading && (
-                <div className="flex items-center justify-center gap-2 text-slate-500 text-sm py-3">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Preparando pago...
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Info de pago */}
-          <div className="bg-slate-100 dark:bg-white/5 rounded-2xl p-4">
-            <p className="text-xs text-slate-500 dark:text-slate-400 text-center">
-              Pago seguro procesado por MercadoPago · Podés cancelar cuando quieras
-            </p>
-          </div>
-        </div>
-      </div>
-    );
   };
 
   // ── Estadisticas ───────────────────────────────────────────────────────────
   const TEMPLATE_INFO = TEMPLATES_META;
-  const PRESET_COLORS = ['#00b8d9','#6366f1','#f59e0b','#10b981','#ef4444','#8b5cf6','#ec4899','#0ea5e9'];
+  const PRESET_COLORS = ['#e4002b','#f97316','#6366f1','#f59e0b','#10b981','#8b5cf6','#ec4899','#14b8a6'];
 
   // Componente separado para respetar Rules of Hooks
   const EditorPanel = ({ hasSlug, slug, previewUrl, paginaForm, setPaginaForm, publicPageForm, setPublicPageForm, savePagina, tienda, setPaginaSaved, hideUrl = false }) => {
@@ -3974,21 +2699,21 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
     const AccordionHeader = ({ id, label, summary }) => (
       <button onClick={() => toggle(id)}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 dark:hover:bg-white/4 transition-colors">
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-surface-card-2 dark:hover:bg-white/4 transition-colors">
         <div className="text-left">
           <p className="text-sm font-bold">{label}</p>
-          {summary && <p className="text-xs text-slate-400 mt-0.5">{summary}</p>}
+          {summary && <p className="text-xs text-ink-dim mt-0.5">{summary}</p>}
         </div>
-        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${openEditorPanel === id ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-4 h-4 text-ink-dim transition-transform duration-200 ${openEditorPanel === id ? 'rotate-180' : ''}`} />
       </button>
     );
 
     const TemplateThumbnail = ({ id }) => {
       const sel = paginaForm.template === id;
-      const c = sel ? paginaForm.color : '#94a3b8';
-      if (id === 'minimal') return (
+      const c = sel ? paginaForm.color : '#a3a3a3';
+      if (id === 'commerce-modern') return (
         <svg viewBox="0 0 60 80" fill="none" className="w-full h-full">
-          <rect width="60" height="80" rx="4" fill={sel ? `${c}18` : '#f1f5f9'} />
+          <rect width="60" height="80" rx="4" fill={sel ? `${c}18` : '#f0f0f0'} />
           <rect x="10" y="8" width="40" height="10" rx="2" fill={c} opacity="0.8" />
           <rect x="15" y="22" width="30" height="3" rx="1.5" fill={c} opacity="0.4" />
           <rect x="6" y="30" width="48" height="16" rx="2" fill={c} opacity="0.15" />
@@ -3999,7 +2724,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       );
       if (id === 'tarjetas') return (
         <svg viewBox="0 0 60 80" fill="none" className="w-full h-full">
-          <rect width="60" height="80" rx="4" fill={sel ? `${c}18` : '#f1f5f9'} />
+          <rect width="60" height="80" rx="4" fill={sel ? `${c}18` : '#f0f0f0'} />
           <rect x="4" y="4" width="52" height="20" rx="3" fill={c} opacity="0.7" />
           <rect x="4" y="28" width="25" height="22" rx="2" fill={c} opacity="0.25" />
           <rect x="31" y="28" width="25" height="22" rx="2" fill={c} opacity="0.25" />
@@ -4009,7 +2734,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       );
       if (id === 'magazine') return (
         <svg viewBox="0 0 60 80" fill="none" className="w-full h-full">
-          <rect width="60" height="80" rx="4" fill={sel ? `${c}18` : '#f1f5f9'} />
+          <rect width="60" height="80" rx="4" fill={sel ? `${c}18` : '#f0f0f0'} />
           <rect width="60" height="28" rx="4" fill={c} opacity="0.75" />
           <rect x="4" y="32" width="32" height="20" rx="2" fill={c} opacity="0.2" />
           <rect x="39" y="32" width="17" height="9" rx="2" fill={c} opacity="0.2" />
@@ -4021,9 +2746,9 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       );
       if (id === 'detail') return (
         <svg viewBox="0 0 60 80" fill="none" className="w-full h-full">
-          <rect width="60" height="80" rx="4" fill={sel ? `${c}18` : '#f1f5f9'} />
+          <rect width="60" height="80" rx="4" fill={sel ? `${c}18` : '#f0f0f0'} />
           <rect width="60" height="24" rx="4" fill={c} opacity="0.7" />
-          <rect x="6" y="16" width="16" height="16" rx="4" fill={sel ? paginaForm.color : '#fff'} stroke={sel ? `${c}60` : '#e2e8f0'} strokeWidth="1.5" />
+          <rect x="6" y="16" width="16" height="16" rx="4" fill={sel ? paginaForm.color : '#fff'} stroke={sel ? `${c}60` : '#e5e5e5'} strokeWidth="1.5" />
           <rect x="25" y="26" width="28" height="4" rx="2" fill={c} opacity="0.7" />
           <rect x="25" y="32" width="18" height="2.5" rx="1.25" fill={c} opacity="0.3" />
           <rect x="6" y="36" width="14" height="4" rx="2" fill={c} opacity="0.25" />
@@ -4063,7 +2788,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       /* minimal-pro — lista vertical compacta */
       if (id === 'minimal-pro') return (
         <svg viewBox="0 0 60 80" fill="none" className="w-full h-full">
-          <rect width="60" height="80" rx="4" fill={sel ? `${c}18` : '#f1f5f9'} />
+          <rect width="60" height="80" rx="4" fill={sel ? `${c}18` : '#f0f0f0'} />
           {/* header compacto */}
           <rect x="4" y="4" width="52" height="10" rx="2" fill={c} opacity="0.15" />
           <rect x="8" y="7" width="16" height="4" rx="2" fill={c} opacity="0.7" />
@@ -4087,7 +2812,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       /* PARALLAX/Nebula — parallax hero + grid 2 cols + ambient orbs */
       if (id === 'PARALLAX') return (
         <svg viewBox="0 0 60 80" fill="none" className="w-full h-full">
-          <rect width="60" height="80" rx="4" fill="#070b14" />
+          <rect width="60" height="80" rx="4" fill="#080808" />
           <ellipse cx="8" cy="12" rx="16" ry="16" fill={c} opacity="0.15" />
           <ellipse cx="55" cy="68" rx="14" ry="14" fill={c} opacity="0.1" />
           {/* header glass */}
@@ -4119,7 +2844,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       /* premium — dark glassmorphism con orbs de color */
       if (id === 'premium') return (
         <svg viewBox="0 0 60 80" fill="none" className="w-full h-full">
-          <rect width="60" height="80" rx="4" fill="#070b14" />
+          <rect width="60" height="80" rx="4" fill="#080808" />
           {/* orbs de ambiente */}
           <ellipse cx="10" cy="15" rx="18" ry="18" fill={c} opacity="0.12" />
           <ellipse cx="55" cy="50" rx="14" ry="14" fill={c} opacity="0.08" />
@@ -4157,9 +2882,9 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       /* base — parallax hero + sidebar + 2-col grid, light/dark */
       if (id === 'base') return (
         <svg viewBox="0 0 60 80" fill="none" className="w-full h-full">
-          <rect width="60" height="80" rx="4" fill={sel ? `${c}10` : '#f8fafc'} />
+          <rect width="60" height="80" rx="4" fill={sel ? `${c}10` : '#f5f5f5'} />
           {/* header sticky */}
-          <rect width="60" height="9" rx="4" fill={sel ? `${c}15` : '#f1f5f9'} />
+          <rect width="60" height="9" rx="4" fill={sel ? `${c}15` : '#f0f0f0'} />
           <rect x="3" y="3" width="5" height="3" rx="1.5" fill={c} opacity="0.8" />
           <rect x="12" y="3.5" width="20" height="2" rx="1" fill={c} opacity="0.2" />
           <rect x="52" y="3" width="5" height="3" rx="1.5" fill={c} opacity="0.3" />
@@ -4233,7 +2958,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           <div className="p-4 bg-amber-50 dark:bg-amber-500/10">
             <p className="text-xs font-bold text-amber-700 dark:text-amber-400 mb-2">Primero elegí tu URL</p>
             <div className="flex items-center bg-white dark:bg-white/5 rounded-xl border border-amber-200 dark:border-amber-500/30 overflow-hidden focus-within:border-brand transition-colors">
-              <span className="pl-3 text-xs text-slate-400 whitespace-nowrap">lokal.ar/t/</span>
+              <span className="pl-3 text-xs text-ink-dim whitespace-nowrap">lokal.ar/t/</span>
               <input
                 value={publicPageForm.slug}
                 onChange={e => setPublicPageForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
@@ -4251,36 +2976,20 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
               <ExternalLink className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             </div>
             <a href={previewUrl} target="_blank" rel="noreferrer" className="flex-1 text-sm font-semibold text-brand-dark dark:text-brand hover:underline truncate">
-              lokal.ar/t/{slug}
+              lokal.ar/{slug}
             </a>
-            <button onClick={() => { const url = `${window.location.origin}/t/${slug}`; if (navigator.share) { navigator.share({ title: tienda?.nombre || '', url }); } else { navigator.clipboard.writeText(url).then(() => { setPaginaSaved(true); setTimeout(() => setPaginaSaved(false), 2000); }); } }}
-              className="text-xs font-semibold bg-slate-100 dark:bg-white/8 px-2.5 py-1.5 rounded-lg shrink-0">
+            <button onClick={() => { const url = `${window.location.origin}/${slug}`; if (navigator.share) { navigator.share({ title: tienda?.nombre || '', url }); } else { navigator.clipboard.writeText(url).then(() => { setPaginaSaved(true); setTimeout(() => setPaginaSaved(false), 2000); }); } }}
+              className="text-xs font-semibold bg-surface-card-2 dark:bg-white/8 px-2.5 py-1.5 rounded-lg shrink-0">
               Compartir
             </button>
           </div>
         ) : null}
 
-        {/* Template */}
-        <div>
-          <AccordionHeader id="template" label="Plantilla" summary={TEMPLATE_INFO[paginaForm.template]?.label} />
-          {openEditorPanel === 'template' && (
-            <div className="pb-4 pl-4 flex gap-2 overflow-x-auto" style={{ scrollbarWidth:'none', WebkitOverflowScrolling:'touch', paddingRight:16 }}>
-              {Object.entries(TEMPLATE_INFO).map(([key, info]) => {
-                const sel = paginaForm.template === key;
-                return (
-                  <button key={key} onClick={() => setPaginaForm(f => ({ ...f, template: key }))}
-                    className={`flex flex-col items-center gap-1.5 p-1.5 rounded-xl border-2 transition-all shrink-0 ${sel ? 'border-brand bg-brand/5 dark:bg-brand/10 shadow-sm' : 'border-transparent bg-slate-50 dark:bg-white/4'}`}
-                    style={{ width: 72 }}>
-                    <div className="w-full rounded-md overflow-hidden" style={{ aspectRatio:'3/4' }}>
-                      <TemplateThumbnail id={key} />
-                    </div>
-                    <span className={`text-[10px] font-bold leading-none text-center w-full truncate ${sel ? 'text-brand' : 'text-slate-500'}`}>{info.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        {/* Selector de plantilla sacado: hoy existe un solo template real
+            (commerce-modern.jsx) — mostrar un selector de "elegí entre 1
+            opción" no aporta nada. Si se suman templates de verdad, este
+            accordion vuelve (usa TEMPLATE_INFO/TemplateThumbnail, ya
+            preparados para eso). */}
 
         {/* Color */}
         <div>
@@ -4298,14 +3007,36 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 <input type="color" value={paginaForm.color}
                   onChange={e => setPaginaForm(f => ({ ...f, color: e.target.value }))}
                   className="w-9 h-9 rounded-lg border border-slate-200 dark:border-white/10 cursor-pointer bg-transparent p-0.5" />
-                <span className="text-sm font-mono text-slate-500 flex-1">{paginaForm.color}</span>
+                <span className="text-sm font-mono text-ink-dim flex-1">{paginaForm.color}</span>
                 <button onClick={() => setPaginaForm(f => ({ ...f, modoOscuro: !f.modoOscuro }))}
                   title={paginaForm.modoOscuro ? 'Modo oscuro activo' : 'Modo claro'}
-                  className={`w-10 h-5 rounded-full flex items-center px-0.5 transition-colors ${paginaForm.modoOscuro ? 'bg-slate-700' : 'bg-slate-200 dark:bg-white/15'}`}>
+                  className={`w-10 h-5 rounded-full flex items-center px-0.5 transition-colors ${paginaForm.modoOscuro ? 'bg-ink-dim' : 'bg-surface-card-2 dark:bg-white/15'}`}>
                   <span className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform text-[8px] flex items-center justify-center ${paginaForm.modoOscuro ? 'translate-x-5' : 'translate-x-0'}`}>
                     {paginaForm.modoOscuro ? '🌙' : '☀️'}
                   </span>
                 </button>
+              </div>
+
+              {/* Color secundario — opcional, default amarillo LOKAL (#FFC530) si no se personaliza */}
+              <div className="border-t border-slate-100 dark:border-white/8 pt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-ink-dim">Color secundario (opcional)</span>
+                  <button
+                    onClick={() => setPaginaForm(f => ({ ...f, colorSecundario: f.colorSecundario ? null : '#FFC530' }))}
+                    className={`w-10 h-5 rounded-full flex items-center px-0.5 transition-colors ${paginaForm.colorSecundario ? 'bg-brand' : 'bg-surface-card-2 dark:bg-white/15'}`}>
+                    <span className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${paginaForm.colorSecundario ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+                {paginaForm.colorSecundario ? (
+                  <div className="flex items-center gap-3">
+                    <input type="color" value={paginaForm.colorSecundario}
+                      onChange={e => setPaginaForm(f => ({ ...f, colorSecundario: e.target.value }))}
+                      className="w-9 h-9 rounded-lg border border-slate-200 dark:border-white/10 cursor-pointer bg-transparent p-0.5" />
+                    <span className="text-sm font-mono text-ink-dim flex-1">{paginaForm.colorSecundario}</span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-ink-dim">Sin personalizar: usa el amarillo de LOKAL (#FFC530).</p>
+                )}
               </div>
             </div>
           )}
@@ -4319,24 +3050,24 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             <div className="px-3 pb-4 space-y-1">
               {seccionesOrdenadas.map(({ key, def, activa }, i) => (
                 <div key={key}
-                  className={`flex items-center gap-2 px-2 py-2.5 rounded-xl transition-all ${activa ? 'bg-slate-50 dark:bg-white/5' : 'opacity-45'}`}>
+                  className={`flex items-center gap-2 px-2 py-2.5 rounded-xl transition-all ${activa ? 'bg-surface-card-2 dark:bg-white/5' : 'opacity-45'}`}>
                   <div className="flex flex-col gap-0.5 shrink-0">
                     <button onClick={() => moverSeccion(key, 'up')} disabled={i === 0}
-                      className="w-5 h-4 rounded flex items-center justify-center hover:bg-slate-200 dark:hover:bg-white/10 text-slate-300 dark:text-slate-600 disabled:opacity-20 transition-colors text-[9px] leading-none">▲</button>
+                      className="w-5 h-4 rounded flex items-center justify-center hover:bg-surface-card-2 dark:hover:bg-white/10 text-ink-dim dark:text-ink-dim disabled:opacity-20 transition-colors text-[9px] leading-none">▲</button>
                     <button onClick={() => moverSeccion(key, 'down')} disabled={i === seccionesOrdenadas.length - 1}
-                      className="w-5 h-4 rounded flex items-center justify-center hover:bg-slate-200 dark:hover:bg-white/10 text-slate-300 dark:text-slate-600 disabled:opacity-20 transition-colors text-[9px] leading-none">▼</button>
+                      className="w-5 h-4 rounded flex items-center justify-center hover:bg-surface-card-2 dark:hover:bg-white/10 text-ink-dim dark:text-ink-dim disabled:opacity-20 transition-colors text-[9px] leading-none">▼</button>
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold leading-none">{def.label}</p>
-                    <p className="text-xs text-slate-400 mt-0.5 truncate">{def.desc}</p>
+                    <p className="text-xs text-ink-dim mt-0.5 truncate">{def.desc}</p>
                   </div>
                   <button onClick={() => toggleSeccion(key, def, activa)}
-                    className={`w-10 h-5 rounded-full flex items-center px-0.5 transition-colors shrink-0 ${activa ? 'bg-brand' : 'bg-slate-200 dark:bg-white/15'}`}>
+                    className={`w-10 h-5 rounded-full flex items-center px-0.5 transition-colors shrink-0 ${activa ? 'bg-brand' : 'bg-surface-card-2 dark:bg-white/15'}`}>
                     <span className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${activa ? 'translate-x-5' : 'translate-x-0'}`} />
                   </button>
                 </div>
               ))}
-              <p className="text-xs text-slate-400 pt-1 px-2">Guardá para aplicar los cambios</p>
+              <p className="text-xs text-ink-dim pt-1 px-2">Guardá para aplicar los cambios</p>
             </div>
           )}
         </div>
@@ -4347,24 +3078,24 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
   const MiPaginaScreen = () => {
     const slug = tienda?.slug || tiendaData?.slug || publicPageForm.slug || '';
-    const previewUrl = slug ? `/t/${slug}` : null;
+    const previewUrl = slug ? `/${slug}` : null;
     const hasSlug = !!slug;
     const storeId = tienda?.id || tiendaData?.id;
 
     return (
-      <div className="fixed inset-0 bg-slate-50 dark:bg-slate-950 flex flex-col z-[5000] lg:relative lg:inset-auto lg:z-auto lg:min-h-screen">
+      <div className="fixed inset-0 bg-surface-card-2 dark:bg-surface-card-2 flex flex-col z-[5000] lg:relative lg:inset-auto lg:z-auto lg:min-h-screen">
         {/* Header */}
-        <div className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-white/8 px-4 py-3 flex items-center gap-3 shrink-0">
-          <button onClick={() => setScreen('perfil')} className="w-9 h-9 rounded-xl hover:bg-slate-100 dark:hover:bg-white/8 flex items-center justify-center transition-colors">
+        <div className="bg-surface-card border-b border-slate-100 dark:border-white/8 px-4 py-3 flex items-center gap-3 shrink-0">
+          <button onClick={() => setScreen('perfil')} className="w-9 h-9 rounded-xl hover:bg-surface-card-2 dark:hover:bg-white/8 flex items-center justify-center transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex-1">
-            <h1 className="font-bold text-base leading-none">Mi página pública</h1>
+            <h1 className="font-bold text-base leading-none">Diseño de mi página</h1>
             {paginaSaved
               ? <p className="text-xs text-emerald-500 font-semibold mt-0.5">¡Guardado!</p>
               : paginaError
               ? <p className="text-xs text-rose-500 mt-0.5 truncate">{paginaError}</p>
-              : <p className="text-xs text-slate-400 mt-0.5">{hasSlug ? 'Guardá para ver los cambios en la preview' : 'Primero elegí una URL'}</p>
+              : <p className="text-xs text-ink-dim mt-0.5">{hasSlug ? 'Guardá para ver los cambios en la preview' : 'Primero elegí una URL'}</p>
             }
           </div>
           <button
@@ -4380,16 +3111,16 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         {/* ── MOBILE: preview arriba + bottom sheet editor ── */}
         <div className="lg:hidden flex-1 relative overflow-hidden" style={{ minHeight: 0, contain: 'strict' }}>
           {/* Preview: teléfono ocupa todo el ancho disponible */}
-          <div className="absolute inset-0 flex items-start justify-center bg-slate-200 dark:bg-slate-900 overflow-hidden" style={{ paddingTop: 8, paddingLeft: 8, paddingRight: 8 }}>
+          <div className="absolute inset-0 flex items-start justify-center bg-surface-card-2 dark:bg-surface-card-2 overflow-hidden" style={{ paddingTop: 8, paddingLeft: 8, paddingRight: 8 }}>
             {/* frameW = 100% del área - 16px márgenes. El contenido interno = frameW - 16px borde */}
             <div style={{ width: '100%', maxWidth: 480, flexShrink: 0 }}>
-              <div style={{ width: '100%', borderRadius: 32, border: '8px solid #1e293b', background: '#0f172a', boxShadow: '0 16px 48px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.06)', overflow: 'hidden' }}>
+              <div style={{ width: '100%', borderRadius: 32, border: '8px solid #262626', background: '#18181b', boxShadow: '0 16px 48px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.06)', overflow: 'hidden' }}>
                 {/* Notch */}
-                <div style={{ height: 22, background: '#1e293b', display: 'flex', justifyContent: 'center', alignItems: 'flex-end', paddingBottom: 3 }}>
-                  <div style={{ width: 56, height: 8, borderRadius: 6, background: '#0f172a' }} />
+                <div style={{ height: 22, background: '#262626', display: 'flex', justifyContent: 'center', alignItems: 'flex-end', paddingBottom: 3 }}>
+                  <div style={{ width: 56, height: 8, borderRadius: 6, background: '#18181b' }} />
                 </div>
                 {/* Contenido: alto fijo para que el sheet tape el resto */}
-                <div style={{ height: 'calc(100dvh - 56px - 52px - 38px)', background: paginaForm.modoOscuro ? '#0a0d16' : '#f8fafc', overflowY: 'auto', overflowX: 'hidden', position: 'relative', WebkitOverflowScrolling: 'touch' }}>
+                <div style={{ height: 'calc(100dvh - 56px - 52px - 38px)', background: paginaForm.modoOscuro ? '#080808' : '#f5f5f5', overflowY: 'auto', overflowX: 'hidden', position: 'relative', WebkitOverflowScrolling: 'touch' }}>
                   {tienda ? (
                     <div key={previewKey} style={{ transformOrigin: 'top left', transform: 'scale(var(--phone-scale, 1))', width: 'calc(100% / var(--phone-scale, 1))' }}
                       ref={el => {
@@ -4407,14 +3138,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                       />
                     </div>
                   ) : (
-                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, color: '#64748b' }}>
+                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, color: '#6b6b6b' }}>
                       <Store style={{ width: 28, height: 28, opacity: .3 }} />
                       <p style={{ fontSize: 12, fontWeight: 600 }}>Cargando...</p>
                     </div>
                   )}
                 </div>
                 {/* Chin */}
-                <div style={{ height: 16, background: '#1e293b', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <div style={{ height: 16, background: '#262626', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                   <div style={{ width: 48, height: 3, borderRadius: 3, background: 'rgba(255,255,255,.2)' }} />
                 </div>
               </div>
@@ -4423,7 +3154,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
           {/* Bottom sheet — handle arriba, contenido scrolleable */}
           <div
-            className="absolute bottom-0 left-0 right-0 flex flex-col transition-all duration-300 ease-out bg-white dark:bg-slate-900 shadow-2xl"
+            className="absolute bottom-0 left-0 right-0 flex flex-col transition-all duration-300 ease-out bg-surface-card shadow-2xl"
             style={{ maxHeight: editorSheetOpen ? '75%' : '52px', height: editorSheetOpen ? 'auto' : '52px', overflow: 'hidden' }}
           >
             {/* Handle / drag bar */}
@@ -4431,8 +3162,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
               onClick={() => setEditorSheetOpen(v => !v)}
               className="w-full flex flex-col items-center justify-center gap-1 py-3 shrink-0 border-t border-slate-200 dark:border-white/10"
             >
-              <div className="w-10 h-1 rounded-full bg-slate-300 dark:bg-white/20" />
-              <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
+              <div className="w-10 h-1 rounded-full bg-ink-dim/40 dark:bg-white/20" />
+              <p className="text-xs font-bold text-ink-dim">
                 {editorSheetOpen ? 'Ocultar editor' : 'Editar página'}
               </p>
             </button>
@@ -4458,13 +3189,13 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             savePagina={savePagina} tienda={tienda} setPaginaSaved={setPaginaSaved}
           />
 
-          <div className="flex flex-1 items-center justify-center overflow-hidden bg-slate-100 dark:bg-slate-950/50">
+          <div className="flex flex-1 items-center justify-center overflow-hidden bg-surface-card-2 dark:bg-surface-card-2/50">
             <div style={{ width: 320, flexShrink: 0 }}>
-              <div style={{ width: 320, borderRadius: 42, border: '10px solid #1e293b', background: '#0f172a', boxShadow: '0 30px 80px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.05)', overflow: 'hidden' }}>
-                <div style={{ height: 28, background: '#1e293b', display: 'flex', justifyContent: 'center', alignItems: 'flex-end', paddingBottom: 4 }}>
-                  <div style={{ width: 80, height: 10, borderRadius: 8, background: '#0f172a' }} />
+              <div style={{ width: 320, borderRadius: 42, border: '10px solid #262626', background: '#18181b', boxShadow: '0 30px 80px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.05)', overflow: 'hidden' }}>
+                <div style={{ height: 28, background: '#262626', display: 'flex', justifyContent: 'center', alignItems: 'flex-end', paddingBottom: 4 }}>
+                  <div style={{ width: 80, height: 10, borderRadius: 8, background: '#18181b' }} />
                 </div>
-                <div style={{ height: 580, background: paginaForm.modoOscuro ? '#0f172a' : '#f8fafc', position: 'relative', overflowY: 'auto' }}>
+                <div style={{ height: 580, background: paginaForm.modoOscuro ? '#18181b' : '#f5f5f5', position: 'relative', overflowY: 'auto' }}>
                   {tienda ? (
                     <div key={previewKey} style={{ transformOrigin: 'top left', transform: 'scale(0.55)', width: '182%', pointerEvents: 'none' }}>
                       <TiendaPublicaRenderer
@@ -4474,17 +3205,17 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                       />
                     </div>
                   ) : (
-                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10, color: '#64748b' }}>
+                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10, color: '#6b6b6b' }}>
                       <Store style={{ width: 32, height: 32, opacity: .3 }} />
                       <p style={{ fontSize: 13, fontWeight: 600 }}>Cargando tienda...</p>
                     </div>
                   )}
                 </div>
-                <div style={{ height: 20, background: '#1e293b', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <div style={{ height: 20, background: '#262626', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                   <div style={{ width: 60, height: 4, borderRadius: 4, background: 'rgba(255,255,255,.2)' }} />
                 </div>
               </div>
-              <p className="text-center text-xs text-slate-400 mt-3">Preview en vivo · escala reducida</p>
+              <p className="text-center text-xs text-ink-dim mt-3">Preview en vivo · escala reducida</p>
             </div>
           </div>
         </div>
@@ -4493,12 +3224,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   };
 
   const StatsScreen = () => {
-    const totalRespuestas = misRespuestas.length;
-    const demandasConRespuesta = new Set(misRespuestas.map(r => r.demandaId)).size;
-    const tasaRespuesta = demandas.length > 0
-      ? Math.round((demandasConRespuesta / demandas.length) * 100)
-      : 0;
-
     const fetchInsights = async () => {
       setAiLoading(true);
       setAiError(null);
@@ -4518,10 +3243,10 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
     const prioColor = (p) => p === 'alta' ? 'text-rose-500 bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20'
       : p === 'media' ? 'text-amber-600 bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20'
-      : 'text-slate-500 bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10';
+      : 'text-ink-dim bg-surface-card-2 dark:bg-white/5 border-slate-200 dark:border-white/10';
 
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24 lg:pb-8">
+      <div className="min-h-screen bg-surface-card-2 dark:bg-surface-card-2 pb-24 lg:pb-8">
         <StorePageHeader title="Estadísticas" subtitle="Rendimiento de tu tienda" />
 
         <div className="max-w-3xl mx-auto px-5 py-6 space-y-5">
@@ -4530,29 +3255,29 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             <div className="grid grid-cols-3 gap-3">
               {[
                 { label: 'Visitas hoy', value: MOCK_STATS.visitasHoy, color: 'text-emerald-600 dark:text-emerald-400' },
-                { label: 'Esta semana', value: MOCK_STATS.visitasSemana, color: 'text-blue-600 dark:text-blue-400' },
+                { label: 'Esta semana', value: MOCK_STATS.visitasSemana, color: 'text-brand' },
                 { label: 'Este mes', value: MOCK_STATS.visitasMes, color: 'text-violet-600 dark:text-violet-400' },
               ].map(({ label, value, color }) => (
-                <div key={label} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-white/8 p-4 text-center">
+                <div key={label} className="bg-surface-card rounded-2xl border border-slate-100 dark:border-white/8 p-4 text-center">
                   <p className={`text-2xl font-black ${color}`}>{value.toLocaleString()}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">{label}</p>
+                  <p className="text-xs text-ink-dim mt-0.5">{label}</p>
                 </div>
               ))}
             </div>
           )}
           {mockMode && (
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-white/8 p-5">
+            <div className="bg-surface-card rounded-2xl border border-slate-100 dark:border-white/8 p-5">
               <h3 className="font-bold text-sm mb-3">Productos más vistos</h3>
               <div className="space-y-2">
                 {MOCK_STATS.productosVistos.map((p, i) => (
                   <div key={p.nombre} className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-slate-400 w-4">{i + 1}</span>
+                    <span className="text-xs font-bold text-ink-dim w-4">{i + 1}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs font-semibold truncate">{p.nombre}</span>
-                        <span className="text-xs text-slate-400 shrink-0 ml-2">{p.visitas}</span>
+                        <span className="text-xs text-ink-dim shrink-0 ml-2">{p.visitas}</span>
                       </div>
-                      <div className="h-1.5 bg-slate-100 dark:bg-white/8 rounded-full overflow-hidden">
+                      <div className="h-1.5 bg-surface-card-2 dark:bg-white/8 rounded-full overflow-hidden">
                         <div className="h-full bg-brand rounded-full" style={{ width: `${Math.round(p.visitas / MOCK_STATS.productosVistos[0].visitas * 100)}%` }} />
                       </div>
                     </div>
@@ -4562,68 +3287,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             </div>
           )}
 
-          {/* Cards stats */}
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-            {[
-              {
-                label: 'Demandas activas',
-                value: demandas.length,
-                icon: Package,
-                iconWrapClass: 'bg-blue-100 dark:bg-blue-500/15',
-                iconClass: 'text-blue-600 dark:text-blue-400',
-              },
-              {
-                label: 'Respuestas enviadas',
-                value: totalRespuestas,
-                icon: MessageSquare,
-                iconWrapClass: 'bg-brand/10 dark:bg-brand/15',
-                iconClass: 'text-brand-dark dark:text-brand',
-              },
-              {
-                label: 'Tasa de respuesta',
-                value: `${tasaRespuesta}%`,
-                icon: TrendingUp,
-                iconWrapClass: 'bg-violet-100 dark:bg-violet-500/10',
-                iconClass: 'text-violet-600 dark:text-violet-400',
-              },
-            ].map(({ label, value, icon: Icon, iconWrapClass, iconClass }) => (
-              <div key={label} className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-slate-100 dark:border-white/10 p-5">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${iconWrapClass}`}>
-                  <Icon className={`w-5 h-5 ${iconClass}`} />
-                </div>
-                <p className="text-3xl font-bold mb-1">{value}</p>
-                <p className="text-sm text-slate-500 dark:text-slate-400">{label}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Actividad reciente */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-slate-100 dark:border-white/10 p-5">
-            <h3 className="font-bold mb-4">Ultimas respuestas</h3>
-            {misRespuestas.length === 0 ? (
-              <p className="text-sm text-slate-400">Sin actividad todavia</p>
-            ) : misRespuestas.slice(0, 5).map(r => (
-              <div key={r.id} className="flex items-center gap-3 py-3 border-b dark:border-white/10 last:border-0">
-                <div className="w-8 h-8 bg-brand/15 rounded-xl flex items-center justify-center shrink-0">
-                  <CheckCircle className="w-4 h-4 text-brand-dark" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm truncate">{r.demandaTitulo || 'Demanda'}</p>
-                  <p className="text-xs text-slate-400">{r.tiempoRespuesta || 'Reciente'}</p>
-                </div>
-                {r.precio && <p className="text-sm font-bold text-brand-dark shrink-0">${r.precio.toLocaleString()}</p>}
-              </div>
-            ))}
-          </div>
-
           {/* ── Análisis IA ──────────────────────────────────────────────── */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-slate-100 dark:border-white/10 p-5">
+          <div className="bg-surface-card rounded-3xl border-2 border-slate-100 dark:border-white/10 p-5">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="font-bold flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-brand" /> Análisis IA
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">Guía personalizada basada en tu actividad</p>
+                <p className="text-xs text-ink-dim mt-0.5">Guía personalizada basada en tu actividad</p>
               </div>
               {!aiData && (
                 <button
@@ -4636,7 +3307,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 </button>
               )}
               {aiData && (
-                <button onClick={() => { setAiData(null); setAiError(null); }} className="text-xs text-slate-400 hover:text-slate-600">Actualizar</button>
+                <button onClick={() => { setAiData(null); setAiError(null); }} className="text-xs text-ink-dim hover:text-ink-dim">Actualizar</button>
               )}
             </div>
 
@@ -4647,14 +3318,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             )}
 
             {!aiData && !aiLoading && !aiError && (
-              <div className="text-center py-6 text-slate-400">
+              <div className="text-center py-6 text-ink-dim">
                 <Lightbulb className="w-10 h-10 mx-auto mb-2 opacity-30" />
                 <p className="text-sm">Presioná "Analizar" para obtener consejos personalizados sobre tu tienda</p>
               </div>
             )}
 
             {aiLoading && (
-              <div className="flex flex-col items-center py-8 gap-3 text-slate-400">
+              <div className="flex flex-col items-center py-8 gap-3 text-ink-dim">
                 <Loader2 className="w-8 h-8 animate-spin text-brand" />
                 <p className="text-sm">Analizando tu tienda...</p>
               </div>
@@ -4663,10 +3334,10 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             {aiData && (
               <div className="space-y-4">
                 {/* Score + resumen */}
-                <div className="flex items-center gap-4 bg-slate-50 dark:bg-white/5 rounded-2xl p-4">
+                <div className="flex items-center gap-4 bg-surface-card-2 dark:bg-white/5 rounded-2xl p-4">
                   <div className="w-14 h-14 rounded-2xl bg-brand/15 dark:bg-brand/20 flex flex-col items-center justify-center shrink-0">
                     <span className="text-xl font-black text-brand-dark dark:text-brand">{aiData.insights?.score ?? '—'}</span>
-                    <span className="text-[9px] text-slate-400 font-semibold">/ 10</span>
+                    <span className="text-[9px] text-ink-dim font-semibold">/ 10</span>
                   </div>
                   <p className="text-sm font-semibold flex-1">{aiData.insights?.resumen}</p>
                 </div>
@@ -4674,7 +3345,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 {/* Consejos */}
                 {(aiData.insights?.consejos || []).length > 0 && (
                   <div className="space-y-2">
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Consejos</p>
+                    <p className="text-xs font-bold text-ink-dim uppercase tracking-wider">Consejos</p>
                     {aiData.insights.consejos.map((c, i) => (
                       <div key={i} className={`flex gap-3 p-3.5 rounded-2xl border ${prioColor(c.prioridad)}`}>
                         <Lightbulb className="w-4 h-4 shrink-0 mt-0.5" />
@@ -4690,7 +3361,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 {/* Fortalezas */}
                 {(aiData.insights?.fortalezas || []).length > 0 && (
                   <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Puntos fuertes</p>
+                    <p className="text-xs font-bold text-ink-dim uppercase tracking-wider mb-2">Puntos fuertes</p>
                     <div className="flex flex-wrap gap-2">
                       {aiData.insights.fortalezas.map((f, i) => (
                         <span key={i} className="flex items-center gap-1 text-xs bg-brand/10 dark:bg-brand/15 text-brand-dark dark:text-brand px-3 py-1.5 rounded-full font-semibold">
@@ -4745,7 +3416,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
     return (
       <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/10">
-        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">Rubros de la tienda</p>
+        <p className="text-xs font-semibold text-ink-dim mb-2">Rubros de la tienda</p>
         <div className="flex flex-wrap gap-1.5 mb-3">
           {rootCats.map(cat => {
             const isSelected = selected.includes(cat.id);
@@ -4757,7 +3428,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
                   isSelected
                     ? 'bg-brand text-white'
-                    : 'bg-slate-100 dark:bg-white/8 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/12'
+                    : 'bg-surface-card-2 dark:bg-white/8 text-ink-dim dark:text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/12'
                 }`}
               >
                 <CategoryIcon name={cat.icon} className="w-3.5 h-3.5" />
@@ -4768,7 +3439,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         </div>
 
         {selected.length === 0 && (
-          <div className="flex items-center gap-2 text-xs text-slate-400 mb-3">
+          <div className="flex items-center gap-2 text-xs text-ink-dim mb-3">
             <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
             <span>Sin rubros — los clientes no podrán encontrar tu tienda fácilmente.</span>
           </div>
@@ -4778,7 +3449,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-2xl text-xs text-amber-700 dark:text-amber-400 mb-3">
             <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
             <div>
-              <strong>Demasiados rubros.</strong> Recibirás más demandas pero menos relevantes para tu tienda.
+              <strong>Demasiados rubros.</strong> Elegir menos categorías ayuda a que tu tienda aparezca más relevante para los clientes correctos.
               Si vendés de todo, considerá elegir solo <strong>"Multirubro"</strong>.
             </div>
           </div>
@@ -4813,21 +3484,21 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
     return (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center" onClick={closeMediaEditor}>
-        <div className="bg-white dark:bg-slate-900 rounded-t-3xl lg:rounded-3xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="bg-surface-card rounded-t-3xl lg:rounded-3xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-white/10 shrink-0">
             <div>
               <h2 className="font-bold text-base">{title}</h2>
-              <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>
+              <p className="text-xs text-ink-dim mt-0.5">{subtitle}</p>
             </div>
-            <button onClick={closeMediaEditor} className="w-8 h-8 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 flex items-center justify-center">
+            <button onClick={closeMediaEditor} className="w-8 h-8 rounded-xl hover:bg-surface-card-2 dark:hover:bg-white/10 flex items-center justify-center">
               <X className="w-4 h-4" />
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-4 py-3">
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 dark:border-white/10 bg-surface-card-2 dark:bg-white/5 px-4 py-3">
               <div>
                 <p className="text-sm font-semibold">{mediaDraft.length} / {maxItems} imágenes</p>
-                <p className="text-xs text-slate-400">Podés subir nuevas o conservar las ya usadas.</p>
+                <p className="text-xs text-ink-dim">Podés subir nuevas o conservar las ya usadas.</p>
               </div>
               <button onClick={() => mediaInputRef.current?.click()} disabled={mediaDraft.length >= maxItems} className="px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark disabled:opacity-50 text-white text-sm font-semibold transition-colors">
                 {isSingle && mediaDraft.length > 0 ? 'Cambiar' : 'Agregar'}
@@ -4835,15 +3506,15 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
               <input ref={mediaInputRef} type="file" accept="image/*" multiple={!isSingle} className="hidden" onChange={handleMediaFiles} />
             </div>
             {mediaDraft.length === 0 ? (
-              <div className="rounded-3xl border-2 border-dashed border-slate-200 dark:border-white/10 p-10 text-center text-slate-400">
+              <div className="rounded-3xl border-2 border-dashed border-slate-200 dark:border-white/10 p-10 text-center text-ink-dim">
                 <Camera className="w-10 h-10 mx-auto mb-3" />
                 <p className="font-semibold">{emptyLabel}</p>
               </div>
             ) : (
               <div className={`grid gap-3 ${isSingle ? 'grid-cols-1' : 'grid-cols-2 lg:grid-cols-3'}`}>
                 {mediaDraft.map((item, index) => (
-                  <div key={`${item.url}-${index}`} className="relative rounded-3xl overflow-hidden bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 group">
-                    <img src={item.url} alt="" className={`w-full object-cover ${isSingle ? 'aspect-[16/9]' : 'aspect-square'}`} />
+                  <div key={`${item.url}-${index}`} className="relative rounded-3xl overflow-hidden bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 group">
+                    <img src={item.url} alt="" loading="lazy" decoding="async" className={`w-full object-cover ${isSingle ? 'aspect-[16/9]' : 'aspect-square'}`} />
                     <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/70 to-transparent text-white text-xs font-semibold">
                       {item.existing ? 'Ya usada' : 'Nueva'}
                     </div>
@@ -4869,48 +3540,77 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
   const LocationEditorModal = () => {
     if (!locationModal) return null;
-    const currentCoords = tiendaData?.lat && tiendaData?.lng ? `${Number(tiendaData.lat).toFixed(5)}, ${Number(tiendaData.lng).toFixed(5)}` : 'Sin ubicación exacta';
-    const nextCoords = locationForm.lat && locationForm.lng ? `${Number(locationForm.lat).toFixed(5)}, ${Number(locationForm.lng).toFixed(5)}` : 'Elegí un punto en el mapa';
+
+    // GPS y click-en-mapa son alternativas COMPLETAS a tipear: además de
+    // mover el pin, resuelven ciudad/dirección vía reverse geocoding
+    // (mismo proveedor — Nominatim — que ya usa el buscador de arriba), así
+    // no dejan esos campos vacíos o desincronizados del pin.
+    const applyGeocode = async (lat, lng) => {
+      setLocationForm(prev => ({ ...prev, lat, lng }));
+      setLocationFlyTo({ lat, lng });
+      try {
+        const { ciudad, direccion } = await reverseGeocode(lat, lng);
+        setLocationForm(prev => ({ ...prev, lat, lng, ciudad: ciudad || prev.ciudad, direccion: direccion || prev.direccion }));
+      } catch { /* el pin ya quedó puesto; ciudad/dirección se pueden tipear a mano */ }
+    };
+
+    const useMyLocation = () => {
+      geo.requestLocation();
+    };
 
     return (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center" onClick={() => setLocationModal(false)}>
-        <div className="bg-white dark:bg-slate-900 rounded-t-3xl lg:rounded-3xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="bg-surface-card rounded-t-3xl lg:rounded-3xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-white/10 shrink-0">
             <div>
               <h2 className="font-bold text-base">Ubicación de la tienda</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Mostrá la ubicación actual y confirmá una nueva dirección con mapa.</p>
+              <p className="text-xs text-ink-dim mt-0.5">Usá tu ubicación, tocá el mapa o escribí la dirección.</p>
             </div>
-            <button onClick={() => setLocationModal(false)} className="w-8 h-8 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 flex items-center justify-center">
+            <button onClick={() => setLocationModal(false)} className="w-8 h-8 rounded-xl hover:bg-surface-card-2 dark:hover:bg-white/10 flex items-center justify-center">
               <X className="w-4 h-4" />
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            {/* Acciones de ubicación — misma fila, GPS y mapa como
+                alternativas reales a tipear (antes eran dos cajas de
+                coordenadas crudas sin acción, solo texto). */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={useMyLocation}
+                disabled={geo.loading}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-2xl border border-slate-200 dark:border-white/10 bg-surface-card-2 dark:bg-white/5 hover:bg-brand/10 hover:border-brand/40 hover:text-brand text-sm font-bold text-ink dark:text-ink-dim transition-colors disabled:opacity-60"
+              >
+                {geo.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Navigation className="w-4 h-4" />}
+                {geo.loading ? 'Ubicando...' : 'Usar mi ubicación'}
+              </button>
+              <span className="text-xs text-ink-dim shrink-0 hidden sm:block">o tocá el mapa</span>
+            </div>
+            {geo.error && <p className="text-xs text-rose-500 font-semibold">No pudimos acceder a tu ubicación — probá tocar el mapa o escribir la dirección.</p>}
+
             <div className="grid lg:grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-semibold text-slate-500 mb-1 block">Ciudad</label>
-                <PlaceAutocomplete value={locationForm.ciudad} onChange={(value) => setLocationForm(prev => ({ ...prev, ciudad: value }))} onSelect={({ label }) => setLocationForm(prev => ({ ...prev, ciudad: label }))} placeholder="Buscá tu ciudad" labelParts={2} />
+                <label className="text-xs font-semibold text-ink-dim mb-1 block">Ciudad</label>
+                <PlaceAutocomplete
+                  id="ciudad" activeId={activeLocationField}
+                  onActivate={setActiveLocationField}
+                  onDeactivate={(fieldId) => setActiveLocationField(cur => (cur === fieldId ? null : cur))}
+                  value={locationForm.ciudad} onChange={(value) => setLocationForm(prev => ({ ...prev, ciudad: value }))} onSelect={({ label }) => setLocationForm(prev => ({ ...prev, ciudad: label }))} placeholder="Buscá tu ciudad" labelParts={2}
+                />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-500 mb-1 block">Dirección</label>
-                <PlaceAutocomplete value={locationForm.direccion} onChange={(value) => setLocationForm(prev => ({ ...prev, direccion: value }))} onSelect={({ lat, lng, label }) => { setLocationForm(prev => ({ ...prev, direccion: label, lat, lng })); setLocationFlyTo({ lat, lng }); }} placeholder="Escribí la dirección o referencia" searchSuffix={locationForm.ciudad} labelParts={3} />
-              </div>
-            </div>
-            <div className="grid lg:grid-cols-2 gap-3">
-              <div className="rounded-2xl border border-slate-200 dark:border-white/10 px-4 py-3 bg-slate-50 dark:bg-white/5">
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Ubicación actual</p>
-                <p className="mt-1 text-sm font-bold text-slate-900 dark:text-white">{currentCoords}</p>
-                <p className="text-xs text-slate-500 mt-1">{[tiendaInfo.direccion, tiendaInfo.ciudad].filter(Boolean).join(', ') || 'Todavía no configurada'}</p>
-              </div>
-              <div className="rounded-2xl border border-brand/20 px-4 py-3 bg-brand/5 dark:bg-brand/10">
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-400 font-semibold">Nueva ubicación</p>
-                <p className="mt-1 text-sm font-bold text-slate-900 dark:text-white">{nextCoords}</p>
-                <p className="text-xs text-slate-500 mt-1">{[locationForm.direccion, locationForm.ciudad].filter(Boolean).join(', ') || 'Seleccioná una dirección o tocá el mapa'}</p>
+                <label className="text-xs font-semibold text-ink-dim mb-1 block">Dirección</label>
+                <PlaceAutocomplete
+                  id="direccion" activeId={activeLocationField} mode="direccion"
+                  onActivate={setActiveLocationField}
+                  onDeactivate={(fieldId) => setActiveLocationField(cur => (cur === fieldId ? null : cur))}
+                  value={locationForm.direccion} onChange={(value) => setLocationForm(prev => ({ ...prev, direccion: value }))} onSelect={({ lat, lng, label }) => applyGeocode(lat, lng).then(() => setLocationForm(prev => ({ ...prev, direccion: label })))} placeholder="Escribí la dirección o referencia" searchSuffix={locationForm.ciudad} labelParts={3}
+                />
               </div>
             </div>
             <div>
-              <p className="text-xs font-semibold text-slate-500 mb-2">Mapa</p>
-              <MapPicker lat={locationForm.lat} lng={locationForm.lng} flyTo={locationFlyTo} onChange={({ lat, lng }) => setLocationForm(prev => ({ ...prev, lat, lng }))} isDark={isDark} />
-              <p className="text-xs text-slate-400 mt-2">Tocá el mapa para dejar un pin nuevo o buscá la dirección arriba.</p>
+              <p className="text-xs font-semibold text-ink-dim mb-2">Mapa</p>
+              <MapPicker lat={locationForm.lat} lng={locationForm.lng} flyTo={locationFlyTo} onChange={({ lat, lng }) => applyGeocode(lat, lng)} isDark={isDark} />
+              <p className="text-xs text-ink-dim mt-2">{[locationForm.direccion, locationForm.ciudad].filter(Boolean).join(', ') || 'Tocá el mapa, usá tu ubicación o buscá la dirección arriba.'}</p>
             </div>
             {locationError && <p className="text-sm text-rose-500 font-semibold">{locationError}</p>}
           </div>
@@ -4966,25 +3666,25 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
     return (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center" onClick={() => setHorarioModal(false)}>
-        <div className="bg-white dark:bg-slate-900 rounded-t-3xl lg:rounded-3xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="bg-surface-card rounded-t-3xl lg:rounded-3xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-white/10 shrink-0">
             <div>
               <h2 className="font-bold text-base">Horarios de atención</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Marcá los días que abrís y los horarios.</p>
+              <p className="text-xs text-ink-dim mt-0.5">Marcá los días que abrís y los horarios.</p>
             </div>
-            <button onClick={() => setHorarioModal(false)} className="w-8 h-8 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 flex items-center justify-center">
+            <button onClick={() => setHorarioModal(false)} className="w-8 h-8 rounded-xl hover:bg-surface-card-2 dark:hover:bg-white/10 flex items-center justify-center">
               <X className="w-4 h-4" />
             </button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-5 space-y-3">
             {diasSemana.map(({ key, label }) => (
-              <div key={key} className={`rounded-2xl border p-4 transition-colors ${horarioForm[key]?.abierto ? 'border-brand/30 bg-brand/5' : 'border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5'}`}>
+              <div key={key} className={`rounded-2xl border p-4 transition-colors ${horarioForm[key]?.abierto ? 'border-brand/30 bg-brand/5' : 'border-slate-200 dark:border-white/10 bg-surface-card-2 dark:bg-white/5'}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => toggleDia(key)}
-                      className={`w-12 h-7 rounded-full transition-colors relative ${horarioForm[key]?.abierto ? 'bg-brand' : 'bg-slate-300 dark:bg-slate-600'}`}
+                      className={`w-12 h-7 rounded-full transition-colors relative ${horarioForm[key]?.abierto ? 'bg-brand' : 'bg-ink-dim dark:bg-ink-dim'}`}
                     >
                       <div className={`w-5 h-5 rounded-full bg-white absolute top-1 transition-transform ${horarioForm[key]?.abierto ? 'left-6' : 'left-1'}`} />
                     </button>
@@ -4998,21 +3698,21 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 {horarioForm[key]?.abierto && (
                   <div className="flex items-center gap-3 mt-3">
                     <div className="flex-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">Desde</label>
+                      <label className="text-[10px] font-bold text-ink-dim uppercase">Desde</label>
                       <input
                         type="time"
                         value={horarioForm[key]?.desde || '09:00'}
                         onChange={e => setHora(key, 'desde', e.target.value)}
-                        className="w-full mt-1 p-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm"
+                        className="w-full mt-1 p-2 rounded-xl border border-slate-200 dark:border-white/10 bg-surface-card text-sm"
                       />
                     </div>
                     <div className="flex-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">Hasta</label>
+                      <label className="text-[10px] font-bold text-ink-dim uppercase">Hasta</label>
                       <input
                         type="time"
                         value={horarioForm[key]?.hasta || '18:00'}
                         onChange={e => setHora(key, 'hasta', e.target.value)}
-                        className="w-full mt-1 p-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm"
+                        className="w-full mt-1 p-2 rounded-xl border border-slate-200 dark:border-white/10 bg-surface-card text-sm"
                       />
                     </div>
                   </div>
@@ -5043,9 +3743,9 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     const activeTab = editInfoTab;
     const setActiveTab = setEditInfoTab;
     const isGeneralScope = editInfoScope === 'general';
-    const isPhoneScope = editInfoScope === 'telefono';
+    const isPhoneScope = editInfoScope === 'contacto'; // teléfono+whatsapp+instagram+tagline juntos
     const isDescriptionScope = editInfoScope === 'descripcion';
-    const modalTitle = isPhoneScope ? 'Editar contacto' : isDescriptionScope ? 'Editar descripción' : 'Editar perfil';
+    const modalTitle = isPhoneScope ? 'Contacto e info' : isDescriptionScope ? 'Editar descripción' : 'Editar perfil';
 
     const toggleRubro = (id) => setSelectedRubros(prev =>
       prev.includes(id) ? prev.filter(r => r !== id) : prev.length < 5 ? [...prev, id] : prev
@@ -5071,11 +3771,11 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
     return (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center" onClick={() => setEditInfoModal(false)}>
-        <div className="bg-white dark:bg-slate-900 rounded-t-3xl lg:rounded-3xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="bg-surface-card rounded-t-3xl lg:rounded-3xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-white/10 shrink-0">
             <h2 className="font-bold text-base">{modalTitle}</h2>
-            <button onClick={() => setEditInfoModal(false)} className="w-8 h-8 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 flex items-center justify-center">
+            <button onClick={() => setEditInfoModal(false)} className="w-8 h-8 rounded-xl hover:bg-surface-card-2 dark:hover:bg-white/10 flex items-center justify-center">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -5085,7 +3785,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             <div className="flex border-b border-slate-100 dark:border-white/10 shrink-0">
               {[{ id: 'info', label: 'Info básica' }, { id: 'rubros', label: 'Rubros' }].map(t => (
                 <button key={t.id} onClick={() => setActiveTab(t.id)}
-                  className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-colors ${activeTab === t.id ? 'border-brand text-brand' : 'border-transparent text-slate-500'}`}>
+                  className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-colors ${activeTab === t.id ? 'border-brand text-brand' : 'border-transparent text-ink-dim'}`}>
                   {t.label}
                 </button>
               ))}
@@ -5097,7 +3797,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
               <>
                 {isGeneralScope && (
                   <div className="space-y-3">
-                    <p className="text-xs text-slate-400">Desde acá podés ajustar la info general y abrir ediciones específicas para imágenes y ubicación.</p>
+                    <p className="text-xs text-ink-dim">Desde acá podés ajustar la info general y abrir ediciones específicas para imágenes y ubicación.</p>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       {[
                         { key: 'foto', label: 'Foto de perfil', meta: tiendaInfo.foto ? 'Configurada' : 'Agregar', action: () => { setEditInfoModal(false); openMediaEditor('foto'); } },
@@ -5107,9 +3807,9 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                         <button
                           key={item.key}
                           onClick={item.action}
-                          className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-3 text-left hover:border-brand/40 hover:bg-brand/5 transition-colors"
+                          className="rounded-2xl border border-slate-200 dark:border-white/10 bg-surface-card-2 dark:bg-white/5 p-3 text-left hover:border-brand/40 hover:bg-brand/5 transition-colors"
                         >
-                          <p className="text-xs text-slate-400 font-medium">{item.label}</p>
+                          <p className="text-xs text-ink-dim font-medium">{item.label}</p>
                           <p className="text-sm font-bold mt-1">{item.meta}</p>
                         </button>
                       ))}
@@ -5118,41 +3818,66 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 )}
                 {!isPhoneScope && !isDescriptionScope && (
                   <div>
-                    <label className="text-xs font-semibold text-slate-500 mb-1 block">Nombre de la tienda *</label>
+                    <label className="text-xs font-semibold text-ink-dim mb-1 block">Nombre de la tienda *</label>
                     <input value={editInfoForm.nombre} onChange={e => setEditInfoForm(f => ({ ...f, nombre: e.target.value }))}
                       placeholder="Nombre de tu tienda"
-                      className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand" />
+                      className="w-full bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand" />
                   </div>
                 )}
                 {!isPhoneScope && (
                   <div>
-                  <label className="text-xs font-semibold text-slate-500 mb-1 block">Descripción</label>
+                  <label className="text-xs font-semibold text-ink-dim mb-1 block">Descripción</label>
                   <textarea value={editInfoForm.descripcion} onChange={e => setEditInfoForm(f => ({ ...f, descripcion: e.target.value }))}
                     placeholder="Contá de qué se trata tu tienda, qué productos o servicios ofrecés..."
                     rows={3} maxLength={1500}
-                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand resize-none" />
+                    className="w-full bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand resize-none" />
                 </div>
                 )}
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 mb-1 block">Teléfono / WhatsApp</label>
+                  <label className="text-xs font-semibold text-ink-dim mb-1 block">Teléfono / WhatsApp</label>
                   <input value={editInfoForm.telefono} onChange={e => setEditInfoForm(f => ({ ...f, telefono: e.target.value }))}
                     placeholder="+5493XX XXXXXXX"
-                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand" />
+                    className="w-full bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand" />
                 </div>
+                {isPhoneScope && (
+                  <>
+                    <div>
+                      <label className="text-xs font-semibold text-ink-dim mb-1 block">WhatsApp (si es distinto al teléfono)</label>
+                      <input value={editInfoForm.whatsapp} onChange={e => setEditInfoForm(f => ({ ...f, whatsapp: e.target.value }))}
+                        placeholder="+5493XX XXXXXXX"
+                        className="w-full bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-ink-dim mb-1 block">Instagram</label>
+                      <div className="flex items-center bg-surface-card-2 dark:bg-white/5 rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                        <span className="pl-3 text-xs text-ink-dim">@</span>
+                        <input value={editInfoForm.instagram} onChange={e => setEditInfoForm(f => ({ ...f, instagram: e.target.value.replace('@', '') }))}
+                          placeholder="mitienda" maxLength={60}
+                          className="flex-1 bg-transparent px-2 py-2.5 text-sm outline-none" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-ink-dim mb-1 block">Tagline</label>
+                      <input value={editInfoForm.tagline} onChange={e => setEditInfoForm(f => ({ ...f, tagline: e.target.value }))}
+                        placeholder="Tu frase o eslogan" maxLength={160}
+                        className="w-full bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand" />
+                    </div>
+                  </>
+                )}
                 {!isPhoneScope && !isDescriptionScope && (
-                  <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4">
+                  <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-surface-card-2 dark:bg-white/5 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-xs text-slate-400 font-medium">Ubicación</p>
+                        <p className="text-xs text-ink-dim font-medium">Ubicación</p>
                         <p className="text-sm font-bold mt-1">{[tiendaInfo.direccion, tiendaInfo.ciudad].filter(Boolean).join(', ') || 'Sin configurar'}</p>
-                        <p className="text-xs text-slate-400 mt-1">Usá el mapa para confirmar la dirección exacta y mover el pin.</p>
+                        <p className="text-xs text-ink-dim mt-1">Usá el mapa para confirmar la dirección exacta y mover el pin.</p>
                       </div>
                       <button
                         onClick={() => {
                           setEditInfoModal(false);
                           openLocationEditor();
                         }}
-                        className="shrink-0 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-sm font-semibold hover:border-brand/40 transition-colors"
+                        className="shrink-0 px-3 py-2 rounded-xl bg-surface-card border border-slate-200 dark:border-white/10 text-sm font-semibold hover:border-brand/40 transition-colors"
                       >
                         Editar mapa
                       </button>
@@ -5163,15 +3888,15 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
               </>
             ) : (
               <>
-                <p className="text-xs text-slate-400">Seleccioná hasta 5 rubros que describan tu tienda.</p>
+                <p className="text-xs text-ink-dim">Seleccioná hasta 5 rubros que describan tu tienda.</p>
                 <div className="grid grid-cols-2 gap-2">
                   {rootCats.map(cat => {
                     const sel = selectedRubros.includes(cat.id);
                     return (
                       <button key={cat.id} onClick={() => toggleRubro(cat.id)}
                         className={`flex items-center gap-2 p-3 rounded-2xl border-2 text-left transition-all ${sel ? 'border-brand bg-brand/8 dark:bg-brand/10' : 'border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20'}`}>
-                        <CategoryIcon name={cat.icon} className={`w-4 h-4 shrink-0 ${sel ? 'text-brand' : 'text-slate-400'}`} />
-                        <span className={`text-sm font-semibold ${sel ? 'text-brand-dark dark:text-brand' : 'text-slate-700 dark:text-slate-200'}`}>{cat.name}</span>
+                        <CategoryIcon name={cat.icon} className={`w-4 h-4 shrink-0 ${sel ? 'text-brand' : 'text-ink-dim'}`} />
+                        <span className={`text-sm font-semibold ${sel ? 'text-brand-dark dark:text-brand' : 'text-ink dark:text-ink-dim'}`}>{cat.name}</span>
                         {sel && <CheckCircle className="w-3.5 h-3.5 text-brand ml-auto shrink-0" />}
                       </button>
                     );
@@ -5197,7 +3922,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     );
   };
 
-  // ── Formulario producto (overlay independiente) ────────────────────────────
+  // ── Formulario producto — módulo "catalogo" (overlay independiente) ────────
   const ProductoFormOverlay = () => {
     if (!productoShowForm) return null;
 
@@ -5255,7 +3980,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
     return (
       <>
-        <div className="fixed inset-0 z-[5000] bg-[#f7f8fa] dark:bg-[#0a0d16] overflow-y-auto pb-24">
+        <div className="fixed inset-0 z-[5000] bg-[#f5f5f5] dark:bg-[#080808] overflow-y-auto pb-24">
           <StorePageHeader
             title={productoEditing ? 'Editar producto' : 'Nuevo producto'}
             onBack={() => setProductoShowForm(false)}
@@ -5291,8 +4016,299 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     );
   };
 
+  // ── Módulo "ofertas" (isModuleActive(tienda, 'ofertas')) ───────────────────
+  // Simple a propósito: foto + nombre + vigencia. Contrato real del backend
+  // (ofertas.js → sanitizeOfertaInput): nombre, imageUrl, thumbUrl,
+  // publishAt, expireAt, visible — nada de precio/stock/categoría (eso es
+  // el módulo 'catalogo', más abajo). Comparte misProductos/
+  // fetchMisProductos con catalogo (mismo endpoint GET /ofertas).
+  const OfertaFormOverlay = () => {
+    if (!ofertaShowForm) return null;
+
+    const handleFoto = (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      setOfertaFotoFile(file);
+      setOfertaFotoPreview(URL.createObjectURL(file));
+      e.target.value = '';
+    };
+
+    const handleSave = async () => {
+      if (!ofertaForm.nombre.trim()) return;
+      setOfertaSaving(true); setOfertaSaveErr(null);
+      try {
+        let imageUrl = ofertaEditing?.imageUrl || null;
+        if (ofertaFotoFile) imageUrl = await uploadFile(ofertaFotoFile);
+        if (!imageUrl) throw new Error('Subí una foto para la oferta');
+
+        const payload = {
+          nombre: ofertaForm.nombre.trim(),
+          imageUrl,
+          thumbUrl: imageUrl,
+          expireAt: ofertaForm.expireAt ? new Date(ofertaForm.expireAt).toISOString() : null,
+          visible: ofertaForm.visible,
+        };
+
+        if (ofertaEditing) {
+          const res = await apiFetch(`${API_BASE}/ofertas`, { method: 'PATCH', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: ofertaEditing.id, ...payload }) });
+          if (!res.ok) throw new Error('Error al actualizar');
+          const updated = await res.json();
+          setMisProductos(prev => prev.map(o => o.id === updated.id ? updated : o));
+        } else {
+          const res = await apiFetch(`${API_BASE}/ofertas`, { method: 'POST', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tiendaId: tiendaData.id, ...payload }) });
+          if (!res.ok) throw new Error('Error al crear');
+          const nueva = await res.json();
+          setMisProductos(prev => [nueva, ...prev]);
+        }
+        setOfertaShowForm(false);
+      } catch (err) { setOfertaSaveErr(err.message); }
+      finally { setOfertaSaving(false); }
+    };
+
+    return (
+      <div className="fixed inset-0 z-[5000] bg-[#f5f5f5] dark:bg-[#080808] overflow-y-auto pb-24">
+        <StorePageHeader
+          title={ofertaEditing ? 'Editar oferta' : 'Nueva oferta'}
+          onBack={() => setOfertaShowForm(false)}
+        />
+        <div className="max-w-md mx-auto p-4 lg:p-8 space-y-5">
+          {/* Foto */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-ink-dim mb-2">Foto</label>
+            <label className="block aspect-square rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 bg-surface-card-2 dark:bg-white/5 overflow-hidden cursor-pointer relative hover:border-brand transition-colors">
+              <input type="file" accept="image/*" className="hidden" onChange={handleFoto} />
+              {(ofertaFotoPreview || ofertaEditing?.imageUrl) ? (
+                <img src={ofertaFotoPreview || ofertaEditing.imageUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-ink-dim">
+                  <Camera className="w-8 h-8" />
+                  <span className="text-sm font-semibold">Elegir foto</span>
+                </div>
+              )}
+            </label>
+          </div>
+
+          {/* Nombre */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-ink-dim mb-2">Nombre</label>
+            <input
+              value={ofertaForm.nombre}
+              onChange={e => setOfertaForm(f => ({ ...f, nombre: e.target.value }))}
+              placeholder="Ej: 2x1 en aceite de girasol"
+              maxLength={160}
+              className="w-full px-4 py-3 rounded-2xl text-sm border outline-none bg-surface-card-2 dark:bg-white/5 border-slate-200 dark:border-white/10 focus:border-brand transition-colors"
+            />
+          </div>
+
+          {/* Vencimiento — fecha única, mínimo hoy (no se caduca en el pasado) */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-ink-dim mb-2">Vence (opcional)</label>
+            <DatePicker
+              value={ofertaForm.expireAt}
+              onChange={(iso) => setOfertaForm(f => ({ ...f, expireAt: iso }))}
+              placeholder="Sin fecha límite"
+              minISO={new Date().toISOString().slice(0, 10)}
+            />
+            <p className="text-xs text-ink-dim mt-1.5">Sin fecha, la oferta queda vigente hasta que la ocultes.</p>
+          </div>
+
+          {/* El toggle visible/oculto va en la card de la oferta ya creada
+              (pausar/reactivar), no acá: una oferta nueva nace visible. */}
+
+          {ofertaSaveErr && <p className="text-xs text-rose-500 font-semibold">{ofertaSaveErr}</p>}
+
+          <button
+            onClick={handleSave}
+            disabled={ofertaSaving || !ofertaForm.nombre.trim()}
+            className="w-full py-3.5 bg-brand hover:bg-brand-dark disabled:opacity-50 text-white font-bold text-sm rounded-2xl flex items-center justify-center gap-2 transition-colors"
+          >
+            {ofertaSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {ofertaEditing ? 'Guardar cambios' : 'Publicar oferta'}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const OfertasScreen = () => {
+    const openNew = () => {
+      setOfertaEditing(null);
+      setOfertaForm({ nombre: '', expireAt: '', visible: true });
+      setOfertaFotoFile(null); setOfertaFotoPreview(null);
+      setOfertaSaveErr(null);
+      setOfertaShowForm(true);
+    };
+
+    const openEdit = (o) => {
+      setOfertaEditing(o);
+      setOfertaForm({
+        nombre: o.nombre || '',
+        expireAt: o.expireAt ? new Date(o.expireAt).toISOString().slice(0, 10) : '',
+        visible: o.visible !== false,
+      });
+      setOfertaFotoFile(null); setOfertaFotoPreview(null);
+      setOfertaSaveErr(null);
+      setOfertaShowForm(true);
+    };
+
+    const toggleVisible = async (o) => {
+      haptic('medium');
+      const updated = { ...o, visible: !o.visible };
+      setMisProductos(prev => prev.map(x => x.id === o.id ? updated : x));
+      try {
+        const res = await apiFetch(`${API_BASE}/ofertas`, { method: 'PATCH', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: o.id, visible: updated.visible }) });
+        if (!res.ok) throw new Error();
+        haptic('success');
+      } catch {
+        setMisProductos(prev => prev.map(x => x.id === o.id ? o : x));
+        haptic('error');
+      }
+    };
+
+    const deleteOferta = async (id) => {
+      haptic('heavy');
+      const original = misProductos.find(o => o.id === id);
+      setMisProductos(prev => prev.filter(o => o.id !== id));
+      try {
+        const res = await apiFetch(`${API_BASE}/ofertas?id=${id}`, { method: 'DELETE', authRequired: true });
+        if (!res.ok) throw new Error();
+      } catch {
+        if (original) setMisProductos(prev => [...prev, original]);
+      } finally {
+        setOfertaConfirmDelete(null);
+      }
+    };
+
+    if (ofertaShowForm) return null;
+
+    const vencida = (o) => o.expireAt && new Date(o.expireAt).getTime() < Date.now();
+
+    const OfertaCard = ({ o }) => {
+      const estaVencida = vencida(o);
+      const inactiva = o.visible === false || estaVencida;
+      return (
+        <div className={`bg-surface-card rounded-2xl overflow-hidden border transition-all ${inactiva ? 'border-dashed border-slate-200 dark:border-white/10 opacity-55' : 'border-slate-100 dark:border-white/8 hover:shadow-md hover:shadow-black/5'}`}>
+          <div className="aspect-square bg-surface-card-2 dark:bg-white/6 relative overflow-hidden">
+            {o.imageUrl ? <LazyImg src={o.thumbUrl || o.imageUrl} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Package className="w-10 h-10 text-ink-dim dark:text-white/20" /></div>}
+            {estaVencida && <span className="absolute top-2 right-2 bg-danger text-white text-[9px] font-bold px-1.5 py-0.5 rounded-xl shadow">Vencida</span>}
+            {!estaVencida && o.visible === false && <span className="absolute top-2 right-2 bg-ink-dim text-white text-[9px] font-bold px-1.5 py-0.5 rounded-xl shadow">Oculta</span>}
+          </div>
+          <div className="p-2.5">
+            <p className="font-bold text-[12px] leading-snug line-clamp-2 mb-1.5">{o.nombre}</p>
+            {o.expireAt && (
+              <p className="flex items-center gap-1 text-[10px] text-ink-dim mb-2">
+                <CalendarClock className="w-3 h-3 shrink-0" />
+                {estaVencida ? 'Venció' : 'Vence'} {new Date(o.expireAt).toLocaleDateString('es-AR')}
+              </p>
+            )}
+            <div className="flex gap-1">
+              <button onClick={() => toggleVisible(o)}
+                className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-xl text-[10px] font-bold transition-colors ${o.visible !== false ? 'bg-surface-card-2 dark:bg-white/8 text-ink-dim' : 'bg-brand/10 text-brand'}`}>
+                {o.visible !== false ? <ToggleRight className="w-3 h-3" /> : <ToggleLeft className="w-3 h-3" />}
+                {o.visible !== false ? 'Ocultar' : 'Mostrar'}
+              </button>
+              <button onClick={() => openEdit(o)} className="flex items-center justify-center w-8 rounded-xl text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8 hover:text-brand transition-colors">
+                <Edit3 className="w-3 h-3" />
+              </button>
+              <button onClick={() => setOfertaConfirmDelete(o.id)} className="flex items-center justify-center w-8 rounded-xl text-ink-dim hover:bg-danger/10 hover:text-danger transition-colors">
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <>
+      <div className="h-[100dvh] flex flex-col bg-surface-card-2 dark:bg-surface-card-2">
+        <StorePageHeader
+          title="Ofertas"
+          subtitle={`${misProductos.length} publicación${misProductos.length !== 1 ? 'es' : ''}`}
+          actionSlot={(
+            <>
+              {loadingProductos && <Loader2 className="w-4 h-4 animate-spin text-ink-dim shrink-0" />}
+              {/* Solo desktop: en móvil el FAB del bottom-nav ya crea */}
+              <button onClick={openNew} className="hidden lg:flex items-center gap-1.5 bg-brand hover:bg-brand-light text-white text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0 shadow-sm shadow-brand/20">
+                <Plus className="w-4 h-4" /><span className="hidden sm:inline">Nueva</span>
+              </button>
+            </>
+          )}
+        />
+
+        {loadingProductos && misProductos.length === 0 ? (
+          <div className="flex-1 overflow-y-auto p-4 pb-24 lg:pb-4">
+            <SkeletonProductosGrid cols={2} count={6} />
+          </div>
+        ) : misProductos.length === 0 && !loadingProductos ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-center px-6 gap-4 pb-24 lg:pb-0">
+            <div className="w-16 h-16 rounded-3xl bg-brand/10 dark:bg-brand/15 flex items-center justify-center">
+              <Package className="w-8 h-8 text-brand" />
+            </div>
+            <div>
+              <h3 className="font-black text-xl mb-1">Sin ofertas aún</h3>
+              <p className="text-sm text-ink-dim">Publicá tu primera oferta para que los clientes la vean</p>
+            </div>
+            <button onClick={openNew} className="px-6 py-3 bg-brand hover:bg-brand-light text-white rounded-2xl font-bold transition-colors shadow-lg shadow-brand/25">
+              Crear primera oferta
+            </button>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto p-4 pb-24 lg:pb-4">
+            {/* Barra de resumen — contexto de gestión, no repite lo que ya
+                muestra la pantalla de Estadísticas. */}
+            <div className="flex items-center gap-4 px-1 pb-4 text-xs">
+              <span className="flex items-center gap-1.5 font-semibold text-ink-dim">
+                <span className="w-2 h-2 rounded-full bg-ok shrink-0" />
+                {misProductos.filter(o => o.visible !== false && !vencida(o)).length} activas
+              </span>
+              {misProductos.some(o => vencida(o)) && (
+                <span className="flex items-center gap-1.5 font-semibold text-ink-dim">
+                  <span className="w-2 h-2 rounded-full bg-danger shrink-0" />
+                  {misProductos.filter(o => vencida(o)).length} vencidas
+                </span>
+              )}
+              {misProductos.some(o => o.visible === false && !vencida(o)) && (
+                <span className="flex items-center gap-1.5 font-semibold text-ink-dim">
+                  <span className="w-2 h-2 rounded-full bg-ink-dim shrink-0" />
+                  {misProductos.filter(o => o.visible === false && !vencida(o)).length} ocultas
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {misProductos.map(o => <OfertaCard key={o.id} o={o} />)}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {ofertaConfirmDelete && (
+        <div className="fixed inset-0 z-[6000] bg-black/50 flex items-center justify-center p-4" onClick={() => setOfertaConfirmDelete(null)}>
+          <div className="bg-surface-card rounded-3xl p-6 max-w-xs w-full" onClick={e => e.stopPropagation()}>
+            <div className="w-12 h-12 rounded-2xl bg-danger/10 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6 text-rose-500" />
+            </div>
+            <h3 className="font-black text-lg text-center mb-1">¿Eliminar esta oferta?</h3>
+            <p className="text-sm text-ink-dim text-center mb-6">Esta acción no se puede deshacer.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setOfertaConfirmDelete(null)} className="flex-1 py-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-sm font-bold text-ink-dim dark:text-ink-dim">Cancelar</button>
+              <button onClick={() => deleteOferta(ofertaConfirmDelete)} className="flex-1 py-2.5 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold transition-colors">
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      </>
+    );
+  };
+
   // ── Perfil tienda ──────────────────────────────────────────────────────────
-  // ── Productos Screen ─────────────────────────────────────────────────────────
+  // ── Módulo "catalogo" (isModuleActive(tienda, 'catalogo')) ─────────────────
+  // Producto de e-commerce completo: precio, stock, condición, categoría,
+  // financiación, atributos. Para tiendas mono-oferta (módulo 'ofertas'),
+  // ver OfertasScreen más abajo — mismo patrón que MODULES.catalogo vs
+  // MODULES.ofertas en netlify/functions/_lib/modules.js.
   const ProductosScreen = () => {
     const showForm = productoShowForm;
     const setShowForm = setProductoShowForm;
@@ -5454,7 +4470,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     ];
 
     const chipCls = (active) => `w-full text-left flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
-      active ? 'bg-brand/10 dark:bg-brand/15 text-brand-dark dark:text-brand' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/8'
+      active ? 'bg-brand/10 dark:bg-brand/15 text-brand-dark dark:text-brand' : 'text-ink-dim dark:text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8'
     }`;
 
     // Card grilla
@@ -5463,10 +4479,10 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       const img = o.fotos?.[0];
       const sinStock = o.stock != null && Number(o.stock) === 0;
       return (
-        <div onClick={() => { setProdDetail(o); setProdDetailPhotoIdx(0); setProdDetailEditField(null); }} className={`bg-white dark:bg-slate-900 rounded-2xl overflow-hidden border transition-all group cursor-pointer ${o.activa !== false ? 'border-slate-100 dark:border-white/8 hover:shadow-md hover:shadow-black/5' : 'border-dashed border-slate-200 dark:border-white/10 opacity-50'}`}>
+        <div onClick={() => { setProdDetail(o); setProdDetailPhotoIdx(0); setProdDetailEditField(null); }} className={`bg-surface-card rounded-2xl overflow-hidden border transition-all group cursor-pointer ${o.activa !== false ? 'border-slate-100 dark:border-white/8 hover:shadow-md hover:shadow-black/5' : 'border-dashed border-slate-200 dark:border-white/10 opacity-50'}`}>
           {/* Foto */}
-          <div className="aspect-square bg-gradient-to-br from-slate-100 to-slate-200 dark:from-white/6 dark:to-white/10 relative overflow-hidden">
-            {img ? <LazyImg src={img} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Package className="w-10 h-10 text-slate-300 dark:text-white/20" /></div>}
+          <div className="aspect-square bg-gradient-to-br from-surface-card-2 to-surface-card-2 dark:from-white/6 dark:to-white/10 relative overflow-hidden">
+            {img ? <LazyImg src={img} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Package className="w-10 h-10 text-ink-dim dark:text-white/20" /></div>}
             {/* Badge ventaja */}
             {vc && <span className={`absolute top-2 left-2 ${vc.badgeClass} text-[9px] font-bold px-1.5 py-0.5 rounded-xl flex items-center gap-1 shadow`}><vc.Icon className={`w-2.5 h-2.5 ${vc.iconClass}`} />{vc.label}</span>}
             {/* Badge sin stock */}
@@ -5491,21 +4507,21 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             <p className="font-bold text-[12px] leading-snug line-clamp-2 mb-1">{o.titulo}</p>
             <div className="flex items-center justify-between gap-1 mb-2">
               {o.precio != null
-                ? <span className="text-sm font-black text-slate-900 dark:text-white">${Number(o.precio).toLocaleString('es')}</span>
-                : <span className="text-[10px] text-slate-400 italic">Sin precio</span>}
+                ? <span className="text-sm font-black text-ink">${Number(o.precio).toLocaleString('es')}</span>
+                : <span className="text-[10px] text-ink-dim italic">Sin precio</span>}
               {o.condicion && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-lg ${o.condicion === 'nuevo' ? 'bg-ok/10 text-ok-dark dark:text-ok' : 'bg-amber-50 dark:bg-amber-500/10 text-amber-600'}`}>{o.condicion === 'nuevo' ? 'Nuevo' : 'Usado'}</span>}
             </div>
             {/* Acciones móvil — siempre visibles */}
             <div className="lg:hidden flex gap-1">
               <button onClick={e => { e.stopPropagation(); toggleActiva(o); }}
-                className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-xl text-[10px] font-bold transition-colors ${o.activa !== false ? 'bg-slate-100 dark:bg-white/8 text-slate-500' : 'bg-brand/10 text-brand'}`}>
+                className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-xl text-[10px] font-bold transition-colors ${o.activa !== false ? 'bg-surface-card-2 dark:bg-white/8 text-ink-dim' : 'bg-brand/10 text-brand'}`}>
                 {o.activa !== false ? <ToggleRight className="w-3 h-3" /> : <ToggleLeft className="w-3 h-3" />}
                 {o.activa !== false ? 'Pausar' : 'Activar'}
               </button>
-              <button onClick={e => { e.stopPropagation(); openEdit(o); }} className="flex items-center justify-center w-8 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8 hover:text-brand transition-colors">
+              <button onClick={e => { e.stopPropagation(); openEdit(o); }} className="flex items-center justify-center w-8 rounded-xl text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8 hover:text-brand transition-colors">
                 <Edit3 className="w-3 h-3" />
               </button>
-              <button onClick={e => { e.stopPropagation(); setConfirmDelete(o.id); }} className="flex items-center justify-center w-8 rounded-xl text-slate-300 hover:bg-danger/10 hover:text-danger transition-colors">
+              <button onClick={e => { e.stopPropagation(); setConfirmDelete(o.id); }} className="flex items-center justify-center w-8 rounded-xl text-ink-dim hover:bg-danger/10 hover:text-danger transition-colors">
                 <Trash2 className="w-3 h-3" />
               </button>
             </div>
@@ -5520,10 +4536,10 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       const img = o.fotos?.[0];
       const sinStock = o.stock != null && Number(o.stock) === 0;
       return (
-        <div onClick={() => { setProdDetail(o); setProdDetailPhotoIdx(0); setProdDetailEditField(null); }} className={`bg-white dark:bg-slate-900 rounded-2xl border overflow-hidden flex gap-0 transition-all cursor-pointer ${o.activa !== false ? 'border-slate-100 dark:border-white/8 hover:shadow-md hover:shadow-black/5' : 'border-dashed border-slate-200 dark:border-white/10 opacity-55'}`}>
+        <div onClick={() => { setProdDetail(o); setProdDetailPhotoIdx(0); setProdDetailEditField(null); }} className={`bg-surface-card rounded-2xl border overflow-hidden flex gap-0 transition-all cursor-pointer ${o.activa !== false ? 'border-slate-100 dark:border-white/8 hover:shadow-md hover:shadow-black/5' : 'border-dashed border-slate-200 dark:border-white/10 opacity-55'}`}>
           {/* Foto */}
-          <div className="relative w-24 shrink-0 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-white/6 dark:to-white/10 overflow-hidden">
-            {img ? <LazyImg src={img} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Package className="w-7 h-7 text-slate-300 dark:text-white/20" /></div>}
+          <div className="relative w-24 shrink-0 bg-gradient-to-br from-surface-card-2 to-surface-card-2 dark:from-white/6 dark:to-white/10 overflow-hidden">
+            {img ? <LazyImg src={img} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Package className="w-7 h-7 text-ink-dim dark:text-white/20" /></div>}
             {vc && <span className={`absolute top-1.5 left-1.5 ${vc.badgeClass} text-[8px] font-bold px-1 py-0.5 rounded-lg flex items-center gap-0.5 shadow`}><vc.Icon className={`w-2 h-2 ${vc.iconClass}`} />{vc.label}</span>}
             {sinStock && <span className="absolute bottom-1.5 left-1.5 bg-danger text-white text-[8px] font-bold px-1 py-0.5 rounded-lg shadow">Sin stock</span>}
           </div>
@@ -5533,33 +4549,33 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             <div className="flex items-start gap-1.5">
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-[13px] leading-snug line-clamp-2">{o.titulo}</p>
-                {o.descripcion && <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">{o.descripcion}</p>}
+                {o.descripcion && <p className="text-[11px] text-ink-dim line-clamp-1 mt-0.5">{o.descripcion}</p>}
               </div>
-              <span className={`shrink-0 w-2 h-2 rounded-full mt-1 ${o.activa !== false ? 'bg-ok' : 'bg-slate-300 dark:bg-slate-600'}`} />
+              <span className={`shrink-0 w-2 h-2 rounded-full mt-1 ${o.activa !== false ? 'bg-ok' : 'bg-ink-dim dark:bg-ink-dim'}`} />
             </div>
             {/* Bottom: precio + badges + acciones */}
             <div className="flex items-center gap-1.5">
               {o.precio != null
-                ? <span className="text-sm font-black text-slate-900 dark:text-white">${Number(o.precio).toLocaleString('es')}</span>
-                : <span className="text-[10px] text-slate-400 italic">Sin precio</span>}
+                ? <span className="text-sm font-black text-ink">${Number(o.precio).toLocaleString('es')}</span>
+                : <span className="text-[10px] text-ink-dim italic">Sin precio</span>}
               {o.precioOriginal && o.precio && Number(o.precioOriginal) > Number(o.precio) && (
-                <span className="text-[10px] text-slate-400 line-through">${Number(o.precioOriginal).toLocaleString('es')}</span>
+                <span className="text-[10px] text-ink-dim line-through">${Number(o.precioOriginal).toLocaleString('es')}</span>
               )}
               {o.condicion && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-lg ${o.condicion === 'nuevo' ? 'bg-ok/10 text-ok-dark dark:text-ok' : 'bg-amber-50 dark:bg-amber-500/10 text-amber-600'}`}>{o.condicion === 'nuevo' ? 'N' : 'U'}</span>}
               {/* Acciones — empujar a la derecha */}
               <div className="ml-auto flex items-center gap-1">
                 <button onClick={e => { e.stopPropagation(); toggleActiva(o); }}
-                  className={`w-7 h-7 rounded-xl flex items-center justify-center transition-colors ${o.activa !== false ? 'bg-slate-100 dark:bg-white/8 text-slate-500 hover:bg-slate-200' : 'bg-brand/10 text-brand hover:bg-brand/20'}`}
+                  className={`w-7 h-7 rounded-xl flex items-center justify-center transition-colors ${o.activa !== false ? 'bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:bg-surface-card-2' : 'bg-brand/10 text-brand hover:bg-brand/20'}`}
                   title={o.activa !== false ? 'Pausar' : 'Activar'}>
                   {o.activa !== false ? <ToggleRight className="w-3.5 h-3.5" /> : <ToggleLeft className="w-3.5 h-3.5" />}
                 </button>
                 <button onClick={e => { e.stopPropagation(); openEdit(o); }}
-                  className="w-7 h-7 rounded-xl flex items-center justify-center text-slate-400 hover:bg-brand/10 hover:text-brand transition-colors"
+                  className="w-7 h-7 rounded-xl flex items-center justify-center text-ink-dim hover:bg-brand/10 hover:text-brand transition-colors"
                   title="Editar">
                   <Edit3 className="w-3 h-3" />
                 </button>
                 <button onClick={e => { e.stopPropagation(); setConfirmDelete(o.id); }}
-                  className="w-7 h-7 rounded-xl flex items-center justify-center text-slate-300 hover:bg-danger/10 hover:text-danger transition-colors"
+                  className="w-7 h-7 rounded-xl flex items-center justify-center text-ink-dim hover:bg-danger/10 hover:text-danger transition-colors"
                   title="Eliminar">
                   <Trash2 className="w-3 h-3" />
                 </button>
@@ -5634,32 +4650,32 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         return (
           <button
             onClick={() => { setProdDetailEditField(field); setProdDetailDraft(value ?? ''); }}
-            className="group/field flex items-start gap-1.5 w-full text-left hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl px-3 py-2 -mx-3 transition-colors"
+            className="group/field flex items-start gap-1.5 w-full text-left hover:bg-surface-card-2 dark:hover:bg-white/5 rounded-xl px-3 py-2 -mx-3 transition-colors"
           >
-            <span className="flex-1">{display ?? value ?? <span className="text-slate-400 italic">{placeholder}</span>}</span>
-            <Edit3 className="w-3 h-3 text-slate-300 group-hover/field:text-brand shrink-0 mt-0.5 transition-colors" />
+            <span className="flex-1">{display ?? value ?? <span className="text-ink-dim italic">{placeholder}</span>}</span>
+            <Edit3 className="w-3 h-3 text-ink-dim group-hover/field:text-brand shrink-0 mt-0.5 transition-colors" />
           </button>
         );
       };
 
       return (
-        <div className="fixed inset-0 z-[6000] bg-white dark:bg-slate-900 flex flex-col overflow-hidden animate-fade-in">
+        <div className="fixed inset-0 z-[6000] bg-surface-card flex flex-col overflow-hidden animate-fade-in">
           {/* Header */}
           <div className="shrink-0 flex items-center gap-2 px-3 h-14 border-b border-slate-100 dark:border-white/8">
-            <button onClick={() => setProdDetail(null)} className="ui-icon-btn text-slate-500 hover:bg-slate-100 dark:hover:bg-white/8 transition-colors shrink-0">
+            <button onClick={() => setProdDetail(null)} className="ui-icon-btn text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8 transition-colors shrink-0">
               <ChevronLeft className="w-5 h-5" />
             </button>
             <p className="font-black flex-1 truncate text-sm">{o.titulo}</p>
             {prodDetailSaving && <Loader2 className="w-4 h-4 animate-spin text-brand shrink-0" />}
             <button onClick={() => { setProdDetail(null); toggleActiva(o); }}
-              className={`shrink-0 text-xs font-bold px-3 py-1.5 rounded-xl transition-colors ${o.activa !== false ? 'bg-slate-100 dark:bg-white/8 text-slate-500 hover:bg-slate-200' : 'bg-brand/10 text-brand hover:bg-brand/20'}`}>
+              className={`shrink-0 text-xs font-bold px-3 py-1.5 rounded-xl transition-colors ${o.activa !== false ? 'bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:bg-surface-card-2' : 'bg-brand/10 text-brand hover:bg-brand/20'}`}>
               {o.activa !== false ? 'Pausar' : 'Activar'}
             </button>
-            <div className="w-px h-5 bg-slate-200 dark:bg-white/10 shrink-0" />
-            <button onClick={() => { setProdDetail(null); openEdit(o); }} className="ui-icon-btn text-slate-400 hover:bg-brand/10 hover:text-brand transition-colors shrink-0" title="Editar formulario">
+            <div className="w-px h-5 bg-surface-card-2 dark:bg-white/10 shrink-0" />
+            <button onClick={() => { setProdDetail(null); openEdit(o); }} className="ui-icon-btn text-ink-dim hover:bg-brand/10 hover:text-brand transition-colors shrink-0" title="Editar formulario">
               <Edit3 className="w-4 h-4" />
             </button>
-            <button onClick={() => { setProdDetail(null); setConfirmDelete(o.id); }} className="ui-icon-btn text-slate-300 hover:bg-danger/10 hover:text-danger transition-colors shrink-0" title="Eliminar">
+            <button onClick={() => { setProdDetail(null); setConfirmDelete(o.id); }} className="ui-icon-btn text-ink-dim hover:bg-danger/10 hover:text-danger transition-colors shrink-0" title="Eliminar">
               <Trash2 className="w-4 h-4" />
             </button>
           </div>
@@ -5701,8 +4717,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 )}
               </div>
             ) : (
-              <div className="aspect-[4/3] max-h-72 bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                <Package className="w-16 h-16 text-slate-300 dark:text-slate-600" />
+              <div className="aspect-[4/3] max-h-72 bg-surface-card-2 dark:bg-surface-card-2 flex items-center justify-center">
+                <Package className="w-16 h-16 text-ink-dim dark:text-ink-dim" />
               </div>
             )}
 
@@ -5710,14 +4726,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             <div className="px-5 py-5 space-y-5 max-w-2xl mx-auto">
               {/* Badges */}
               <div className="flex flex-wrap gap-2">
-                {o.activa === false && <span className="text-xs font-bold bg-slate-100 dark:bg-white/10 text-slate-500 px-3 py-1 rounded-xl">Pausado</span>}
+                {o.activa === false && <span className="text-xs font-bold bg-surface-card-2 dark:bg-white/10 text-ink-dim px-3 py-1 rounded-xl">Pausado</span>}
                 {o.condicion && <span className={`text-xs font-bold px-3 py-1 rounded-xl ${o.condicion === 'nuevo' ? 'bg-ok/10 text-ok-dark dark:text-ok' : 'bg-amber-50 dark:bg-amber-500/10 text-amber-600'}`}>{o.condicion === 'nuevo' ? 'Nuevo' : 'Usado'}</span>}
                 {vc && <span className={`text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-1 ${vc.badgeClass}`}><vc.Icon className={`w-3 h-3 ${vc.iconClass}`} />{vc.label}</span>}
               </div>
 
               {/* Título */}
               <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Título</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-ink-dim mb-1">Título</p>
                 <p className="font-black text-xl leading-snug">
                   <InlineField field="titulo" value={o.titulo} />
                 </p>
@@ -5726,15 +4742,15 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
               {/* Precio */}
               <div className="flex gap-4">
                 <div className="flex-1">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Precio</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-ink-dim mb-1">Precio</p>
                   <div className="font-black text-2xl text-brand-dark dark:text-brand">
                     <InlineField field="precio" value={String(o.precio ?? '')} display={o.precio != null ? `$${Number(o.precio).toLocaleString('es')}` : null} placeholder="Sin precio" />
                   </div>
                 </div>
                 {(o.precioOriginal || prodDetailEditField === 'precioOriginal') && (
                   <div className="flex-1">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Precio original</p>
-                    <div className="text-slate-400 line-through text-lg">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-ink-dim mb-1">Precio original</p>
+                    <div className="text-ink-dim line-through text-lg">
                       <InlineField field="precioOriginal" value={String(o.precioOriginal ?? '')} display={o.precioOriginal ? `$${Number(o.precioOriginal).toLocaleString('es')}` : null} placeholder="—" />
                     </div>
                   </div>
@@ -5743,8 +4759,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
               {/* Descripción */}
               <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Descripción</p>
-                <div className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                <p className="text-[10px] font-black uppercase tracking-widest text-ink-dim mb-1">Descripción</p>
+                <div className="text-sm text-ink-dim dark:text-ink-dim leading-relaxed">
                   <InlineField field="descripcion" value={o.descripcion ?? ''} multiline placeholder="Sin descripción" />
                 </div>
               </div>
@@ -5752,8 +4768,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
               {/* Financiación */}
               {(o.financiacion || prodDetailEditField === 'financiacion') && (
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Financiación</p>
-                  <div className="text-sm text-slate-600 dark:text-slate-300">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-ink-dim mb-1">Financiación</p>
+                  <div className="text-sm text-ink-dim dark:text-ink-dim">
                     <InlineField field="financiacion" value={o.financiacion ?? ''} placeholder="—" />
                   </div>
                 </div>
@@ -5765,14 +4781,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           {prodDetailPhotoConfirm !== null && (
             <div className="fixed inset-0 z-[7000] flex items-center justify-center p-4" onClick={() => setProdDetailPhotoConfirm(null)}>
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-              <div className="relative bg-white dark:bg-slate-900 rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-fade-in" onClick={e => e.stopPropagation()}>
+              <div className="relative bg-surface-card rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-fade-in" onClick={e => e.stopPropagation()}>
                 <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center mx-auto mb-4">
                   <Trash2 className="w-6 h-6 text-rose-500" />
                 </div>
                 <h3 className="font-black text-lg text-center mb-1">¿Eliminar esta foto?</h3>
-                <p className="text-sm text-slate-400 text-center mb-6">Esta acción no se puede deshacer.</p>
+                <p className="text-sm text-ink-dim text-center mb-6">Esta acción no se puede deshacer.</p>
                 <div className="flex gap-3">
-                  <button onClick={() => setProdDetailPhotoConfirm(null)} className="flex-1 py-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-sm font-bold text-slate-600 dark:text-slate-300">Cancelar</button>
+                  <button onClick={() => setProdDetailPhotoConfirm(null)} className="flex-1 py-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-sm font-bold text-ink-dim dark:text-ink-dim">Cancelar</button>
                   <button onClick={() => removePhoto(prodDetailPhotoConfirm)} className="flex-1 py-2.5 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold transition-colors">
                     {prodDetailSaving ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Eliminar'}
                   </button>
@@ -5787,15 +4803,16 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     return (
       <>
       {ProductoDetail()}
-      <div className="h-[100dvh] flex flex-col bg-slate-50 dark:bg-slate-950">
+      <div className="h-[100dvh] flex flex-col bg-surface-card-2 dark:bg-surface-card-2">
         {/* Header */}
         <StorePageHeader
           title="Mis productos"
           subtitle={`${misProductos.length} publicación${misProductos.length !== 1 ? 'es' : ''} · ${activos.length} activa${activos.length !== 1 ? 's' : ''}`}
           actionSlot={(
             <>
-              {loadingProductos && <Loader2 className="w-4 h-4 animate-spin text-slate-400 shrink-0" />}
-              <button onClick={openNew} className="flex items-center gap-1.5 bg-brand hover:bg-brand-light text-white text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0 shadow-sm shadow-brand/20">
+              {loadingProductos && <Loader2 className="w-4 h-4 animate-spin text-ink-dim shrink-0" />}
+              {/* Solo desktop: en móvil el FAB del bottom-nav ya crea */}
+              <button onClick={openNew} className="hidden lg:flex items-center gap-1.5 bg-brand hover:bg-brand-light text-white text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0 shadow-sm shadow-brand/20">
                 <Plus className="w-4 h-4" /><span className="hidden sm:inline">Nuevo</span>
               </button>
             </>
@@ -5813,7 +4830,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             </div>
             <div>
               <h3 className="font-black text-xl mb-1">Sin productos aún</h3>
-              <p className="text-sm text-slate-400">Publicá tu primer producto para que los clientes te encuentren</p>
+              <p className="text-sm text-ink-dim">Publicá tu primer producto para que los clientes te encuentren</p>
             </div>
             <button onClick={openNew} className="px-6 py-3 bg-brand hover:bg-brand-light text-white rounded-2xl font-bold transition-colors shadow-lg shadow-brand/25">
               Crear primer producto
@@ -5823,18 +4840,18 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           <div className="flex flex-1 min-h-0">
 
             {/* ── Sidebar izquierda (desktop) ── */}
-            <div className="hidden lg:flex flex-col w-56 xl:w-64 border-r border-slate-100 dark:border-white/8 bg-white dark:bg-slate-900 shrink-0 overflow-y-auto">
+            <div className="hidden lg:flex flex-col w-56 xl:w-64 border-r border-slate-100 dark:border-white/8 bg-surface-card shrink-0 overflow-y-auto">
               <div className="p-4 space-y-5">
 
                 {/* Capacidad */}
                 {productLimit !== Infinity && (
-                  <div className={`rounded-2xl px-3 py-2.5 ${nearLimit ? 'bg-warn/8' : 'bg-slate-50 dark:bg-white/5'}`}>
+                  <div className={`rounded-2xl px-3 py-2.5 ${nearLimit ? 'bg-warn/8' : 'bg-surface-card-2 dark:bg-white/5'}`}>
                     <div className="flex items-center justify-between mb-1.5">
-                      <p className={`text-[10px] font-bold uppercase tracking-wider ${nearLimit ? 'text-warn-dark dark:text-warn' : 'text-slate-400'}`}>Capacidad</p>
+                      <p className={`text-[10px] font-bold uppercase tracking-wider ${nearLimit ? 'text-warn-dark dark:text-warn' : 'text-ink-dim'}`}>Capacidad</p>
                       {nearLimit && <AlertTriangle className="w-3 h-3 text-warn" />}
                     </div>
-                    <p className={`text-sm font-black mb-1.5 ${nearLimit ? 'text-warn-dark dark:text-warn' : 'text-slate-700 dark:text-slate-200'}`}>{usados} / {productLimit}</p>
-                    <div className="h-1.5 bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden">
+                    <p className={`text-sm font-black mb-1.5 ${nearLimit ? 'text-warn-dark dark:text-warn' : 'text-ink dark:text-ink-dim'}`}>{usados} / {productLimit}</p>
+                    <div className="h-1.5 bg-surface-card-2 dark:bg-white/10 rounded-full overflow-hidden">
                       <div className={`h-full rounded-full ${nearLimit ? 'bg-warn' : 'bg-brand'}`} style={{ width: `${pct}%` }} />
                     </div>
                   </div>
@@ -5842,13 +4859,13 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
                 {/* Estado */}
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Estado</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-ink-dim mb-2">Estado</p>
                   <div className="space-y-0.5">
                     {[['todos', `Todos`, misProductos.length], ['activos', 'Activos', activos.length], ['pausados', 'Pausados', pausados.length]].map(([v, label, count]) => (
                       <button key={v} onClick={() => setProdFilter(v)} className={chipCls(prodFilter === v)}>
-                        <span className={`w-2 h-2 rounded-full shrink-0 ${v === 'activos' ? 'bg-ok' : v === 'pausados' ? 'bg-slate-300 dark:bg-slate-600' : 'bg-brand'}`} />
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${v === 'activos' ? 'bg-ok' : v === 'pausados' ? 'bg-ink-dim dark:bg-ink-dim' : 'bg-brand'}`} />
                         {label}
-                        <span className="ml-auto text-[10px] font-black text-slate-400">{count}</span>
+                        <span className="ml-auto text-[10px] font-black text-ink-dim">{count}</span>
                       </button>
                     ))}
                   </div>
@@ -5856,7 +4873,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
                 {/* Condición */}
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Condición</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-ink-dim mb-2">Condición</p>
                   <div className="space-y-0.5">
                     {[['nuevo', 'Nuevo'], ['usado', 'Usado']].map(([v, label]) => (
                       <button key={v} onClick={() => setProdCondicion(prodCondicion === v ? null : v)} className={chipCls(prodCondicion === v)}>
@@ -5869,7 +4886,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
                 {/* Filtros rápidos */}
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Filtros</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-ink-dim mb-2">Filtros</p>
                   <div className="space-y-0.5">
                     <button onClick={() => setProdSinStock(v => !v)} className={chipCls(prodSinStock)}>
                       <Package className="w-3 h-3 shrink-0" /> Sin stock
@@ -5882,7 +4899,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
                 {/* Limpiar */}
                 {activeFilterCount > 0 && (
-                  <button onClick={clearFilters} className="w-full text-xs font-bold text-slate-400 hover:text-brand transition-colors py-1.5">
+                  <button onClick={clearFilters} className="w-full text-xs font-bold text-ink-dim hover:text-brand transition-colors py-1.5">
                     Limpiar filtros ({activeFilterCount})
                   </button>
                 )}
@@ -5893,25 +4910,25 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
               {/* Toolbar */}
-              <div className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-white/8 shrink-0">
+              <div className="flex items-center gap-2 px-4 py-3 bg-surface-card border-b border-slate-100 dark:border-white/8 shrink-0">
                 {/* Búsqueda */}
                 <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-dim" />
                   <input value={prodSearch} onChange={e => setProdSearch(e.target.value)}
                     placeholder="Buscar..."
-                    className="w-full pl-8 pr-8 py-2 bg-slate-50 dark:bg-white/5 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand transition-all border border-transparent focus:border-brand/20" />
-                  {prodSearch && <button onClick={() => setProdSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400"><X className="w-3 h-3" /></button>}
+                    className="w-full pl-8 pr-8 py-2 bg-surface-card-2 dark:bg-white/5 rounded-xl text-sm placeholder:text-ink-dim focus:outline-none focus:ring-2 focus:ring-brand transition-all border border-transparent focus:border-brand/20" />
+                  {prodSearch && <button onClick={() => setProdSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-dim"><X className="w-3 h-3" /></button>}
                 </div>
 
                 {/* Sort */}
                 <div className="relative group shrink-0">
-                  <button className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${prodSort !== 'recientes' ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-white/8 text-slate-500'}`}>
+                  <button className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${prodSort !== 'recientes' ? 'bg-brand text-white' : 'bg-surface-card-2 dark:bg-white/8 text-ink-dim'}`}>
                     <ArrowUpDown className="w-3.5 h-3.5" />
                   </button>
-                  <div className="absolute right-0 top-full mt-1.5 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-100 dark:border-white/10 overflow-hidden z-50 min-w-[160px] hidden group-focus-within:block">
+                  <div className="absolute right-0 top-full mt-1.5 bg-surface-card rounded-2xl shadow-xl border border-slate-100 dark:border-white/10 overflow-hidden z-50 min-w-[160px] hidden group-focus-within:block">
                     {SORT_OPTS.map(o => (
                       <button key={o.value} onClick={() => setProdSort(o.value)}
-                        className={`w-full flex items-center gap-2 px-4 py-2.5 text-xs transition-colors text-left ${prodSort === o.value ? 'bg-slate-50 dark:bg-white/5 font-bold text-brand' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'}`}>
+                        className={`w-full flex items-center gap-2 px-4 py-2.5 text-xs transition-colors text-left ${prodSort === o.value ? 'bg-surface-card-2 dark:bg-white/5 font-bold text-brand' : 'text-ink-dim dark:text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/5'}`}>
                         {prodSort === o.value && <CheckCircle className="w-3 h-3 text-brand shrink-0" />}
                         <span className={prodSort === o.value ? '' : 'pl-4'}>{o.label}</span>
                       </button>
@@ -5920,31 +4937,31 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 </div>
 
                 {/* Filtros mobile */}
-                <button onClick={() => setProdFilterSheet(true)} className={`lg:hidden relative w-8 h-8 rounded-xl flex items-center justify-center transition-colors shrink-0 ${activeFilterCount > 0 ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-white/8 text-slate-500'}`}>
+                <button onClick={() => setProdFilterSheet(true)} className={`lg:hidden relative w-8 h-8 rounded-xl flex items-center justify-center transition-colors shrink-0 ${activeFilterCount > 0 ? 'bg-brand text-white' : 'bg-surface-card-2 dark:bg-white/8 text-ink-dim'}`}>
                   <ListFilter className="w-3.5 h-3.5" />
                   {activeFilterCount > 0 && <span className="absolute -top-1 -right-1 min-w-[14px] h-3.5 px-0.5 bg-warn text-white text-[8px] font-black rounded-full flex items-center justify-center">{activeFilterCount}</span>}
                 </button>
 
                 {/* View toggle */}
-                <div className="flex gap-0.5 bg-slate-100 dark:bg-white/8 rounded-xl p-0.5 shrink-0">
-                  <button onClick={() => setProdView('grid')} className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${prodView === 'grid' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-700 dark:text-white' : 'text-slate-400'}`}>
+                <div className="flex gap-0.5 bg-surface-card-2 dark:bg-white/8 rounded-xl p-0.5 shrink-0">
+                  <button onClick={() => setProdView('grid')} className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${prodView === 'grid' ? 'bg-white dark:bg-surface-card-2 shadow-sm text-ink dark:text-white' : 'text-ink-dim'}`}>
                     <LayoutGrid className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={() => setProdView('lista')} className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${prodView === 'lista' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-700 dark:text-white' : 'text-slate-400'}`}>
+                  <button onClick={() => setProdView('lista')} className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${prodView === 'lista' ? 'bg-white dark:bg-surface-card-2 shadow-sm text-ink dark:text-white' : 'text-ink-dim'}`}>
                     <LayoutList className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
                 {/* Contador */}
-                <p className="text-xs text-slate-400 shrink-0 hidden sm:block">{filtered.length} producto{filtered.length !== 1 ? 's' : ''}</p>
+                <p className="text-xs text-ink-dim shrink-0 hidden sm:block">{filtered.length} producto{filtered.length !== 1 ? 's' : ''}</p>
               </div>
 
               {/* Lista / Grilla */}
               <div className="flex-1 overflow-y-auto p-4 pb-24 lg:pb-4">
                 {filtered.length === 0 ? (
                   <div className="flex flex-col items-center text-center gap-3 pt-12 pb-8">
-                    <Search className="w-8 h-8 text-slate-300 dark:text-slate-600" />
-                    <p className="text-sm font-semibold text-slate-400">Sin resultados</p>
+                    <Search className="w-8 h-8 text-ink-dim dark:text-ink-dim" />
+                    <p className="text-sm font-semibold text-ink-dim">Sin resultados</p>
                     {(prodSearch || activeFilterCount > 0) && (
                       <button onClick={clearFilters} className="text-xs font-bold text-brand hover:text-brand-dark transition-colors">Limpiar filtros</button>
                     )}
@@ -5968,12 +4985,12 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       {prodFilterSheet && (
         <div className="lg:hidden fixed inset-0 z-[5000] flex flex-col justify-end" onClick={() => setProdFilterSheet(false)}>
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-          <div className="relative bg-white dark:bg-slate-900 rounded-t-3xl px-4 pt-3 pb-8 shadow-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 2rem)', animation: 'sheet-up .22s ease' }} onClick={e => e.stopPropagation()}>
-            <div className="w-10 h-1 rounded-full bg-slate-200 dark:bg-white/15 mx-auto mb-5" />
+          <div className="relative bg-surface-card rounded-t-3xl px-4 pt-3 pb-8 shadow-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 2rem)', animation: 'sheet-up .22s ease' }} onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 rounded-full bg-surface-card-2 dark:bg-white/15 mx-auto mb-5" />
             <h3 className="font-black text-base mb-4">Filtros</h3>
 
             {/* Estado */}
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Estado</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-ink-dim mb-2">Estado</p>
             <div className="flex gap-2 mb-4">
               {[
                 { value: 'todos',   label: 'Todos' },
@@ -5981,14 +4998,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 { value: 'pausados',label: 'Pausados' },
               ].map(opt => (
                 <button key={opt.value} onClick={() => setProdFilter(opt.value)}
-                  className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${prodFilter === opt.value ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-white/8 text-slate-500'}`}>
+                  className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${prodFilter === opt.value ? 'bg-brand text-white' : 'bg-surface-card-2 dark:bg-white/8 text-ink-dim'}`}>
                   {opt.label}
                 </button>
               ))}
             </div>
 
             {/* Condición */}
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Condición</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-ink-dim mb-2">Condición</p>
             <div className="flex gap-2 mb-4">
               {[
                 { value: null,    label: 'Todas' },
@@ -5996,18 +5013,18 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 { value: 'usado', label: 'Usado' },
               ].map(opt => (
                 <button key={String(opt.value)} onClick={() => setProdCondicion(opt.value)}
-                  className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${prodCondicion === opt.value ? 'bg-brand text-white' : 'bg-slate-100 dark:bg-white/8 text-slate-500'}`}>
+                  className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${prodCondicion === opt.value ? 'bg-brand text-white' : 'bg-surface-card-2 dark:bg-white/8 text-ink-dim'}`}>
                   {opt.label}
                 </button>
               ))}
             </div>
 
             {/* Ordenar */}
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Ordenar</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-ink-dim mb-2">Ordenar</p>
             <div className="flex flex-col gap-1 mb-5">
               {SORT_OPTS.map(opt => (
                 <button key={opt.value} onClick={() => setProdSort(opt.value)}
-                  className={`flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${prodSort === opt.value ? 'bg-brand/10 text-brand' : 'bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-slate-300'}`}>
+                  className={`flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${prodSort === opt.value ? 'bg-brand/10 text-brand' : 'bg-surface-card-2 dark:bg-white/5 text-ink-dim dark:text-ink-dim'}`}>
                   {opt.label}
                   {prodSort === opt.value && <CheckCircle className="w-4 h-4" />}
                 </button>
@@ -6017,18 +5034,18 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             {/* Quick filters */}
             <div className="flex gap-2 mb-5">
               <button onClick={() => setProdSinStock(v => !v)}
-                className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${prodSinStock ? 'bg-danger/10 text-danger' : 'bg-slate-100 dark:bg-white/8 text-slate-500'}`}>
+                className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${prodSinStock ? 'bg-danger/10 text-danger' : 'bg-surface-card-2 dark:bg-white/8 text-ink-dim'}`}>
                 Sin stock
               </button>
               <button onClick={() => setProdDescuento(v => !v)}
-                className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${prodDescuento ? 'bg-ok/10 text-ok-dark dark:text-ok' : 'bg-slate-100 dark:bg-white/8 text-slate-500'}`}>
+                className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all ${prodDescuento ? 'bg-ok/10 text-ok-dark dark:text-ok' : 'bg-surface-card-2 dark:bg-white/8 text-ink-dim'}`}>
                 Con descuento
               </button>
             </div>
 
             <div className="flex gap-3">
               {activeFilterCount > 0 && (
-                <button onClick={() => { clearFilters(); }} className="flex-1 py-3 rounded-2xl border border-slate-200 dark:border-white/10 text-sm font-bold text-slate-500">
+                <button onClick={() => { clearFilters(); }} className="flex-1 py-3 rounded-2xl border border-slate-200 dark:border-white/10 text-sm font-bold text-ink-dim">
                   Limpiar
                 </button>
               )}
@@ -6044,14 +5061,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       {confirmDelete && (
         <div className="fixed inset-0 z-[9000] flex items-center justify-center p-4" onClick={() => setConfirmDelete(null)}>
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-          <div className="relative bg-white dark:bg-slate-900 rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-fade-in" onClick={e => e.stopPropagation()}>
+          <div className="relative bg-surface-card rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-fade-in" onClick={e => e.stopPropagation()}>
             <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center mx-auto mb-4">
               <Trash2 className="w-6 h-6 text-rose-500" />
             </div>
             <h3 className="font-black text-lg text-center mb-1">¿Eliminar producto?</h3>
-            <p className="text-sm text-slate-400 text-center mb-6">Esta acción no se puede deshacer.</p>
+            <p className="text-sm text-ink-dim text-center mb-6">Esta acción no se puede deshacer.</p>
             <div className="flex gap-3">
-              <button onClick={() => setConfirmDelete(null)} className="flex-1 py-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">Cancelar</button>
+              <button onClick={() => setConfirmDelete(null)} className="flex-1 py-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-sm font-bold text-ink-dim dark:text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/5 transition-colors">Cancelar</button>
               <button onClick={() => { deleteProducto(confirmDelete); setConfirmDelete(null); }} className="flex-1 py-2.5 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold transition-colors">Eliminar</button>
             </div>
           </div>
@@ -6066,6 +5083,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     const rubros = tiendaInfo.rubros || [];
 
     // Profile completion
+    const usaCatalogoPerfil = isModuleActive(tiendaData, 'catalogo');
     const profileItems = [
       { key: 'foto',        done: !!tiendaInfo.foto,                               label: 'Foto de perfil',       action: () => openProfileEdit('foto') },
       { key: 'descripcion', done: (tiendaInfo.descripcion || '').length >= 20,     label: 'Descripción',          action: () => openProfileEdit('descripcion') },
@@ -6078,6 +5096,13 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       { key: 'slug',        done: !!tiendaInfo.slug,                                label: 'URL personalizada',    action: () => openProfileEdit('slug') },
       { key: 'tagline',     done: (tiendaInfo.tagline || '').length >= 5,           label: 'Tagline',              action: () => openProfileEdit('tagline') },
       { key: 'instagram',   done: !!tiendaInfo.instagram,                           label: 'Instagram',            action: () => openProfileEdit('instagram') },
+      // Ítem específico según el módulo de negocio activo de la tienda — el
+      // resto del checklist es genérico de cualquier perfil, este es el
+      // único paso que depende de si vende con catálogo (precio/stock) u
+      // ofertas (imagen+vigencia). Ver _lib/modules.js.
+      usaCatalogoPerfil
+        ? { key: 'primer-producto', done: misProductos.length > 0, label: 'Primer producto', action: () => navigateTo('productos') }
+        : { key: 'primera-oferta',  done: misProductos.length > 0, label: 'Primera oferta',  action: () => navigateTo('productos') },
     ];
     const profileDone = profileItems.filter(i => i.done).length;
     const profilePct = Math.round((profileDone / profileItems.length) * 100);
@@ -6085,97 +5110,132 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     const circ = 2 * Math.PI * r;
     const dash = circ * (profilePct / 100);
 
+    const { abierta: heroAbierta } = getEstadoApertura(tiendaInfo.horarios);
+
     return (
-      <div className="h-[100dvh] flex flex-col bg-slate-50 dark:bg-slate-950">
-        <StorePageHeader title={tiendaInfo?.nombre || 'Mi tienda'} subtitle={tiendaInfo?.tagline || 'Editá tu perfil público'} />
+      <div className="h-[100dvh] flex flex-col bg-surface-card-2 dark:bg-surface-card-2">
+        <StorePageHeader
+          title={tiendaInfo?.nombre || 'Mi tienda'}
+          subtitle={tiendaInfo?.tagline || 'Editá tu perfil público'}
+          actionSlot={tiendaInfo.slug && (
+            <a href={`/${tiendaInfo.slug}`} target="_blank" rel="noreferrer"
+              className="flex items-center gap-1.5 bg-brand hover:bg-brand-light text-white text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0 shadow-sm shadow-brand/20">
+              <Globe className="w-4 h-4" /><span className="hidden sm:inline">Ver página</span>
+            </a>
+          )}
+        />
         <div className="flex-1 overflow-y-auto pb-24 lg:pb-8">
 
-        {/* ── Hero cover + avatar ─────────────────────────────────────── */}
-        <div className="relative">
-          {/* Cover: galeria[0] o gradiente */}
-          <div className="h-44 lg:h-56 w-full overflow-hidden" style={{ background: '#0B132B' }}>
+        {/* ── Hero compacto — calcado literal del hero real de OfertaIndividual.jsx
+            (franja de color de marca fundida + card flotante horizontal con
+            logo/nombre/estado), con los mismos elementos convertidos en
+            botones editables en vez de solo-lectura. Antes era un fondo
+            bordó fijo sin relación con el color de marca real. ──────────── */}
+        <div className="relative" style={{ background: 'var(--tp-surface)' }}>
+          <div className="relative" style={{
+            height: 88,
+            background: 'linear-gradient(135deg, var(--tp-primary), color-mix(in srgb, var(--tp-primary) 60%, #000))',
+            WebkitMaskImage: 'linear-gradient(to top, transparent 0%, rgba(0,0,0,.15) 28px, #000 76px)',
+            maskImage: 'linear-gradient(to top, transparent 0%, rgba(0,0,0,.15) 28px, #000 76px)',
+          }}>
             {galeria[0] && (
-              <img src={galeria[0]} alt="" className="w-full h-full object-cover opacity-60" />
+              <img src={galeria[0]} alt="" className="absolute inset-0 w-full h-full object-cover opacity-40" />
             )}
-            {/* Overlay bottom fade */}
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent" />
-          </div>
-
-          {/* Avatar flotante con botón de cambio */}
-          <div className="absolute left-5 lg:left-8 -bottom-10 w-24 h-24 group">
-            <div className="w-full h-full rounded-3xl border-4 border-slate-950 overflow-hidden bg-slate-800 shadow-2xl">
-              {tiendaInfo.foto
-                ? <img src={tiendaInfo.foto} alt="" className="w-full h-full object-cover" />
-                : (
-                  <div className="w-full h-full flex items-center justify-center bg-slate-900 text-white">
-                    <Store className="w-10 h-10" />
-                  </div>
-                )
-              }
+            <div className="absolute right-2.5 top-3.5 flex items-center gap-2">
+              {tiendaInfo.slug && (
+                <a href={`/${tiendaInfo.slug}`} target="_blank" rel="noreferrer" aria-label="Ver mi página"
+                  className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors" style={{ background: 'rgba(255,255,255,.14)', color: '#fff', backdropFilter: 'blur(4px)' }}>
+                  <Globe className="w-4 h-4" />
+                </a>
+              )}
+              <button onClick={() => openProfileEdit('portada')} aria-label="Cambiar portada"
+                className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors" style={{ background: 'rgba(255,255,255,.14)', color: '#fff', backdropFilter: 'blur(4px)' }}>
+                <Camera className="w-4 h-4" />
+              </button>
+              <button onClick={() => openGeneralProfileEditor()} aria-label="Editar perfil"
+                className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors" style={{ background: 'rgba(255,255,255,.14)', color: '#fff', backdropFilter: 'blur(4px)' }}>
+                <Edit3 className="w-4 h-4" />
+              </button>
             </div>
-            <button onClick={() => openProfileEdit('foto')}
-              className="absolute bottom-0 right-0 w-7 h-7 bg-brand text-white rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity">
-              <Camera className="w-3.5 h-3.5" />
-            </button>
           </div>
 
-          {/* Botones top */}
-          <div className="absolute right-4 top-4 flex items-center gap-2">
-            <button onClick={() => openProfileEdit('portada')}
-              className="bg-black/40 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-xl flex items-center gap-1.5 hover:bg-black/60 transition-colors">
-              <Camera className="w-3.5 h-3.5" /> Portada
-            </button>
-            <button onClick={() => openGeneralProfileEditor()}
-              className="bg-black/40 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-xl flex items-center gap-1.5 hover:bg-black/60 transition-colors">
-              <Edit3 className="w-3.5 h-3.5" /> Editar
-            </button>
+          {/* Card flotante — logo/nombre/estado, mismo layout horizontal que
+              la vista pública compacta, con el logo editable. */}
+          <div className="px-4 lg:px-8 pb-3">
+            <div className="flex items-center justify-center gap-2 flex-wrap" style={{ marginTop: -14 }}>
+              <div className="relative shrink-0 group">
+                <div className="w-14 h-14 rounded-2xl overflow-hidden flex items-center justify-center" style={{ background: tiendaInfo.foto ? 'var(--tp-primary-soft)' : 'var(--tp-primary)', border: '3px solid var(--tp-surface)', boxShadow: '0 4px 20px rgba(0,0,0,.12)' }}>
+                  {tiendaInfo.foto
+                    ? <img src={tiendaInfo.foto} alt="" className="w-full h-full object-cover" />
+                    : <Store className="w-7 h-7 text-white" />}
+                </div>
+                <button onClick={() => openProfileEdit('foto')} aria-label="Cambiar foto de perfil"
+                  className="absolute -bottom-1 -right-1 w-6 h-6 bg-brand text-white rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity">
+                  <Camera className="w-3 h-3" />
+                </button>
+              </div>
+              {editingNombre ? (
+                <input
+                  autoFocus
+                  value={nombreDraft}
+                  onChange={e => setNombreDraft(e.target.value)}
+                  onBlur={async () => {
+                    setEditingNombre(false);
+                    const trim = nombreDraft.trim();
+                    if (!trim || trim === tiendaInfo.nombre) return;
+                    try {
+                      const res = await apiFetch(`${API_BASE}/tiendas-crud`, {
+                        method: 'PATCH', authRequired: true,
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: tiendaData.id, nombre: trim }),
+                      });
+                      if (res.ok) { const u = await res.json(); setTienda(u); onTiendaUpdate(u); }
+                    } catch { /* silencioso */ }
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') e.target.blur();
+                    if (e.key === 'Escape') { setEditingNombre(false); setNombreDraft(tiendaInfo.nombre || ''); }
+                  }}
+                  className="text-lg font-black bg-transparent border-b-2 border-brand outline-none max-w-[200px]"
+                  style={{ color: 'var(--tp-text)' }}
+                  maxLength={120}
+                />
+              ) : (
+                <h1
+                  className="text-lg font-black cursor-pointer hover:opacity-70 transition-opacity inline-flex items-center gap-1 group"
+                  style={{ color: 'var(--tp-text)' }}
+                  onClick={() => { setNombreDraft(tiendaInfo.nombre || ''); setEditingNombre(true); }}
+                >
+                  {tiendaInfo.nombre}
+                  <Edit3 className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: 'var(--tp-text-muted)' }} />
+                </h1>
+              )}
+              {(tiendaInfo.horarios && Object.keys(tiendaInfo.horarios).length > 0) && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold" style={heroAbierta ? { background: 'color-mix(in srgb, #22C55E 14%, transparent)', color: '#22C55E' } : { background: 'color-mix(in srgb, #ef4444 14%, transparent)', color: '#ef4444' }}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: heroAbierta ? '#22C55E' : '#ef4444' }} />
+                  {heroAbierta ? 'Abierto' : 'Cerrado'}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* ── Nombre inline editable + rubros ─────────────────────────── */}
-        <div className="px-5 lg:px-8 pt-14 pb-1 max-w-3xl mx-auto">
-          {editingNombre ? (
-            <input
-              autoFocus
-              value={nombreDraft}
-              onChange={e => setNombreDraft(e.target.value)}
-              onBlur={async () => {
-                setEditingNombre(false);
-                const trim = nombreDraft.trim();
-                if (!trim || trim === tiendaInfo.nombre) return;
-                try {
-                  const res = await apiFetch(`${API_BASE}/tiendas-crud`, {
-                    method: 'PATCH', authRequired: true,
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: tiendaData.id, nombre: trim }),
-                  });
-                  if (res.ok) { const u = await res.json(); setTienda(u); onTiendaUpdate(u); }
-                } catch { /* silencioso */ }
-              }}
-              onKeyDown={e => {
-                if (e.key === 'Enter') e.target.blur();
-                if (e.key === 'Escape') { setEditingNombre(false); setNombreDraft(tiendaInfo.nombre || ''); }
-              }}
-              className="text-2xl font-black bg-transparent border-b-2 border-brand outline-none w-full dark:text-white"
-              maxLength={120}
-            />
-          ) : (
-            <h1
-              className="text-2xl font-black cursor-pointer hover:text-brand transition-colors inline-flex items-center gap-1.5 group"
-              onClick={() => { setNombreDraft(tiendaInfo.nombre || ''); setEditingNombre(true); }}
-            >
-              {tiendaInfo.nombre}
-              <Edit3 className="w-4 h-4 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </h1>
-          )}
-          {tiendaInfo.ciudad && (
-            <button onClick={() => openProfileEdit('ciudad')}
-              className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5 hover:text-brand transition-colors">
-              <MapPin className="w-3.5 h-3.5" /> {tiendaInfo.ciudad}
-            </button>
-          )}
-          {rubros.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mt-3">
+        {/* ── Rubro — el nombre ya se edita en el hero; ciudad y
+            descripción se sacaron de acá (quedaban duplicadas: ya viven
+            como cards en "Contacto e info" más abajo, con el mismo patrón
+            punteado que el resto de campos). Rubro se queda SOLO acá, con
+            label explícito (antes era un chip suelto sin contexto). No es
+            un tag puramente cosmético: al CREAR la tienda determina el
+            preset inicial de módulos (Catálogo vs. Ofertas) — pero
+            cambiarlo después NO mueve esos módulos ni afecta productos ya
+            cargados (ver netlify/functions/_lib/modules.js), así que acá no
+            hace falta ninguna advertencia de riesgo al editarlo. */}
+        <div className="px-5 lg:px-8 pt-4 pb-1 max-w-3xl mx-auto">
+          <p className="text-[11px] font-black text-ink-dim uppercase tracking-widest mb-2">
+            Rubro <span className="normal-case font-medium text-ink-dim/70">— categoría de tu negocio en LOKAL</span>
+          </p>
+          {rubros.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
               {rubros.map(r => {
                 const cat = allCategories.find(c => c.id === r);
                 return (
@@ -6188,40 +5248,79 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 );
               })}
               <button onClick={() => openProfileEdit('rubros')}
-                className="flex items-center gap-1 text-xs bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400 px-2.5 py-1 rounded-full font-semibold hover:bg-brand/15 hover:text-brand transition-colors">
+                className="flex items-center gap-1 text-xs bg-surface-card-2 dark:bg-white/10 text-ink-dim px-2.5 py-1 rounded-full font-semibold hover:bg-brand/15 hover:text-brand transition-colors">
                 <Plus className="w-3 h-3" /> Rubro
               </button>
             </div>
-          )}
-          {!rubros.length && (
-            <button onClick={() => openProfileEdit('rubros')}
-              className="mt-3 flex items-center gap-1 text-xs bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400 px-2.5 py-1 rounded-full font-semibold hover:bg-brand/15 hover:text-brand transition-colors">
-              <Plus className="w-3 h-3" /> Agregar rubro
-            </button>
-          )}
-          {tiendaInfo.descripcion ? (
-            <button onClick={() => openProfileEdit('descripcion')}
-              className="mt-3 text-sm text-slate-600 dark:text-slate-400 leading-relaxed text-left hover:text-brand transition-colors w-full group flex items-start gap-1">
-              <span className="flex-1">{tiendaInfo.descripcion}</span>
-              <Edit3 className="w-3.5 h-3.5 shrink-0 opacity-0 group-hover:opacity-60 mt-0.5 transition-opacity" />
-            </button>
           ) : (
-            <button onClick={() => openProfileEdit('descripcion')}
-              className="mt-3 text-sm text-brand font-semibold flex items-center gap-1 hover:underline">
-              <Plus className="w-3.5 h-3.5" /> Agregar descripción
+            <button onClick={() => openProfileEdit('rubros')}
+              className="flex items-center gap-1 text-xs bg-surface-card-2 dark:bg-white/10 text-ink-dim px-2.5 py-1 rounded-full font-semibold hover:bg-brand/15 hover:text-brand transition-colors">
+              <Plus className="w-3 h-3" /> Agregar rubro
             </button>
           )}
         </div>
 
         <div className="max-w-3xl mx-auto px-5 lg:px-8 mt-6 space-y-5">
 
-          {/* ── Completitud del perfil ──────────────────────────────────── */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-white/8 p-5">
-            <div className="flex items-center gap-4">
+          {/* ── Suscripción — resumen, detalle completo en su propia pantalla.
+              El conteo de ofertas activas se sacó de acá: es redundante con
+              Estadísticas y tiene más sentido como barra de resumen dentro
+              de OfertasScreen (contexto de gestión), no en el perfil general. */}
+          <button onClick={() => navigateTo('suscripcion')} className="w-full flex items-center gap-3 bg-surface-card rounded-2xl p-4 border border-slate-100 dark:border-white/8 hover:border-brand/30 transition-colors text-left">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isActiva ? 'bg-brand/10 text-brand' : 'bg-rose-500/10 text-rose-500'}`}>
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm">
+                Plan {tiendaData?.suscripcion?.plan ? tiendaData.suscripcion.plan.charAt(0).toUpperCase() + tiendaData.suscripcion.plan.slice(1) : '—'}
+              </p>
+              <p className={`text-xs font-semibold ${isActiva ? (dias !== null && dias <= 7 ? 'text-amber-500' : 'text-brand') : 'text-rose-500'}`}>
+                {isActiva && dias !== null && dias <= 7
+                  ? `Vence en ${dias} día${dias === 1 ? '' : 's'}`
+                  : isActiva
+                    ? 'Activa'
+                    : 'Vencida'}
+                {tiendaData?.suscripcion?.vence && (dias === null || dias > 7 || !isActiva) && (
+                  <span className="text-ink-dim font-medium"> · {isActiva ? 'vence' : 'venció'} {new Date(tiendaData.suscripcion.vence).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}</span>
+                )}
+              </p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-ink-dim shrink-0" />
+          </button>
+
+          {/* ── Galería de imágenes ─────────────────────────────────────── */}
+          {galeria.length > 0 && (
+            <div className="bg-surface-card rounded-3xl border border-slate-100 dark:border-white/8 p-5">
+              <div className="flex items-center justify-between mb-3 gap-3">
+                <h3 className="font-bold flex items-center gap-2">
+                  <Camera className="w-4 h-4 text-ink-dim" /> Galería
+                </h3>
+                <button onClick={() => openProfileEdit('galeria')}
+                  className="text-xs font-semibold text-brand-dark dark:text-brand hover:underline flex items-center gap-1">
+                  <Edit3 className="w-3.5 h-3.5" /> Editar
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {galeria.map((url, i) => (
+                  <div key={i} className={`overflow-hidden rounded-2xl bg-surface-card-2 dark:bg-surface-card-2 ${i === 0 && galeria.length > 2 ? 'col-span-2' : ''}`}>
+                    <img src={url} alt="" loading="lazy" decoding="async" className="w-full object-cover aspect-video" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Contacto e info — header fusiona el anillo de completitud
+              (antes era una card separada arriba). Cada campo, lleno o
+              vacío, sigue el mismo patrón visual (sólido vs. punteado
+              "+ agregar"), y el botón editar tiene la misma forma cuadrada
+              que el bloque de ícono a la izquierda de cada fila. ────────── */}
+          <div className="bg-surface-card rounded-3xl border border-slate-100 dark:border-white/8 p-5">
+            <div className="flex items-center gap-4 mb-4">
               {/* Ring SVG */}
-              <div className="relative shrink-0 w-[76px] h-[76px]">
-                <svg width="76" height="76" viewBox="0 0 76 76">
-                  <circle cx="38" cy="38" r={r} fill="none" strokeWidth="7" className="stroke-slate-100 dark:stroke-white/10" />
+              <div className="relative shrink-0 w-[56px] h-[56px]">
+                <svg width="56" height="56" viewBox="0 0 76 76">
+                  <circle cx="38" cy="38" r={r} fill="none" strokeWidth="7" className="stroke-surface-card-2 dark:stroke-white/10" />
                   <circle
                     cx="38" cy="38" r={r} fill="none" strokeWidth="7"
                     stroke="rgb(var(--brand))"
@@ -6232,316 +5331,263 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                   />
                 </svg>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-base font-black">{profilePct}%</span>
+                  <span className="text-xs font-black">{profilePct}%</span>
                 </div>
               </div>
-
               <div className="flex-1 min-w-0">
-                <p className="font-bold text-sm">Perfil completo</p>
-                <p className="text-xs text-slate-400 mt-0.5">{profileDone} de {profileItems.length} secciones</p>
-                {profilePct < 100 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {profileItems.filter(i => !i.done).slice(0, 3).map(i => (
-                      <button key={i.key} onClick={i.action}
-                        className="text-[10px] bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20 px-2 py-0.5 rounded-full font-semibold hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors active:scale-95">
-                        + {i.label}
-                      </button>
-                    ))}
-                    {profileItems.filter(i => !i.done).length > 3 && (
-                      <span className="text-[10px] text-slate-400">y {profileItems.filter(i => !i.done).length - 3} más</span>
-                    )}
-                  </div>
-                )}
-                {profilePct === 100 && (
-                  <p className="text-xs text-brand font-semibold mt-1 flex items-center gap-1">
-                    <Award className="w-3.5 h-3.5" /> ¡Perfil completo!
-                  </p>
-                )}
+                <h3 className="font-bold">Contacto e info</h3>
+                <p className="text-xs text-ink-dim mt-0.5">
+                  {profilePct === 100 ? '¡Perfil completo!' : `${profileDone} de ${profileItems.length} secciones completas`}
+                </p>
               </div>
-            </div>
-          </div>
-
-          {/* ── Stats rápidas ───────────────────────────────────────────── */}
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { label: 'Respuestas', value: tiendaData?.totalRespuestas ?? '—', icon: MessageSquare, color: 'text-blue-500' },
-              { label: 'Suscripción', value: isActiva ? 'Activa' : 'Vencida', icon: ShieldCheck, color: isActiva ? 'text-brand' : 'text-rose-500' },
-              { label: 'Plan', value: tiendaData?.suscripcion?.plan ? tiendaData.suscripcion.plan.charAt(0).toUpperCase() + tiendaData.suscripcion.plan.slice(1) : '—', icon: Zap, color: 'text-amber-500' },
-            ].map(({ label, value, icon: Icon, color }) => (
-              <div key={label} className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-100 dark:border-white/8 text-center">
-                <Icon className={`w-5 h-5 mx-auto mb-1.5 ${color}`} />
-                <p className="font-black text-base">{value}</p>
-                <p className="text-xs text-slate-400 mt-0.5">{label}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* ── Galería de imágenes ─────────────────────────────────────── */}
-          {galeria.length > 0 && (
-            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-white/8 p-5">
-              <div className="flex items-center justify-between mb-3 gap-3">
-                <h3 className="font-bold flex items-center gap-2">
-                  <Camera className="w-4 h-4 text-slate-400" /> Galería
-                </h3>
-                <button onClick={() => openProfileEdit('galeria')}
-                  className="text-xs font-semibold text-brand-dark dark:text-brand hover:underline flex items-center gap-1">
-                  <Edit3 className="w-3.5 h-3.5" /> Editar
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {galeria.map((url, i) => (
-                  <div key={i} className={`overflow-hidden rounded-2xl bg-slate-100 dark:bg-slate-800 ${i === 0 && galeria.length > 2 ? 'col-span-2' : ''}`}>
-                    <img src={url} alt="" className="w-full object-cover aspect-video" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* ── Contacto ────────────────────────────────────────────────── */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-white/8 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold">Contacto e info</h3>
               <button onClick={() => openProfileEdit('telefono')}
-                className="text-xs font-semibold text-brand-dark dark:text-brand hover:underline flex items-center gap-1">
-                <Edit3 className="w-3.5 h-3.5" /> Editar
+                className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:bg-brand/10 hover:text-brand transition-colors">
+                <Edit3 className="w-4 h-4" />
               </button>
             </div>
             <div className="space-y-2">
               {tiendaInfo.telefono ? (
                 <button onClick={() => openProfileEdit('telefono')}
-                  className="w-full flex items-center gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-white/5 hover:bg-brand/8 dark:hover:bg-brand/10 transition-colors group text-left">
+                  className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface-card-2 dark:bg-white/5 hover:bg-brand/8 dark:hover:bg-brand/10 transition-colors group text-left">
                   <div className="w-9 h-9 bg-brand/15 dark:bg-brand/20 rounded-xl flex items-center justify-center shrink-0">
                     <Phone className="w-4 h-4 text-brand-dark dark:text-brand" />
                   </div>
                   <div className="flex-1">
-                    <p className="text-xs text-slate-400 font-medium">Teléfono / WhatsApp</p>
+                    <p className="text-xs text-ink-dim font-medium">Teléfono / WhatsApp</p>
                     <p className="font-semibold text-sm">{tiendaInfo.telefono}</p>
                   </div>
-                  <Edit3 className="w-3.5 h-3.5 text-slate-300 group-hover:text-brand transition-colors" />
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-ink-dim group-hover:text-brand transition-colors">
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </div>
                 </button>
               ) : (
                 <button onClick={() => openProfileEdit('telefono')}
                   className="w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-brand dark:hover:border-brand/40 transition-colors group text-left">
-                  <div className="w-9 h-9 bg-slate-100 dark:bg-white/5 rounded-xl flex items-center justify-center shrink-0">
-                    <Phone className="w-4 h-4 text-slate-400" />
+                  <div className="w-9 h-9 bg-surface-card-2 dark:bg-white/5 rounded-xl flex items-center justify-center shrink-0">
+                    <Phone className="w-4 h-4 text-ink-dim" />
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400 font-medium">Teléfono / WhatsApp</p>
+                    <p className="text-xs text-ink-dim font-medium">Teléfono / WhatsApp</p>
                     <p className="text-xs text-brand font-semibold">+ Agregar teléfono</p>
+                  </div>
+                </button>
+              )}
+              {tiendaInfo.instagram ? (
+                <button onClick={() => openProfileEdit('instagram')}
+                  className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface-card-2 dark:bg-white/5 hover:bg-brand/8 dark:hover:bg-brand/10 transition-colors group text-left">
+                  <div className="w-9 h-9 bg-brand/15 dark:bg-brand/20 rounded-xl flex items-center justify-center shrink-0">
+                    <Instagram className="w-4 h-4 text-brand-dark dark:text-brand" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs text-ink-dim font-medium">Instagram</p>
+                    <p className="font-semibold text-sm">@{tiendaInfo.instagram}</p>
+                  </div>
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-ink-dim group-hover:text-brand transition-colors">
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </div>
+                </button>
+              ) : (
+                <button onClick={() => openProfileEdit('instagram')}
+                  className="w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-brand dark:hover:border-brand/40 transition-colors group text-left">
+                  <div className="w-9 h-9 bg-surface-card-2 dark:bg-white/5 rounded-xl flex items-center justify-center shrink-0">
+                    <Instagram className="w-4 h-4 text-ink-dim" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-ink-dim font-medium">Instagram</p>
+                    <p className="text-xs text-brand font-semibold">+ Agregar Instagram</p>
                   </div>
                 </button>
               )}
               {(tiendaInfo.direccion || tiendaInfo.ciudad) ? (
                 <button onClick={() => openProfileEdit('direccion')}
-                  className="w-full flex items-center gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-white/5 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors group text-left">
-                  <div className="w-9 h-9 bg-blue-100 dark:bg-blue-500/20 rounded-xl flex items-center justify-center shrink-0">
-                    <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface-card-2 dark:bg-white/5 hover:bg-brand/5 dark:hover:bg-brand/10 transition-colors group text-left">
+                  <div className="w-9 h-9 bg-brand/10 dark:bg-brand/20 rounded-xl flex items-center justify-center shrink-0">
+                    <MapPin className="w-4 h-4 text-brand" />
                   </div>
                   <div className="flex-1">
-                    <p className="text-xs text-slate-400 font-medium">Dirección</p>
+                    <p className="text-xs text-ink-dim font-medium">Dirección</p>
                     <p className="font-semibold text-sm">{[tiendaInfo.direccion, tiendaInfo.ciudad].filter(Boolean).join(', ')}</p>
                   </div>
-                  <Edit3 className="w-3.5 h-3.5 text-slate-300 group-hover:text-blue-400 transition-colors" />
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-ink-dim group-hover:text-brand transition-colors">
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </div>
                 </button>
               ) : (
                 <button onClick={() => openProfileEdit('ciudad')}
                   className="w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-brand dark:hover:border-brand/40 transition-colors group text-left">
-                  <div className="w-9 h-9 bg-slate-100 dark:bg-white/5 rounded-xl flex items-center justify-center shrink-0">
-                    <MapPin className="w-4 h-4 text-slate-400" />
+                  <div className="w-9 h-9 bg-surface-card-2 dark:bg-white/5 rounded-xl flex items-center justify-center shrink-0">
+                    <MapPin className="w-4 h-4 text-ink-dim" />
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400 font-medium">Ubicación</p>
+                    <p className="text-xs text-ink-dim font-medium">Ubicación</p>
                     <p className="text-xs text-brand font-semibold">+ Agregar ciudad / dirección</p>
                   </div>
                 </button>
               )}
-              {!tiendaInfo.descripcion && (
-                <button onClick={() => openProfileEdit('descripcion')}
-                  className="w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-brand dark:hover:border-brand/40 transition-colors group text-left">
-                  <div className="w-9 h-9 bg-slate-100 dark:bg-white/5 rounded-xl flex items-center justify-center shrink-0">
-                    <Edit3 className="w-4 h-4 text-slate-400" />
+              {tiendaInfo.tagline ? (
+                <button onClick={() => openProfileEdit('tagline')}
+                  className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface-card-2 dark:bg-white/5 hover:bg-brand/8 dark:hover:bg-brand/10 transition-colors group text-left">
+                  <div className="w-9 h-9 bg-brand/15 dark:bg-brand/20 rounded-xl flex items-center justify-center shrink-0">
+                    <Sparkles className="w-4 h-4 text-brand-dark dark:text-brand" />
                   </div>
-                  <div>
-                    <p className="text-xs text-slate-400 font-medium">Descripción</p>
-                    <p className="text-xs text-brand font-semibold">+ Contá de qué trata tu tienda</p>
+                  <div className="flex-1">
+                    <p className="text-xs text-ink-dim font-medium">Tagline</p>
+                    <p className="font-semibold text-sm truncate">{tiendaInfo.tagline}</p>
                   </div>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* ── Mi página pública ───────────────────────────────────────── */}
-          <div id="perfil-pagina-publica" className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-white/8 overflow-hidden">
-            {/* Cabecera */}
-            <div className="flex items-center justify-between px-5 pt-5 pb-3">
-              <h3 className="font-bold flex items-center gap-2">
-                <Palette className="w-4 h-4 text-brand" /> Mi página pública
-              </h3>
-              <button
-                onClick={() => {
-                  setPaginaForm({ template: tiendaInfo.pagina?.template || 'minimal', color: tiendaInfo.pagina?.color || '#00b8d9', modoOscuro: tiendaInfo.pagina?.modoOscuro || false });
-                  setPublicPageForm({ slug: tiendaInfo.slug || '', tagline: tiendaInfo.tagline || '', whatsapp: tiendaInfo.whatsapp || tiendaInfo.telefono || '', instagram: tiendaInfo.instagram || '' });
-                  setPublicPageError(null);
-                  setScreen('mi-pagina');
-                }}
-                className="text-xs font-semibold text-brand-dark dark:text-brand hover:underline flex items-center gap-1"
-              >
-                <Palette className="w-3.5 h-3.5" /> Diseño
-              </button>
-            </div>
-
-            {/* Estado del link */}
-            {tiendaInfo.slug ? (
-              <div className="flex items-center gap-2 px-5 pb-3 flex-wrap">
-                <a href={`/t/${tiendaInfo.slug}`} target="_blank" rel="noreferrer"
-                  className="flex items-center gap-1.5 text-sm text-brand-dark dark:text-brand font-semibold hover:underline">
-                  <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                  lokal.ar/t/{tiendaInfo.slug}
-                </a>
-                <button
-                  onClick={() => { const url = `${window.location.origin}/t/${tiendaInfo.slug}`; if (navigator.share) { navigator.share({ title: tiendaInfo.nombre, url }); } else { navigator.clipboard.writeText(url).then(() => alert('¡Link copiado!')); } }}
-                  className="flex items-center gap-1 text-xs font-semibold bg-brand/10 dark:bg-brand/15 text-brand-dark dark:text-brand px-2.5 py-1 rounded-xl hover:bg-brand/20 transition-colors"
-                >
-                  <ExternalLink className="w-3 h-3" /> Compartir
-                </button>
-              </div>
-            ) : (
-              <p className="text-xs text-slate-400 px-5 pb-3">Sin URL pública todavía.</p>
-            )}
-
-            {/* Chips de diseño actual */}
-            <div className="flex flex-wrap gap-2 px-5 pb-4 text-xs text-slate-500">
-              <span className="bg-slate-100 dark:bg-white/8 px-2.5 py-1 rounded-lg font-semibold capitalize">{tiendaInfo.pagina?.template || 'minimal'}</span>
-              <span className="flex items-center gap-1.5 bg-slate-100 dark:bg-white/8 px-2.5 py-1 rounded-lg">
-                <span style={{ width: 10, height: 10, borderRadius: '50%', background: tiendaInfo.pagina?.color || '#00b8d9', display: 'inline-block' }} /> Color
-              </span>
-              {tiendaInfo.pagina?.modoOscuro && <span className="bg-slate-100 dark:bg-white/8 px-2.5 py-1 rounded-lg">Modo oscuro</span>}
-            </div>
-
-            {/* Separador + sección URL/info editable */}
-            <div className="border-t border-slate-100 dark:border-white/8 px-5 py-4">
-              {!editingPublicPage ? (
-                <button
-                  onClick={() => { setPublicPageForm({ slug: tiendaInfo.slug || '', tagline: tiendaInfo.tagline || '', whatsapp: tiendaInfo.whatsapp || tiendaInfo.telefono || '', instagram: tiendaInfo.instagram || '' }); setPublicPageError(null); setEditingPublicPage(true); }}
-                  className="w-full flex items-center justify-between text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                >
-                  <span className="flex items-center gap-2"><Link2 className="w-4 h-4" /> URL, tagline y contacto</span>
-                  <ChevronRight className="w-4 h-4" />
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-ink-dim group-hover:text-brand transition-colors">
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </div>
                 </button>
               ) : (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">URL, tagline y contacto</p>
-                    <button onClick={() => setEditingPublicPage(false)} className="text-xs text-slate-400 hover:text-slate-600">Cancelar</button>
+                <button onClick={() => openProfileEdit('tagline')}
+                  className="w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-brand dark:hover:border-brand/40 transition-colors group text-left">
+                  <div className="w-9 h-9 bg-surface-card-2 dark:bg-white/5 rounded-xl flex items-center justify-center shrink-0">
+                    <Sparkles className="w-4 h-4 text-ink-dim" />
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-slate-500 mb-1 block">URL personalizada</label>
-                    <div className="flex items-center bg-slate-50 dark:bg-white/5 rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
-                      <span className="pl-3 text-xs text-slate-400 whitespace-nowrap">lokal.ar/t/</span>
-                      <input
-                        value={publicPageForm.slug}
-                        onChange={e => setPublicPageForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
-                        onKeyDown={e => e.key === 'Enter' && e.target.form?.querySelector('button[type=submit]')?.click()}
-                        placeholder="mi-tienda"
-                        autoCapitalize="none"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        className="flex-1 bg-transparent px-2 py-2.5 text-sm outline-none"
-                      />
-                    </div>
+                    <p className="text-xs text-ink-dim font-medium">Tagline</p>
+                    <p className="text-xs text-brand font-semibold">+ Agregar frase o eslogan</p>
                   </div>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-500 mb-1 block">Tagline</label>
-                    <input value={publicPageForm.tagline} onChange={e => setPublicPageForm(f => ({ ...f, tagline: e.target.value }))} placeholder="Tu frase o eslogan" maxLength={160} className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-500 mb-1 block">WhatsApp</label>
-                    <input value={publicPageForm.whatsapp} onChange={e => setPublicPageForm(f => ({ ...f, whatsapp: e.target.value }))} placeholder="+5491112345678" className="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-500 mb-1 block">Instagram</label>
-                    <div className="flex items-center bg-slate-50 dark:bg-white/5 rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
-                      <span className="pl-3 text-xs text-slate-400">@</span>
-                      <input value={publicPageForm.instagram} onChange={e => setPublicPageForm(f => ({ ...f, instagram: e.target.value.replace('@','') }))} placeholder="mitienda" maxLength={60} className="flex-1 bg-transparent px-2 py-2.5 text-sm outline-none" />
-                    </div>
-                  </div>
-                  {publicPageError && <p className="text-xs text-rose-500 font-semibold">{publicPageError}</p>}
-                  <button onClick={savePublicPage} disabled={savingPublicPage} className="w-full py-3 bg-brand hover:bg-brand-light disabled:opacity-60 text-white font-bold text-sm rounded-2xl flex items-center justify-center gap-2 transition-colors">
-                    {savingPublicPage ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Guardar
-                  </button>
-                </div>
+                </button>
               )}
+              {/* Descripción: se edita desde el hero (bajo el título, más
+                  visible), no duplicada acá también. */}
             </div>
           </div>
 
-          {/* ── Suscripción ─────────────────────────────────────────────── */}
-          <div className={`rounded-3xl border p-5 ${isActiva ? 'bg-white dark:bg-slate-900 border-slate-100 dark:border-white/8' : 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30'}`}>
-            <div className="flex items-center justify-between mb-4">
+          {/* ── Diseño de mi página — presentación visual: template, color,
+              modo oscuro, URL. Datos de contacto (teléfono/whatsapp/
+              instagram/tagline) viven en "Contacto e info", arriba. ────── */}
+          <div id="perfil-pagina-publica" className="bg-surface-card rounded-3xl border border-slate-100 dark:border-white/8 overflow-hidden">
+            {/* Cabecera */}
+            <div className="px-5 pt-5 pb-3">
               <h3 className="font-bold flex items-center gap-2">
-                <ShieldCheck className={`w-4 h-4 ${isActiva ? 'text-brand' : 'text-rose-500'}`} />
-                Suscripción
+                <Palette className="w-4 h-4 text-brand" /> Diseño de mi página
               </h3>
-              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${isActiva ? 'bg-brand/15 dark:bg-brand/15 text-brand-dark dark:text-brand' : 'bg-rose-100 dark:bg-rose-500/15 text-rose-700 dark:text-rose-400'}`}>
-                {isActiva ? 'Activa' : 'Vencida'}
-              </span>
             </div>
 
-            {tiendaData?.suscripcion ? (
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">Plan</span>
-                  <span className="font-semibold capitalize">{tiendaData.suscripcion.plan || 'Mensual'}</span>
-                </div>
-                {tiendaData.suscripcion.vence && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">{isActiva ? 'Vence' : 'Venció'}</span>
-                    <span className={`font-semibold ${!isActiva ? 'text-rose-500' : dias !== null && dias <= 7 ? 'text-amber-500' : ''}`}>
-                      {new Date(tiendaData.suscripcion.vence).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                      {isActiva && dias !== null && ` (${dias} días)`}
-                    </span>
+            {/* Accesos prominentes: ver la página real + editar su diseño,
+                mismo peso visual, en la misma fila — antes "Diseño" era
+                texto chico perdido arriba a la derecha del header. */}
+            <div className="px-5 pb-4 space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                {/* Deshabilitado (no oculto) sin slug: mantiene el layout
+                    de dos botones estable y comunica que la acción existe,
+                    solo falta completar la URL — antes desaparecía y
+                    "Editar diseño" quedaba solo ocupando el ancho completo. */}
+                {tiendaInfo.slug ? (
+                  <a href={`/${tiendaInfo.slug}`} target="_blank" rel="noreferrer"
+                    className="flex items-center justify-center gap-2 py-2.5 rounded-2xl bg-brand hover:bg-brand-dark text-white text-sm font-bold transition-colors shadow-sm shadow-brand/20">
+                    <Globe className="w-4 h-4" /> Ver página
+                  </a>
+                ) : (
+                  <div className="flex items-center justify-center gap-2 py-2.5 rounded-2xl bg-surface-card-2 dark:bg-white/5 text-ink-dim text-sm font-bold opacity-60 cursor-not-allowed" title="Elegí una URL para poder ver tu página">
+                    <Globe className="w-4 h-4" /> Ver página
                   </div>
                 )}
+                <button
+                  onClick={() => {
+                    setPaginaForm({ template: tiendaInfo.pagina?.template || 'commerce-modern', color: tiendaInfo.pagina?.color || '#e4002b', modoOscuro: tiendaInfo.pagina?.modoOscuro || false });
+                    setPublicPageForm({ slug: tiendaInfo.slug || '', tagline: tiendaInfo.tagline || '', whatsapp: tiendaInfo.whatsapp || tiendaInfo.telefono || '', instagram: tiendaInfo.instagram || '' });
+                    setPublicPageError(null);
+                    setScreen('mi-pagina');
+                  }}
+                  className="flex items-center justify-center gap-2 py-2.5 rounded-2xl bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 hover:text-brand text-ink dark:text-ink-dim text-sm font-bold transition-colors"
+                >
+                  <Palette className="w-4 h-4" /> Editar diseño
+                </button>
               </div>
-            ) : (
-              <p className="text-sm text-slate-500 mb-4">Sin datos de suscripción</p>
-            )}
+              {/* Edición inline del slug, sin desplegable — único lugar
+                  donde se edita la URL pública (antes había un editor
+                  duplicado en "Contacto e info" para el mismo campo). */}
+              {editingPublicPage ? (
+                <div className="space-y-2">
+                  <div className="flex items-center bg-surface-card-2 dark:bg-white/5 rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden focus-within:border-brand transition-colors">
+                    <span className="pl-3 text-xs text-ink-dim whitespace-nowrap">lokal.ar/</span>
+                    <input
+                      value={publicPageForm.slug}
+                      onChange={e => setPublicPageForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
+                      onKeyDown={e => e.key === 'Enter' && savePublicPage()}
+                      placeholder="mi-tienda"
+                      autoFocus autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                      className="flex-1 bg-transparent px-2 py-2 text-sm outline-none"
+                    />
+                  </div>
+                  {publicPageError && <p className="text-xs text-rose-500 font-semibold">{publicPageError}</p>}
+                  <div className="flex gap-2">
+                    <button onClick={() => { setEditingPublicPage(false); setPublicPageError(null); }} className="flex-1 py-2 rounded-xl border border-slate-200 dark:border-white/10 text-xs font-bold text-ink-dim">
+                      Cancelar
+                    </button>
+                    <button onClick={savePublicPage} disabled={savingPublicPage} className="flex-1 py-2 rounded-xl bg-brand hover:bg-brand-dark disabled:opacity-60 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
+                      {savingPublicPage ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      Guardar
+                    </button>
+                  </div>
+                </div>
+              ) : tiendaInfo.slug ? (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="flex-1 text-xs text-ink-dim truncate">lokal.ar/{tiendaInfo.slug}</span>
+                  <button
+                    onClick={() => { setPublicPageForm(f => ({ ...f, slug: tiendaInfo.slug || '' })); setPublicPageError(null); setEditingPublicPage(true); }}
+                    aria-label="Editar URL" title="Editar URL"
+                    className="w-6 h-6 flex items-center justify-center rounded-lg text-ink-dim hover:text-brand hover:bg-brand/10 transition-colors"
+                  >
+                    <Edit3 className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => { const url = `${window.location.origin}/${tiendaInfo.slug}`; if (navigator.share) { navigator.share({ title: tiendaInfo.nombre, url }); } else { navigator.clipboard.writeText(url).then(() => alert('¡Link copiado!')); } }}
+                    className="flex items-center gap-1 text-xs font-semibold bg-brand/10 dark:bg-brand/15 text-brand-dark dark:text-brand px-2.5 py-1 rounded-xl hover:bg-brand/20 transition-colors"
+                  >
+                    <ExternalLink className="w-3 h-3" /> Compartir
+                  </button>
+                </div>
+              ) : (
+                // Mismo lenguaje visual que el resto de campos sin
+                // completar del perfil (teléfono, instagram, etc.): card
+                // con borde punteado, no un link de texto suelto — para que
+                // "esto falta completar" se lea igual en toda la pantalla.
+                <button
+                  onClick={() => { setPublicPageForm(f => ({ ...f, slug: '' })); setPublicPageError(null); setEditingPublicPage(true); }}
+                  className="w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-brand dark:hover:border-brand/40 transition-colors group text-left">
+                  <div className="w-9 h-9 bg-surface-card-2 dark:bg-white/5 rounded-xl flex items-center justify-center shrink-0">
+                    <Link2 className="w-4 h-4 text-ink-dim" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-ink-dim font-medium">URL pública</p>
+                    <p className="text-xs text-brand font-semibold">+ Elegir URL</p>
+                  </div>
+                </button>
+              )}
+            </div>
 
-            {/* Upgrade a Premium (solo si es plan básico) */}
-            {isActiva && isBasico && (
-              <button
-                onClick={() => setShowPremiumModal(true)}
-                className="w-full py-3 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-colors bg-amber-100 dark:bg-amber-500/15 hover:bg-amber-200 dark:hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 mb-2"
-              >
-                <Sparkles className="w-4 h-4" />
-                Upgrade a Premium
-              </button>
-            )}
+            {/* Chip de "Color" sacado: era solo informativo (no
+                clickeable), redundante con lo que ya se ve/edita al entrar
+                a "Editar diseño" — quedaba flotando sin acción propia. */}
 
-            <button
-              onClick={() => setShowPaywall(true)}
-              className={`w-full py-3 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-colors ${
-                isActiva
-                  ? 'bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-700 dark:text-slate-200'
-                  : 'bg-brand hover:bg-brand-light text-white shadow-lg shadow-brand/25'
-              }`}
-            >
-              <RefreshCw className="w-4 h-4" />
-              {isActiva ? 'Renovar anticipado' : 'Renovar suscripción'}
-            </button>
+            {/* URL personalizada: ya no vive acá como desplegable — se
+                edita directo desde "Diseño de mi página" (arriba muestra
+                lokal.ar/slug + lápiz de editar), mismo criterio que llevó a
+                tagline/whatsapp/instagram a "Contacto e info": un solo
+                lugar por dato, sin duplicar el mismo campo en dos pantallas
+                distintas con nombres distintos ("Diseño" vs "Editor
+                público"). */}
           </div>
 
+          {/* Suscripción: la card resumen de arriba (junto a Estadísticas)
+              ya muestra estado+plan y navega a la pantalla completa, donde
+              viven los botones reales de upgrade/pago por plan — esta card
+              grande duplicaba exactamente lo mismo, se sacó. */}
+
           {/* ── Cuenta Google ────────────────────────────────────────────── */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-white/8 p-5">
+          <div className="bg-surface-card rounded-3xl border border-slate-100 dark:border-white/8 p-5">
             <h3 className="font-bold mb-4">Cuenta Google</h3>
-            <div className="flex items-center gap-3 mb-4 p-3 bg-slate-50 dark:bg-white/5 rounded-2xl">
+            <div className="flex items-center gap-3 mb-4 p-3 bg-surface-card-2 dark:bg-white/5 rounded-2xl">
               <div className="w-11 h-11 bg-brand/15 rounded-2xl overflow-hidden flex items-center justify-center shrink-0">
                 {renderAccountAvatar()}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold truncate">{firebaseUser?.displayName || 'Usuario'}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{firebaseUser?.email || ''}</p>
+                <p className="text-xs text-ink-dim truncate">{firebaseUser?.email || ''}</p>
               </div>
             </div>
             <button onClick={onLogout}
@@ -6560,40 +5606,42 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const MoreSheet = () => (
     <div className="lg:hidden fixed inset-0 z-[4400] flex flex-col justify-end" onClick={() => setMoreSheetOpen(false)}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-      <div className="relative bg-white dark:bg-slate-900 rounded-t-3xl px-4 pt-3 pb-4 shadow-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 5.5rem)', animation: 'sheet-up .22s ease' }} onClick={e => e.stopPropagation()}>
-        <div className="w-10 h-1 rounded-full bg-slate-200 dark:bg-white/15 mx-auto mb-4" />
+      <div className="relative bg-surface-card rounded-t-3xl px-4 pt-3 pb-4 shadow-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 5.5rem)', animation: 'sheet-up .22s ease' }} onClick={e => e.stopPropagation()}>
+        <div className="w-10 h-1 rounded-full bg-surface-card-2 dark:bg-white/15 mx-auto mb-4" />
         <div className="flex items-center gap-3 px-1 mb-3">
           <div className="w-11 h-11 bg-primary/10 rounded-2xl overflow-hidden flex items-center justify-center shrink-0">
             {firebaseUser?.photoURL ? <img src={firebaseUser.photoURL} alt="" className="w-full h-full object-cover" /> : <span className="text-lg font-bold text-primary">{(firebaseUser?.displayName || 'U')[0].toUpperCase()}</span>}
           </div>
           <div className="min-w-0">
             <p className="font-bold text-sm truncate">{firebaseUser?.displayName || 'Usuario'}</p>
-            <p className="text-xs text-slate-400 truncate">{tiendaInfo.nombre}</p>
+            <p className="text-xs text-ink-dim truncate">{tiendaInfo.nombre}</p>
           </div>
         </div>
         <div className="space-y-0.5">
           {[
-            { label: 'Inicio (marketplace)', icon: Home, action: () => { navigateTo('inicio'); setMoreSheetOpen(false); } },
-            ...(isEmpresa ? [{ label: 'Estadísticas', icon: TrendingUp, action: () => { navigateTo('stats'); setMoreSheetOpen(false); } }] : []),
-            ...(isEmpresa ? [{ label: 'Suscripción', icon: CreditCard, action: () => { navigateTo('suscripcion'); setMoreSheetOpen(false); } }] : []),
-            { label: 'Demandas', icon: Package, action: () => { navigateTo('feed'); setMoreSheetOpen(false); } },
-            { label: 'Diseño de página', icon: Palette, action: () => { setPaginaForm({ template: tiendaData?.pagina?.template || 'minimal', color: tiendaData?.pagina?.color || '#00b8d9', modoOscuro: tiendaData?.pagina?.modoOscuro || false }); setPublicPageForm({ slug: tiendaData?.slug || '', tagline: tiendaData?.tagline || '', whatsapp: tiendaData?.whatsapp || tiendaData?.telefono || '', instagram: tiendaData?.instagram || '' }); setPublicPageError(null); setScreen('mi-pagina'); setMoreSheetOpen(false); } },
+            // "Inicio (marketplace)" se sacó: es el feed multi-tienda del
+            // sitio público, no aplica a la gestión de un mono-negocio.
+            // Estadísticas y Suscripción ya no van gateadas por isEmpresa
+            // (ver navItems del sidebar) — visibles para todo plan/rubro.
+            { label: 'Estadísticas', icon: TrendingUp, action: () => { navigateTo('stats'); setMoreSheetOpen(false); } },
+            { label: 'Suscripción', icon: CreditCard, action: () => { navigateTo('suscripcion'); setMoreSheetOpen(false); } },
+            { label: 'Diseño de página', icon: Palette, action: () => { setPaginaForm({ template: tiendaData?.pagina?.template || 'commerce-modern', color: tiendaData?.pagina?.color || '#e4002b', modoOscuro: tiendaData?.pagina?.modoOscuro || false }); setPublicPageForm({ slug: tiendaData?.slug || '', tagline: tiendaData?.tagline || '', whatsapp: tiendaData?.whatsapp || tiendaData?.telefono || '', instagram: tiendaData?.instagram || '' }); setPublicPageError(null); setScreen('mi-pagina'); setMoreSheetOpen(false); } },
             isAdmin ? { label: 'Panel Admin', icon: ShieldCheck, action: () => { onOpenAdmin?.(); setMoreSheetOpen(false); } } : null,
           ].filter(Boolean).map(({ label, icon: Icon, action }) => (
-            <button key={label} onClick={action} className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-left">
-              <Icon className="w-5 h-5 text-slate-400 shrink-0" />
+            <button key={label} onClick={action} className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-surface-card-2 dark:hover:bg-white/5 transition-colors text-left">
+              <Icon className="w-5 h-5 text-ink-dim shrink-0" />
               <span className="font-semibold text-sm">{label}</span>
             </button>
           ))}
           <div className="border-t border-slate-100 dark:border-white/8 my-2" />
           {isAdmin && (
-            <button onClick={() => { toggleMockMode(); setMoreSheetOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-3 rounded-2xl transition-colors ${mockMode ? 'bg-violet-50 dark:bg-violet-500/10 text-violet-600' : 'hover:bg-slate-50 dark:hover:bg-white/5 text-slate-500'}`}>
+            <button onClick={() => { toggleMockMode(); setMoreSheetOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-3 rounded-2xl transition-colors ${mockMode ? 'bg-violet-50 dark:bg-violet-500/10 text-violet-600' : 'hover:bg-surface-card-2 dark:hover:bg-white/5 text-ink-dim'}`}>
               <FlaskConical className="w-5 h-5 shrink-0" />
               <span className="font-semibold text-sm">{mockMode ? 'Mock ON — desactivar' : 'Datos mock'}</span>
             </button>
           )}
-          <button onClick={toggleTheme} className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-            {isDark ? <Sun className="w-5 h-5 text-amber-400 shrink-0" /> : <Moon className="w-5 h-5 text-slate-400 shrink-0" />}
+          <button onClick={toggleTheme} className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-surface-card-2 dark:hover:bg-white/5 transition-colors">
+            {isDark ? <Sun className="w-5 h-5 text-amber-400 shrink-0" /> : <Moon className="w-5 h-5 text-ink-dim shrink-0" />}
             <span className="font-semibold text-sm">{isDark ? 'Modo claro' : 'Modo oscuro'}</span>
           </button>
           <button onClick={onLogout} className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-rose-50 dark:hover:bg-rose-500/10 text-rose-500 transition-colors">
@@ -6608,36 +5656,46 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   // ── "Crear" bottom sheet ───────────────────────────────────────────────────
   const CreateSheet = () => {
     if (!createSheetOpen && !createSheetClosing) return null;
-    const activeProducts = misProductos.filter(o => o.activa !== false).length;
+    const activeProducts = misProductos.filter(o => o.activa !== false && o.visible !== false).length;
     const atProductLimit = activeProducts >= productLimit;
+    const usaCatalogo = isModuleActive(tiendaData, 'catalogo');
     const opts = [
       {
         icon: Tag,
-        color: atProductLimit ? 'bg-slate-100 dark:bg-white/8 text-slate-400' : 'bg-primary/10 text-primary',
-        title: 'Nuevo producto',
+        color: atProductLimit ? 'bg-surface-card-2 dark:bg-white/8 text-ink-dim' : 'bg-primary/10 text-primary',
+        title: usaCatalogo ? 'Nuevo producto' : 'Nueva oferta',
         desc: atProductLimit
-          ? `Límite alcanzado: ${productLimit} productos (${isEmprendimiento ? 'upgrade a Empresa' : 'upgrade a Premium'})`
-          : 'Publicá un producto en tu vitrina',
+          ? `Límite alcanzado: ${productLimit} ${usaCatalogo ? 'productos' : 'ofertas'} (${isEmprendimiento ? 'upgrade a Empresa' : 'upgrade a Premium'})`
+          : usaCatalogo ? 'Publicá un producto en tu vitrina' : 'Publicá una oferta con foto',
         locked: atProductLimit,
         action: () => {
           if (atProductLimit) return;
           closeCreateSheet();
-          setProductoEditing(null);
-          setProductoForm({ titulo: '', descripcion: '', precio: '', precioOriginal: '', ventaja: [], financiacion: '', stock: '1', condicion: 'nuevo', categoryId: null, contactoWhatsapp: '' });
-          setProductoFotoFiles([]);
-          setProductoFotoPreviews([]);
-          setProductoSaveErr(null);
-          setProductoAttributes({});
-          setProductoShowForm(true);
+          if (usaCatalogo) {
+            setProductoEditing(null);
+            setProductoForm({ titulo: '', descripcion: '', precio: '', precioOriginal: '', ventaja: [], financiacion: '', stock: '1', condicion: 'nuevo', categoryId: null, contactoWhatsapp: '' });
+            setProductoFotoFiles([]);
+            setProductoFotoPreviews([]);
+            setProductoSaveErr(null);
+            setProductoAttributes({});
+            setProductoShowForm(true);
+          } else {
+            setOfertaEditing(null);
+            setOfertaForm({ nombre: '', expireAt: '', visible: true });
+            setOfertaFotoFile(null);
+            setOfertaFotoPreview(null);
+            setOfertaSaveErr(null);
+            setOfertaShowForm(true);
+          }
         }
       },
-      { icon: Package, color: 'bg-slate-100 dark:bg-white/8 text-slate-400', title: 'Búsqueda laboral', desc: 'Próximamente disponible', locked: true, action: () => {} },
+      { icon: Package, color: 'bg-surface-card-2 dark:bg-white/8 text-ink-dim', title: 'Búsqueda laboral', desc: 'Próximamente disponible', locked: true, action: () => {} },
     ];
     return (
       <div className="lg:hidden fixed inset-0 z-[4000] flex flex-col justify-end" onClick={closeCreateSheet}>
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" style={{ animation: createSheetClosing ? 'backdrop-out .22s ease forwards' : 'backdrop-in .22s ease' }} />
-        <div className="relative bg-white dark:bg-slate-900 rounded-t-3xl px-4 pt-3 shadow-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 6rem)', animation: createSheetClosing ? 'sheet-down .22s ease forwards' : 'sheet-up .22s ease' }} onClick={e => e.stopPropagation()}>
-          <div className="w-10 h-1 rounded-full bg-slate-200 dark:bg-white/15 mx-auto mb-4" />
+        <div className="relative bg-surface-card rounded-t-3xl px-4 pt-3 shadow-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 6rem)', animation: createSheetClosing ? 'sheet-down .22s ease forwards' : 'sheet-up .22s ease' }} onClick={e => e.stopPropagation()}>
+          <div className="w-10 h-1 rounded-full bg-surface-card-2 dark:bg-white/15 mx-auto mb-4" />
           <p className="font-bold text-base px-1 mb-3">¿Qué querés crear?</p>
           <div className="space-y-2 pb-2">
             {opts.map(opt => {
@@ -6650,9 +5708,9 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                   </div>
                   <div>
                     <p className="font-bold text-sm">{opt.title}</p>
-                    <p className="text-xs text-slate-400">{opt.desc}</p>
+                    <p className="text-xs text-ink-dim">{opt.desc}</p>
                   </div>
-                  {opt.locked && <span className="ml-auto text-xs bg-slate-100 dark:bg-white/10 text-slate-400 px-2 py-1 rounded-lg font-semibold">Pronto</span>}
+                  {opt.locked && <span className="ml-auto text-xs bg-surface-card-2 dark:bg-white/10 text-ink-dim px-2 py-1 rounded-lg font-semibold">Pronto</span>}
                 </button>
               );
             })}
@@ -6664,7 +5722,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
+    <div className="flex min-h-screen bg-surface-card-2 dark:bg-surface-card-2">
       {Sidebar()}
       {/* spacer so content shifts with sidebar on desktop */}
       <div className="hidden lg:block shrink-0" style={{ width: sidebarExpanded ? 224 : 64, transition: 'width 380ms cubic-bezier(0.16,1,0.3,1)' }} />
@@ -6674,7 +5732,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           <div className="bg-rose-500 text-white px-4 py-2.5 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm">
               <Lock className="w-4 h-4 shrink-0" />
-              <span className="font-semibold">Tu suscripción venció. Podés ver las demandas pero no responderlas.</span>
+              <span className="font-semibold">Tu suscripción venció. Renoválo para seguir recibiendo pedidos.</span>
             </div>
             <button
               onClick={() => setShowPaywall(true)}
@@ -6707,12 +5765,10 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           transition: screenVisible ? 'opacity 0.18s ease' : 'opacity 0.10s ease',
           willChange: 'opacity',
         }}>
-          {screen === 'feed' && <FeedScreen />}
-          {screen === 'mensajes' && MensajesScreen()}
-          {screen === 'demanda-detail' && selectedDemanda && DemandaDetailScreen()}
+          {screen === 'mensajes' && isModuleActive(tiendaData, 'mensajes') && MensajesScreen()}
           {screen === 'stats' && StatsScreen()}
-          {screen === 'productos' && ProductosScreen()}
-          {screen === 'suscripcion' && <SuscripcionScreen />}
+          {screen === 'productos' && (isModuleActive(tiendaData, 'catalogo') ? ProductosScreen() : OfertasScreen())}
+          {screen === 'suscripcion' && SuscripcionScreen()}
           {screen === 'mi-pagina' && MiPaginaScreen()}
           {screen === 'perfil' && PerfilScreen()}
           {screen === 'inicio' && InicioScreen()}
@@ -6721,6 +5777,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         {moreSheetOpen && MoreSheet()}
         {CreateSheet()}
         {ProductoFormOverlay()}
+        {OfertaFormOverlay()}
         {showPaywall && PaywallModal()}
         {showPremiumModal && PremiumModal()}
         <TransferenciaModal
@@ -6757,7 +5814,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                   return (
                     <button
                       onClick={() => { navigateTo('mensajes'); setInboxSelectedKey(mobileActive.key); setInboxMobileView('chat'); }}
-                      className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-xl px-2.5 py-2 hover:shadow-2xl transition-shadow"
+                      className="flex items-center gap-2 bg-surface-card border border-slate-200 dark:border-white/10 rounded-2xl shadow-xl px-2.5 py-2 hover:shadow-2xl transition-shadow"
                     >
                       {/* Avatares apilados */}
                       <div className="flex -space-x-2">
@@ -6771,8 +5828,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                         })}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate max-w-[90px]">{clientLabel(convo.partnerUid)}</p>
-                        {floatingChats.length > 1 && <p className="text-[10px] text-slate-400">+{floatingChats.length - 1} más</p>}
+                        <p className="text-xs font-bold text-ink dark:text-ink-dim truncate max-w-[90px]">{clientLabel(convo.partnerUid)}</p>
+                        {floatingChats.length > 1 && <p className="text-[10px] text-ink-dim">+{floatingChats.length - 1} más</p>}
                       </div>
                       {totalUnread > 0 && (
                         <span className="w-5 h-5 bg-rose-500 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0">
@@ -6780,7 +5837,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                         </span>
                       )}
                       <div onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setFloatingChats([]); }}
-                        className="w-6 h-6 rounded-xl flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 shrink-0 transition-colors cursor-pointer">
+                        className="w-6 h-6 rounded-xl flex items-center justify-center hover:bg-surface-card-2 dark:hover:bg-white/10 text-ink-dim shrink-0 transition-colors cursor-pointer">
                         <X className="w-3 h-3" />
                       </div>
                     </button>
@@ -6812,7 +5869,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
                   /* Colapsado */
                   if (fc.collapsed) return (
-                    <div key={fc.key} className="pointer-events-auto flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-xl px-2.5 py-2 cursor-pointer hover:shadow-2xl transition-shadow select-none"
+                    <div key={fc.key} className="pointer-events-auto flex items-center gap-2 bg-surface-card border border-slate-200 dark:border-white/10 rounded-2xl shadow-xl px-2.5 py-2 cursor-pointer hover:shadow-2xl transition-shadow select-none"
                       onClick={() => toggleFloatingCollapse(fc.key)}>
                       <div className="relative shrink-0">
                         <div className={`w-9 h-9 rounded-xl ${avatarColor(convo.partnerUid)} flex items-center justify-center text-white font-bold text-xs`}>
@@ -6820,10 +5877,10 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                         </div>
                         {unread > 0 && <span className="absolute -top-1 -right-1 min-w-4 h-4 bg-rose-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center px-0.5">{unread > 9 ? '9+' : unread}</span>}
                       </div>
-                      {!compact && <span className="font-bold text-sm text-slate-800 dark:text-slate-200 max-w-[100px] truncate">{clientLabel(convo.partnerUid)}</span>}
-                      <ChevronDown className="w-4 h-4 text-slate-400 rotate-180 shrink-0" />
+                      {!compact && <span className="font-bold text-sm text-ink dark:text-ink-dim max-w-[100px] truncate">{clientLabel(convo.partnerUid)}</span>}
+                      <ChevronDown className="w-4 h-4 text-ink-dim rotate-180 shrink-0" />
                       <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); closeFloatingChat(fc.key); }}
-                        className="w-7 h-7 rounded-xl flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 shrink-0 transition-colors">
+                        className="w-7 h-7 rounded-xl flex items-center justify-center hover:bg-surface-card-2 dark:hover:bg-white/10 text-ink-dim shrink-0 transition-colors">
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -6831,44 +5888,44 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
                   /* Expandido */
                   return (
-                    <div key={fc.key} className="pointer-events-auto w-80 h-[520px] bg-white dark:bg-slate-900 flex flex-col rounded-3xl shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                    <div key={fc.key} className="pointer-events-auto w-80 h-[520px] bg-surface-card flex flex-col rounded-3xl shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden">
                       {/* Header */}
                       <div className="flex items-center gap-2.5 px-4 py-3 border-b border-slate-100 dark:border-white/8 shrink-0">
-                        <button onClick={() => toggleFloatingCollapse(fc.key)} className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 transition-colors" title="Minimizar">
-                          <ChevronDown className="w-4 h-4 text-slate-400" />
+                        <button onClick={() => toggleFloatingCollapse(fc.key)} className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-surface-card-2 dark:hover:bg-white/10 transition-colors" title="Minimizar">
+                          <ChevronDown className="w-4 h-4 text-ink-dim" />
                         </button>
                         <div className={`w-8 h-8 rounded-xl ${avatarColor(convo.partnerUid)} flex items-center justify-center text-white font-bold text-xs shrink-0`}>
                           {(convo.partnerUid || 'C').slice(-2).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-bold text-sm truncate">{clientLabel(convo.partnerUid)}</p>
-                          <p className="text-[10px] text-slate-400">{msgs.length} mensaje{msgs.length !== 1 ? 's' : ''}</p>
+                          <p className="text-[10px] text-ink-dim">{msgs.length} mensaje{msgs.length !== 1 ? 's' : ''}</p>
                         </div>
                         <button onClick={() => { navigateTo('mensajes'); setInboxSelectedKey(fc.key); setInboxMobileView('chat'); closeFloatingChat(fc.key); }}
-                          className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 transition-colors" title="Abrir en mensajes">
-                          <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                          className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-surface-card-2 dark:hover:bg-white/10 transition-colors" title="Abrir en mensajes">
+                          <ExternalLink className="w-3.5 h-3.5 text-ink-dim" />
                         </button>
                         <button onClick={() => closeFloatingChat(fc.key)}
-                          className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-slate-100 dark:hover:bg-white/10 transition-colors" title="Cerrar">
-                          <X className="w-3.5 h-3.5 text-slate-400" />
+                          className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-surface-card-2 dark:hover:bg-white/10 transition-colors" title="Cerrar">
+                          <X className="w-3.5 h-3.5 text-ink-dim" />
                         </button>
                       </div>
 
                       {/* Mensajes */}
-                      <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-slate-50 dark:bg-slate-950">
+                      <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-surface-card-2 dark:bg-surface-card-2">
                         {msgs.length === 0 ? (
                           <div className="flex flex-col items-center justify-center h-full gap-2 text-center">
-                            <MessageSquare className="w-8 h-8 text-slate-200 dark:text-slate-700" />
-                            <p className="text-xs text-slate-400">Iniciá la conversación</p>
+                            <MessageSquare className="w-8 h-8 text-ink-dim dark:text-ink" />
+                            <p className="text-xs text-ink-dim">Iniciá la conversación</p>
                           </div>
                         ) : msgs.map(msg => {
                           const isStore = msg.from === storeId;
                           return (
                             <div key={msg.id || msg.ts} className={`flex flex-col ${isStore ? 'items-end' : 'items-start'} gap-0.5`}>
                               {msg.text && (
-                                <div className={`max-w-[80%] rounded-2xl px-3 py-2 ${isStore ? 'bg-brand text-white' : 'bg-white dark:bg-slate-800 shadow-sm text-slate-800 dark:text-slate-200'}`}>
+                                <div className={`max-w-[80%] rounded-2xl px-3 py-2 ${isStore ? 'bg-brand text-white' : 'bg-surface-card shadow-sm text-ink dark:text-ink-dim'}`}>
                                   <p className="text-sm">{msg.text}</p>
-                                  <p className={`text-[10px] mt-0.5 ${isStore ? 'text-white/60' : 'text-slate-400'}`}>{fmtTime(msg.ts)}</p>
+                                  <p className={`text-[10px] mt-0.5 ${isStore ? 'text-white/60' : 'text-ink-dim'}`}>{fmtTime(msg.ts)}</p>
                                 </div>
                               )}
                             </div>
@@ -6877,13 +5934,13 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                       </div>
 
                       {/* Input */}
-                      <div className="shrink-0 border-t border-slate-100 dark:border-white/8 bg-white dark:bg-slate-900 px-3 py-2.5">
+                      <div className="shrink-0 border-t border-slate-100 dark:border-white/8 bg-surface-card px-3 py-2.5">
                         <div className="flex gap-2 items-end">
-                          <div className="flex-1 bg-slate-100 dark:bg-white/8 rounded-2xl px-3 py-2 flex items-center">
+                          <div className="flex-1 bg-surface-card-2 dark:bg-white/8 rounded-2xl px-3 py-2 flex items-center">
                             <textarea value={fc.msg} onChange={e => setFloatingMsg(fc.key, e.target.value)}
                               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendFloating(); } }}
                               placeholder="Responder..." rows={1}
-                              className="bg-transparent text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none w-full resize-none" />
+                              className="bg-transparent text-sm text-ink dark:text-ink-dim placeholder:text-ink-dim focus:outline-none w-full resize-none" />
                           </div>
                           <button onClick={sendFloating} disabled={!fc.msg.trim() || fc.sending}
                             className="w-9 h-9 bg-brand hover:bg-brand-dark rounded-xl flex items-center justify-center disabled:opacity-40 transition-colors shrink-0">

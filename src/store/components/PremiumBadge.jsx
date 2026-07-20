@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 
 export default function PremiumBadge({ plan, role }) {
   // plan: 'basico' | 'premium' | 'mensual' | 'anual' | etc
@@ -8,7 +8,7 @@ export default function PremiumBadge({ plan, role }) {
 
   if (isEmprendimiento) {
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-500/15 text-teal-700 dark:text-teal-400 uppercase tracking-wide">
+      <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-gradient-pastel text-ink uppercase tracking-wide">
         Emprendimiento
       </span>
     );
@@ -23,7 +23,7 @@ export default function PremiumBadge({ plan, role }) {
   }
 
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+    <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-surface-card-2 dark:bg-white/10 text-ink-dim uppercase tracking-wide">
       Básico
     </span>
   );

@@ -2,7 +2,7 @@ import { createVerify } from 'crypto';
 import { HttpError, getHeader } from './http.js';
 
 const CERTS_URL = 'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com';
-const ADMIN_FALLBACK = 'katryelmmartinez@gmail.com';
+const ADMIN_FALLBACK = 'ktrlestudio@gmail.com';
 
 let certCache = {
   certs: null,

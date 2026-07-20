@@ -31,7 +31,7 @@ export function Galeria({ tienda, variant = 'strip' }) {
         {fotos.map((img, i) => (
           <div key={i} onClick={() => setLightbox(i)}
             style={{ width: 160, height: 120, borderRadius: RADIUS.lg, overflow: 'hidden', flexShrink: 0, cursor: 'pointer', boxShadow: SHADOW.sm }}>
-            <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', transition: 'transform .2s ease' }}
+            <img src={img} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', transition: 'transform .2s ease' }}
               onMouseEnter={e => e.target.style.transform = 'scale(1.04)'}
               onMouseLeave={e => e.target.style.transform = 'scale(1)'} />
           </div>
@@ -47,7 +47,7 @@ export function Galeria({ tienda, variant = 'strip' }) {
         {fotos.map((img, i) => (
           <div key={i} onClick={() => setLightbox(i)}
             style={{ marginBottom: 10, borderRadius: RADIUS.lg, overflow: 'hidden', cursor: 'pointer', breakInside: 'avoid', boxShadow: SHADOW.sm }}>
-            <img src={img} alt="" style={{ width: '100%', display: 'block', transition: 'transform .2s ease' }}
+            <img src={img} alt="" loading="lazy" decoding="async" style={{ width: '100%', display: 'block', transition: 'transform .2s ease' }}
               onMouseEnter={e => e.target.style.transform = 'scale(1.02)'}
               onMouseLeave={e => e.target.style.transform = 'scale(1)'} />
           </div>

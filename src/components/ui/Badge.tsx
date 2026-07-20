@@ -11,11 +11,11 @@ interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
 }
 
 const variantClasses = {
-  default: 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200',
+  default: 'bg-surface-card-2 text-ink',
   success: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
   warning: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
   error: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-  info: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+  info: 'bg-surface-card-2 text-ink',
 };
 
 const sizeClasses = {
@@ -52,12 +52,12 @@ interface TagProps extends HTMLAttributes<HTMLSpanElement> {
 
 export function Tag({ removable = false, onRemove, className, children, ...props }: TagProps) {
   return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-sm bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 ${className || ''}`} {...props}>
+    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-sm bg-surface-card-2 text-ink ${className || ''}`} {...props}>
       {children}
       {removable && (
         <button
           onClick={onRemove}
-          className="ml-1 hover:text-slate-900 dark:hover:text-slate-100 text-xs font-bold"
+          className="ml-1 hover:text-ink text-xs font-bold"
         >
           ✕
         </button>
@@ -95,7 +95,7 @@ export function Avatar({
   ...props
 }: AvatarProps) {
   const shapeClass = variant === 'circle' ? 'rounded-full' : 'rounded-lg';
-  const baseClass = `${avatarSizes[size]} ${shapeClass} bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-semibold text-sm`;
+  const baseClass = `${avatarSizes[size]} ${shapeClass} bg-surface-card-2 flex items-center justify-center font-semibold text-sm`;
 
   if (src) {
     return (
@@ -109,7 +109,7 @@ export function Avatar({
   }
 
   return (
-    <div className={`${baseClass} text-slate-600 dark:text-slate-300 ${className || ''}`} {...props}>
+    <div className={`${baseClass} text-ink-dim ${className || ''}`} {...props}>
       {initials}
     </div>
   );

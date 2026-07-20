@@ -2,6 +2,7 @@
  * MapaSection — card clickeable que abre mapa full-screen con ruta OSRM
  */
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { MapPin, Navigation, X, Plus, Minus, Layers, LocateFixed, Loader2 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, GeoJSON, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -14,11 +15,30 @@ const TILES_SAT   = `https://api.maptiler.com/maps/hybrid-v4/{z}/{x}/{y}.jpg?key
 const ATTR = '© <a href="https://osm.org/copyright" tabindex="-1">OSM</a> · © <a href="https://carto.com" tabindex="-1">CARTO</a>';
 const ATTR_SAT = '© <a href="https://www.maptiler.com" tabindex="-1">MapTiler</a>';
 
+// Feedback táctil + hover de los elementos interactivos del mapa. Los <a> y
+// el <div role-less clickeable no reciben la regla global de index.css
+// (solo cubre <button>/[role=button]); se replican a mano, mismo criterio
+// que Contacto/OfertaIndividual.
+const MAPA_CSS = `
+  .mp-addr-link, .mp-thumb, .mp-cta, .mp-global-btn { -webkit-tap-highlight-color: transparent; transition: transform .16s ease, box-shadow .18s ease, filter .15s ease, border-color .18s ease; }
+  @media (hover: hover) {
+    .mp-addr-link:hover { border-color: var(--tp-primary) !important; }
+    .mp-thumb:hover { box-shadow: 0 10px 32px rgba(0,0,0,.16); }
+    .mp-thumb:hover .mp-thumb-zoom { transform: scale(1.06); }
+    .mp-cta:hover { filter: brightness(1.08); }
+    .mp-global-btn:hover { border-color: var(--tp-primary) !important; filter: brightness(0.985); }
+  }
+  .mp-addr-link:active { transform: scale(0.97); }
+  .mp-thumb:active { transform: scale(0.99); }
+  .mp-cta:active { transform: scale(0.93); }
+  .mp-global-btn:active { transform: scale(0.95); }
+  .mp-thumb-zoom { transition: transform .5s cubic-bezier(0.22,1,0.36,1); }`;
+
 function storeIcon(nombre, logo, size = 44) {
   const radius = Math.round(size * 0.28);
   const label = (nombre || '').length > 18 ? nombre.slice(0, 16) + '…' : (nombre || '');
   const pinHtml = logo
-    ? `<div style="width:${size}px;height:${size}px;border-radius:${radius}px;border:3px solid #fff;box-shadow:0 2px 14px rgba(0,0,0,.28),0 0 0 1.5px rgba(0,184,217,.5);overflow:hidden;background:#e2e8f0"><img src="${logo}" style="width:100%;height:100%;object-fit:cover;display:block"/></div>`
+    ? `<div style="width:${size}px;height:${size}px;border-radius:${radius}px;border:3px solid #fff;box-shadow:0 2px 14px rgba(0,0,0,.28),0 0 0 1.5px rgba(0,184,217,.5);overflow:hidden;background:#e5e5e5"><img src="${logo}" style="width:100%;height:100%;object-fit:cover;display:block"/></div>`
     : `<div style="width:${size}px;height:${size}px;background:#00B8D9;border-radius:${radius}px;border:2.5px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;color:#fff;font-size:${Math.round(size*.42)}px;font-weight:800;font-family:system-ui,sans-serif">${nombre?.[0]?.toUpperCase()||'T'}</div>`;
   const W = size + 16;
   return L.divIcon({
@@ -65,11 +85,11 @@ function ZoomControls({ dark }) {
   const map = useMap();
   const btn = {
     width: 40, height: 40, borderRadius: 10,
-    background: dark ? '#1e293b' : '#fff',
-    border: `1px solid ${dark ? '#334155' : '#e2e8f0'}`,
+    background: dark ? '#262626' : '#fff',
+    border: `1px solid ${dark ? '#3a3a3a' : '#e5e5e5'}`,
     boxShadow: '0 2px 8px rgba(0,0,0,.15)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer', color: dark ? '#f1f5f9' : '#1e293b',
+    cursor: 'pointer', color: dark ? '#f2f2f2' : '#18181b',
   };
   return (
     <div style={{ position: 'absolute', bottom: 16, right: 12, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -79,7 +99,7 @@ function ZoomControls({ dark }) {
   );
 }
 
-function MapaModal({ tienda, isDark, onClose }) {
+export function MapaModal({ tienda, isDark, onClose }) {
   const { lat, lng, nombre, logo, direccion, ciudad } = tienda;
   const [sat, setSat] = useState(false);
   const [userPos, setUserPos] = useState(null);
@@ -161,26 +181,30 @@ function MapaModal({ tienda, isDark, onClose }) {
 
   const btnStyle = (active) => ({
     width: 40, height: 40, borderRadius: 10, border: 'none',
-    background: active ? '#00B8D9' : (isDark ? '#334155' : '#f1f5f9'),
+    background: active ? 'var(--tp-primary, #00B8D9)' : (isDark ? '#3a3a3a' : '#f0f0f0'),
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer', color: active ? '#fff' : (isDark ? '#f1f5f9' : '#1e293b'),
-    flexShrink: 0,
+    cursor: 'pointer', color: active ? 'var(--tp-on-primary, #fff)' : (isDark ? '#f2f2f2' : '#18181b'),
+    flexShrink: 0, transition: 'transform .12s cubic-bezier(0.34,1.56,0.64,1), background-color .15s ease',
   });
 
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: isDark ? '#0f172a' : '#fff', display: 'flex', flexDirection: 'column' }}>
+  // Portal a <body>: así el mapa full-screen nunca queda atrapado en el
+  // stacking context / overflow del contenedor que lo monta (el .cm-scroll
+  // de commerce-modern, o el scroll de OfertaIndividual) y SIEMPRE tapa el
+  // TiendaNavBar — patrón inmersivo nativo, consistente venga de donde venga.
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: isDark ? '#18181b' : '#fff', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px',
-        background: isDark ? '#1e293b' : '#fff',
-        borderBottom: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+        background: isDark ? '#262626' : '#fff',
+        borderBottom: `1px solid ${isDark ? '#3a3a3a' : '#e5e5e5'}`,
         flexShrink: 0,
       }}>
         <button onClick={onClose} style={btnStyle(false)}><X size={18} /></button>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontFamily: FONT.family, fontWeight: FONT.weight.bold, fontSize: FONT.size.base, color: isDark ? '#f1f5f9' : '#1e293b', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nombre}</p>
+          <p style={{ fontFamily: FONT.family, fontWeight: FONT.weight.bold, fontSize: FONT.size.base, color: isDark ? '#f2f2f2' : '#18181b', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nombre}</p>
           {(direccion || ciudad) && (
-            <p style={{ fontFamily: FONT.family, fontSize: FONT.size.xs, color: isDark ? '#94a3b8' : '#64748b', margin: '1px 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <p style={{ fontFamily: FONT.family, fontSize: FONT.size.xs, color: isDark ? '#a3a3a3' : '#6b6b6b', margin: '1px 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {[direccion, ciudad].filter(Boolean).join(', ')}
             </p>
           )}
@@ -228,7 +252,7 @@ function MapaModal({ tienda, isDark, onClose }) {
       </div>
 
       {/* Footer — card tienda + acción */}
-      <div style={{ padding: '12px 16px', flexShrink: 0, background: isDark ? '#1e293b' : '#fff', borderTop: `1px solid ${isDark ? '#334155' : '#e2e8f0'}` }}>
+      <div style={{ padding: '12px 16px', flexShrink: 0, background: isDark ? '#262626' : '#fff', borderTop: `1px solid ${isDark ? '#3a3a3a' : '#e5e5e5'}` }}>
         {routeInfo ? (
           /* Modo ruta activa: info en línea + cancelar */
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -236,14 +260,14 @@ function MapaModal({ tienda, isDark, onClose }) {
               <Navigation size={20} style={{ color: '#22c55e' }} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ margin: 0, fontFamily: FONT.family, fontWeight: FONT.weight.bold, fontSize: FONT.size.sm, color: isDark ? '#f1f5f9' : '#1e293b' }}>
+              <p style={{ margin: 0, fontFamily: FONT.family, fontWeight: FONT.weight.bold, fontSize: FONT.size.sm, color: isDark ? '#f2f2f2' : '#18181b' }}>
                 {routeInfo.duracion} caminando
               </p>
-              <p style={{ margin: '1px 0 0', fontFamily: FONT.family, fontSize: FONT.size.xs, color: isDark ? '#94a3b8' : '#64748b' }}>{routeInfo.distancia}</p>
+              <p style={{ margin: '1px 0 0', fontFamily: FONT.family, fontSize: FONT.size.xs, color: isDark ? '#a3a3a3' : '#6b6b6b' }}>{routeInfo.distancia}</p>
             </div>
             <button
               onClick={() => { setRoute(null); setRouteInfo(null); }}
-              style={{ width: 44, height: 44, borderRadius: 13, border: 'none', background: isDark ? '#334155' : '#f1f5f9', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isDark ? '#94a3b8' : '#64748b', flexShrink: 0 }}
+              style={{ width: 44, height: 44, borderRadius: 13, border: 'none', background: isDark ? '#3a3a3a' : '#f0f0f0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isDark ? '#a3a3a3' : '#6b6b6b', flexShrink: 0 }}
             >
               <X size={16} />
             </button>
@@ -251,15 +275,15 @@ function MapaModal({ tienda, isDark, onClose }) {
         ) : (
           /* Modo normal: card tienda + botón */
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 13, flexShrink: 0, overflow: 'hidden', background: isDark ? 'rgba(0,184,217,.15)' : '#e0f7fb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 44, height: 44, borderRadius: 13, flexShrink: 0, overflow: 'hidden', background: 'var(--tp-primary-soft, #e0f7fb)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {logo
                 ? <img src={logo} alt={nombre} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                : <span style={{ fontSize: 18, fontWeight: 800, color: '#00B8D9', fontFamily: FONT.family }}>{nombre?.[0]?.toUpperCase() || 'T'}</span>
+                : <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--tp-primary, #00B8D9)', fontFamily: FONT.family }}>{nombre?.[0]?.toUpperCase() || 'T'}</span>
               }
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ margin: 0, fontFamily: FONT.family, fontWeight: FONT.weight.bold, fontSize: FONT.size.sm, color: isDark ? '#f1f5f9' : '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nombre}</p>
-              {(direccion || ciudad) && <p style={{ margin: '2px 0 0', fontFamily: FONT.family, fontSize: FONT.size.xs, color: isDark ? '#94a3b8' : '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[direccion, ciudad].filter(Boolean).join(', ')}</p>}
+              <p style={{ margin: 0, fontFamily: FONT.family, fontWeight: FONT.weight.bold, fontSize: FONT.size.sm, color: isDark ? '#f2f2f2' : '#18181b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nombre}</p>
+              {(direccion || ciudad) && <p style={{ margin: '2px 0 0', fontFamily: FONT.family, fontSize: FONT.size.xs, color: isDark ? '#a3a3a3' : '#6b6b6b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[direccion, ciudad].filter(Boolean).join(', ')}</p>}
             </div>
             <button
               onClick={calcRoute}
@@ -274,13 +298,22 @@ function MapaModal({ tienda, isDark, onClose }) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
-export function MapaSection({ tienda, isDark = false }) {
+// modalAbierto/onAbrirMapa/onCerrarMapa son opcionales: si vienen (el
+// template padre controla el modal para compartirlo con el chip de
+// dirección del hero, ver commerce-modern.jsx), se usan tal cual — si no
+// vienen, MapaSection mantiene su propio estado interno como siempre.
+export function MapaSection({ tienda, isDark = false, onVerEnMapaGlobal, modalAbierto, onAbrirMapa, onCerrarMapa }) {
   const { lat, lng, nombre, logo, direccion, ciudad } = tienda;
-  const [showModal, setShowModal] = useState(false);
+  const [showModalLocal, setShowModalLocal] = useState(false);
+  const controlado = modalAbierto !== undefined;
+  const showModal = controlado ? modalAbierto : showModalLocal;
+  const abrirModal = controlado ? onAbrirMapa : () => setShowModalLocal(true);
+  const cerrarModal = controlado ? onCerrarMapa : () => setShowModalLocal(false);
 
   const navUrl = lat && lng
     ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
@@ -290,8 +323,9 @@ export function MapaSection({ tienda, isDark = false }) {
     if (!direccion) return null;
     return (
       <section style={{ padding: '2rem 1.25rem' }}>
+        <style>{MAPA_CSS}</style>
         <h2 style={{ fontFamily: FONT.family, fontSize: FONT.size.xl, fontWeight: FONT.weight.black, color: 'var(--tp-text)', margin: '0 0 .75rem' }}>Ubicación</h2>
-        <a href={navUrl} target="_blank" rel="noopener noreferrer"
+        <a href={navUrl} target="_blank" rel="noopener noreferrer" className="mp-addr-link"
           style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', background: 'var(--tp-surface)', border: '1px solid var(--tp-border)', borderRadius: RADIUS.xl, boxShadow: SHADOW.sm }}>
           <div style={{ width: 44, height: 44, borderRadius: RADIUS.lg, background: 'var(--tp-primary-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <MapPin size={22} style={{ color: 'var(--tp-primary)' }} />
@@ -310,6 +344,7 @@ export function MapaSection({ tienda, isDark = false }) {
 
   return (
     <section style={{ padding: '2rem 1.25rem' }}>
+      <style>{MAPA_CSS}</style>
       <h2 style={{ fontFamily: FONT.family, fontSize: FONT.size.xl, fontWeight: FONT.weight.black, color: 'var(--tp-text)', margin: '0 0 .75rem' }}>Ubicación</h2>
 
       {(direccion || ciudad) && (
@@ -319,9 +354,19 @@ export function MapaSection({ tienda, isDark = false }) {
         </p>
       )}
 
+      {/* Click-through al mapa global de LOKAL (todas las tiendas) — solo
+          en modo plataforma, cuando la prop viene definida. */}
+      {onVerEnMapaGlobal && (
+        <button onClick={onVerEnMapaGlobal} className="no-press mp-global-btn"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 12, padding: '7px 12px', borderRadius: RADIUS.md, border: '1px solid var(--tp-border)', background: 'var(--tp-surface)', color: 'var(--tp-text)', fontFamily: FONT.family, fontSize: FONT.size.xs, fontWeight: FONT.weight.bold, cursor: 'pointer' }}>
+          <MapPin size={13} style={{ color: 'var(--tp-primary)' }} />
+          Ver en el mapa de LOKAL
+        </button>
+      )}
+
       {/* Thumbnail clickeable */}
       <div
-        onClick={() => setShowModal(true)}
+        onClick={abrirModal}
         style={{ borderRadius: RADIUS.xl, overflow: 'hidden', boxShadow: SHADOW.md, border: '1px solid var(--tp-border)', cursor: 'pointer', position: 'relative' }}
       >
         <MapContainer
@@ -376,7 +421,7 @@ export function MapaSection({ tienda, isDark = false }) {
       </div>
 
       {showModal && (
-        <MapaModal tienda={tienda} isDark={isDark} onClose={() => setShowModal(false)} />
+        <MapaModal tienda={tienda} isDark={isDark} onClose={cerrarModal} />
       )}
     </section>
   );

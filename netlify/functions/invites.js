@@ -1,3 +1,8 @@
+// invites.js — links de invitación de USO ÚNICO para registrar tienda,
+// portado literal de LOKAL global (netlify/functions/invites.js).
+// POST (admin): genera un token nuevo. GET: valida + reclama (con TTL de
+// reclamo para evitar carreras entre pestañas). PATCH: marca como usado tras
+// crear la tienda. Usado por tiendas-crud.js POST (token + sessionId).
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { randomBytes } from 'crypto';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
@@ -149,9 +154,12 @@ export const handler = async (event) => {
       await writeInvite(token, invite);
 
       const baseUrl = process.env.URL || 'http://localhost:8888';
+      // /admin (no la raíz "/"): ahí es donde Root.jsx monta AdminLogin y
+      // luego RegistroTienda, que lee ?token= de la URL. En "/" el usuario
+      // caería en la home pública de la tienda fija y el token se perdería.
       return jsonResponse(event, 201, {
         token,
-        url: `${baseUrl}?token=${token}`,
+        url: `${baseUrl}/admin?token=${token}`,
         creadoEn: invite.creadoEn,
         expiraEn: new Date(Date.now() + TOKEN_TTL_MS).toISOString(),
       }, HTTP_OPTIONS);

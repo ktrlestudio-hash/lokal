@@ -87,7 +87,7 @@ async function writeJson(key, data, retries = 3) {
  * Registra una acción en el log de auditoría
  * @param {Object} entry
  * @param {string} entry.accion - nombre de la acción (ej: 'tienda.creada', 'pago.aprobado', 'usuario.suspendido')
- * @param {string} entry.entidadTipo - tipo de entidad afectada (tienda, usuario, producto, demanda, pago, etc.)
+ * @param {string} entry.entidadTipo - tipo de entidad afectada (tienda, usuario, producto, pago, etc.)
  * @param {string} entry.entidadId - ID de la entidad
  * @param {string} entry.actorUid - UID del usuario que hizo la acción
  * @param {string} entry.actorEmail - email del actor

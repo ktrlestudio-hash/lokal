@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
   CheckCircle, ArrowLeft, Package, RotateCcw, Wrench,
   Link2, Copy, Tag, Sparkles
@@ -73,8 +73,8 @@ export default function MatchTypeSelector({ value, onChange }) {
           <Icon className="w-4.5 h-4.5" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className={`font-bold text-sm ${selected ? accent : 'text-slate-900 dark:text-white'}`}>{meta.label}</p>
-          <p className="text-xs text-slate-400 mt-0.5">{meta.desc}</p>
+          <p className={`font-bold text-sm ${selected ? accent : 'text-ink'}`}>{meta.label}</p>
+          <p className="text-xs text-ink-dim mt-0.5">{meta.desc}</p>
         </div>
         {selected && <CheckCircle className={`w-4 h-4 ml-auto shrink-0 mt-0.5 ${meta.tone === 'brand' ? 'text-brand' : 'text-violet-500'}`} />}
       </button>
@@ -83,14 +83,14 @@ export default function MatchTypeSelector({ value, onChange }) {
 
   if (step === 'root') return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">¿Cómo coincide tu producto?</p>
+      <p className="text-xs font-semibold text-ink-dim uppercase tracking-wide mb-3">¿Cómo coincide tu producto?</p>
       <button className={`${btnBase} ${btnActive(step === 'exacto', 'brand')}`} onClick={() => setStep('exacto')}>
         <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand">
           <CheckCircle className="w-4.5 h-4.5" />
         </div>
         <div>
-          <p className="font-bold text-sm text-slate-900 dark:text-white">Tengo exactamente lo que pide</p>
-          <p className="text-xs text-slate-400 mt-0.5">El mismo producto, misma marca o especificación</p>
+          <p className="font-bold text-sm text-ink">Tengo exactamente lo que pide</p>
+          <p className="text-xs text-ink-dim mt-0.5">El mismo producto, misma marca o especificación</p>
         </div>
       </button>
       <button className={`${btnBase} ${btnActive(step === 'similar', 'violet')}`} onClick={() => setStep('similar')}>
@@ -98,8 +98,8 @@ export default function MatchTypeSelector({ value, onChange }) {
           <Sparkles className="w-4.5 h-4.5" />
         </div>
         <div>
-          <p className="font-bold text-sm text-slate-900 dark:text-white">No es exactamente, pero puede servir</p>
-          <p className="text-xs text-slate-400 mt-0.5">Compatible, similar, alternativa o genérico</p>
+          <p className="font-bold text-sm text-ink">No es exactamente, pero puede servir</p>
+          <p className="text-xs text-ink-dim mt-0.5">Compatible, similar, alternativa o genérico</p>
         </div>
       </button>
     </div>
@@ -108,10 +108,10 @@ export default function MatchTypeSelector({ value, onChange }) {
   if (step === 'exacto') return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 mb-3">
-        <button onClick={back} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/8 transition-colors">
-          <ArrowLeft className="w-4 h-4 text-slate-500" />
+        <button onClick={back} className="p-1.5 rounded-lg hover:bg-surface-card-2 dark:hover:bg-white/8 transition-colors">
+          <ArrowLeft className="w-4 h-4 text-ink-dim" />
         </button>
-        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Es el mismo producto — ¿en qué estado?</p>
+        <p className="text-xs font-semibold text-ink-dim uppercase tracking-wide">Es el mismo producto — ¿en qué estado?</p>
       </div>
       {['exacto-nuevo', 'exacto-usado', 'reacondicionado'].map(renderOption)}
     </div>
@@ -121,10 +121,10 @@ export default function MatchTypeSelector({ value, onChange }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 mb-3">
-        <button onClick={back} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/8 transition-colors">
-          <ArrowLeft className="w-4 h-4 text-slate-500" />
+        <button onClick={back} className="p-1.5 rounded-lg hover:bg-surface-card-2 dark:hover:bg-white/8 transition-colors">
+          <ArrowLeft className="w-4 h-4 text-ink-dim" />
         </button>
-        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">¿Qué tipo de alternativa es?</p>
+        <p className="text-xs font-semibold text-ink-dim uppercase tracking-wide">¿Qué tipo de alternativa es?</p>
       </div>
       {['compatible', 'similar', 'imitacion'].map(renderOption)}
     </div>

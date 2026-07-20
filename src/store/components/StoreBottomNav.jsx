@@ -1,4 +1,4 @@
-/**
+﻿/**
  * StoreBottomNav (MEJORADO con Motion)
  * Navegación inferior de tienda con layoutId para indicador activo
  */
@@ -7,17 +7,17 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Package, MessageSquare, Plus, Store, Menu } from 'lucide-react';
 
-export default function StoreBottomNav({ activeTab, onTabChange, notifCount, newDemandasCount, isEmprendimiento }) {
+export default function StoreBottomNav({ activeTab, onTabChange, notifCount, isEmprendimiento }) {
   const tabs = [
     { id: 'home', icon: Package, label: 'Inicio' },
-    { id: 'feed', icon: Package, label: 'Feed', badge: newDemandasCount },
+    { id: 'feed', icon: Package, label: 'Feed' },
     { id: 'create', icon: Plus, label: 'Crear', special: true },
     { id: 'productos', icon: MessageSquare, label: 'Productos' },
     { id: 'perfil', icon: Store, label: isEmprendimiento ? 'Mi perfil' : 'Mi tienda' },
   ];
 
   return (
-    <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-white/8 z-[4500]" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-surface-card border-t border-slate-100 dark:border-white/8 z-[4500]" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <div className="flex items-end justify-around px-2 pt-2 pb-3 max-w-md mx-auto relative">
         {tabs.map(({ id, icon: Icon, label, special, badge }) => {
           const isActive = activeTab === id;
@@ -42,7 +42,7 @@ export default function StoreBottomNav({ activeTab, onTabChange, notifCount, new
                 >
                   <Plus className="w-7 h-7 text-white" />
                 </motion.div>
-                <span className="text-[10px] font-semibold text-slate-400">{label}</span>
+                <span className="text-[10px] font-semibold text-ink-dim">{label}</span>
               </motion.button>
             );
           }
@@ -64,7 +64,7 @@ export default function StoreBottomNav({ activeTab, onTabChange, notifCount, new
                 >
                   <Icon
                     className={`w-5 h-5 transition-colors duration-200 ${
-                      isActive ? 'text-brand' : 'text-slate-500 dark:text-slate-400'
+                      isActive ? 'text-brand' : 'text-ink-dim'
                     }`}
                     strokeWidth={isActive ? 2.5 : 1.8}
                   />
@@ -84,7 +84,7 @@ export default function StoreBottomNav({ activeTab, onTabChange, notifCount, new
               </div>
 
               <span className={`text-[10px] font-semibold transition-colors duration-200 ${
-                isActive ? 'text-brand' : 'text-slate-400'
+                isActive ? 'text-brand' : 'text-ink-dim'
               }`}>
                 {label}
               </span>

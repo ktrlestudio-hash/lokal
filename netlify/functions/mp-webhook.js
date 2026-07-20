@@ -3,8 +3,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { getHeader, handleOptions, HttpError, jsonResponse, parseJsonBody } from './_lib/http.js';
-import { findTiendaById, findTiendaByOwnerUid, readTiendas, writeTiendas } from './_lib/tiendas-store.js';
-import { readUserProfiles, writeUserProfiles, findUserProfileByUid } from './_lib/user-profiles-store.js';
+import { findTiendaByOwnerUid, writeTiendas } from './_lib/tiendas-store.js';
 
 const BUCKET = process.env.R2_BUCKET_NAME;
 const TIENDAS_KEY = 'data/tiendas.json';
@@ -116,47 +115,6 @@ function mergeSuscripcion(existing, plan, paymentId, monto, esNuevo) {
   };
 }
 
-async function syncUserProfileSuscripcion(googleUid, suscripcion, tiendaData) {
-  try {
-    const profiles = await readUserProfiles();
-    const idx = profiles.findIndex((p) => p.uid === googleUid);
-    if (idx === -1) return; // no hay perfil, nada que hacer
-
-    profiles[idx] = {
-      ...profiles[idx],
-      role: 'empresa',
-      plan: profiles[idx].plan || 'basico',
-      suscripcion,
-      // Si no tiene businessProfile, crearlo desde tiendaData
-      businessProfile: profiles[idx].businessProfile || {
-        nombre: tiendaData.nombre || '',
-        rubros: tiendaData.rubros || [],
-        descripcion: tiendaData.descripcion || '',
-        direccion: tiendaData.direccion || '',
-        ciudad: tiendaData.ciudad || '',
-        telefono: tiendaData.telefono || '',
-        lat: tiendaData.lat || null,
-        lng: tiendaData.lng || null,
-        tieneLocal: tiendaData.tieneLocal || false,
-        slug: tiendaData.slug || '',
-        tagline: tiendaData.tagline || '',
-        instagram: tiendaData.instagram || '',
-        whatsapp: tiendaData.whatsapp || '',
-        horarios: tiendaData.horarios || {},
-        galeria: tiendaData.galeria || [],
-        foto: tiendaData.foto || null,
-        portada: tiendaData.portada || null,
-      },
-      updatedAt: new Date().toISOString(),
-    };
-
-    await writeUserProfiles(profiles);
-  } catch (err) {
-    console.error('[mp-webhook] Error syncUserProfileSuscripcion:', err);
-    // No fallar el webhook por esto
-  }
-}
-
 function safeEqualHex(a, b) {
   const left = Buffer.from(String(a || ''), 'hex');
   const right = Buffer.from(String(b || ''), 'hex');
@@ -263,8 +221,6 @@ export const handler = async (event) => {
         tiendas[idx].activa = true;
         tiendas[idx].updatedAt = new Date().toISOString();
         await writeTiendas(tiendas);
-        // Sincronizar con userProfile
-        await syncUserProfileSuscripcion(googleUid, nuevaSuscripcion, tiendas[idx]);
       }
       return jsonResponse(event, 200, { ok: true, tipo: 'renovacion' }, HTTP_OPTIONS);
     }
@@ -282,8 +238,6 @@ export const handler = async (event) => {
       existente.activa = true;
       existente.updatedAt = new Date().toISOString();
       await writeTiendas(tiendas);
-      // Sincronizar con userProfile
-      await syncUserProfileSuscripcion(googleUid, nuevaSuscripcion, existente);
       return jsonResponse(event, 200, { ok: true, tipo: 'activacion-existente' }, HTTP_OPTIONS);
     }
 
@@ -320,13 +274,6 @@ export const handler = async (event) => {
 
     tiendas.push(nueva);
     await writeTiendas(tiendas);
-
-    // Sincronizar con userProfile
-    await syncUserProfileSuscripcion(
-      googleUid || pendingData.googleUid,
-      nueva.suscripcion,
-      nueva
-    );
 
     delete pending[ref];
     await writeJson(PENDING_KEY, PENDING_LOCAL, pending);

@@ -521,7 +521,7 @@ LOKAL | Para tiendas | Para compradores | Descargar app
 
 ### Paleta para HOME (fusión de lo mejor)
 ```
-Primary:    #00B8D9  (cyan LOKAL, ya definido)
+Primary:    #E4002B  (rojo LOKAL, ya definido)
 Success:    #22AD5C  (verde — tienda abierta, confirmaciones)
 Danger:     #F23030  (rojo — cerrado, sin stock)
 Warning:    #FBBF24  (amarillo — rating stars)

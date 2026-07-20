@@ -71,7 +71,7 @@ export default function LoginBottomSheet({ open, onClose, context = 'default', o
     },
     perfil: {
       title: 'Tu perfil',
-      desc: 'Iniciá sesión para ver tus demandas, productos y mensajes.',
+      desc: 'Iniciá sesión para ver tus pedidos y mensajes.',
       cta: 'Entrar a mi perfil',
     },
   };
@@ -88,21 +88,21 @@ export default function LoginBottomSheet({ open, onClose, context = 'default', o
       {/* Sheet */}
       <div className="fixed inset-x-0 bottom-0 z-[7001] animate-sheet-up">
         <div
-          className="bg-white dark:bg-[#0B132B] rounded-t-3xl shadow-2xl mx-auto max-w-lg"
+          className="bg-white dark:bg-[#2A0509] rounded-t-3xl shadow-2xl mx-auto max-w-lg"
           style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
         >
           {/* Drag handle */}
           <div className="flex justify-center pt-3 pb-1">
-            <div className="w-10 h-1 bg-slate-300 dark:bg-white/20 rounded-full" />
+            <div className="w-10 h-1 bg-surface-card-2 dark:bg-white/20 rounded-full" />
           </div>
 
           <div className="px-6 pt-2 pb-6 relative">
             {/* Close */}
             <button
               onClick={onClose}
-              className="absolute top-3 right-4 w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+              className="absolute top-3 right-4 w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-card-2 dark:hover:bg-white/10 transition-colors"
             >
-              <X className="w-4 h-4 text-slate-400" />
+              <X className="w-4 h-4 text-ink-dim" />
             </button>
 
             {/* Avatar genérico */}
@@ -114,19 +114,22 @@ export default function LoginBottomSheet({ open, onClose, context = 'default', o
 
             {/* Texto */}
             <div className="text-center mb-5">
-              <h3 className="text-lg font-black text-slate-900 dark:text-white mb-1.5">
+              <h3 className="text-lg font-black text-ink mb-1.5">
                 {ctx.title}
               </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+              <p className="text-sm text-ink-dim leading-relaxed">
                 {ctx.desc}
               </p>
             </div>
 
-            {/* CTA Google */}
+            {/* CTA Google — text-[#18181b] fijo en dark (no dark:text-ink):
+                text-ink resuelve a --text-primary-rgb, casi blanco en dark
+                mode, así que sobre bg-white quedaba texto blanco sobre
+                fondo blanco, invisible. */}
             <button
               onClick={handleGoogle}
               disabled={loading}
-              className="w-full flex items-center justify-center gap-3 bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold py-3.5 px-6 rounded-2xl transition-all shadow-lg hover:shadow-xl disabled:opacity-60 active:scale-[0.98]"
+              className="w-full flex items-center justify-center gap-3 bg-ink dark:bg-white hover:bg-ink/90 dark:hover:bg-white/90 text-white dark:text-[#18181b] font-bold py-3.5 px-6 rounded-2xl transition-all shadow-lg hover:shadow-xl disabled:opacity-60 active:scale-[0.98]"
             >
               {loading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
@@ -142,9 +145,9 @@ export default function LoginBottomSheet({ open, onClose, context = 'default', o
 
             {/* Divider */}
             <div className="flex items-center gap-3 my-5">
-              <div className="flex-1 h-px bg-slate-100 dark:bg-white/10" />
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">o</span>
-              <div className="flex-1 h-px bg-slate-100 dark:bg-white/10" />
+              <div className="flex-1 h-px bg-surface-card-2 dark:bg-white/10" />
+              <span className="text-[10px] font-bold text-ink-dim uppercase tracking-wider">o</span>
+              <div className="flex-1 h-px bg-surface-card-2 dark:bg-white/10" />
             </div>
 
             {/* Links secundarios */}
@@ -152,31 +155,31 @@ export default function LoginBottomSheet({ open, onClose, context = 'default', o
               {/* ¿Qué es Lokal? */}
               <button
                 onClick={() => { onClose(); onOpenLanding?.(); }}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/8 border border-slate-100 dark:border-white/8 transition-colors text-left"
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-surface-card-2 dark:bg-white/5 hover:bg-surface-card-2 dark:hover:bg-white/8 border border-slate-100 dark:border-white/8 transition-colors text-left"
               >
                 <div className="w-9 h-9 rounded-xl bg-brand/10 flex items-center justify-center shrink-0">
                   <HelpCircle className="w-4 h-4 text-brand" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-slate-900 dark:text-white">¿Qué es Lokal?</p>
-                  <p className="text-[11px] text-slate-400">Descubrí cómo funciona</p>
+                  <p className="text-sm font-bold text-ink">¿Qué es Lokal?</p>
+                  <p className="text-[11px] text-ink-dim">Descubrí cómo funciona</p>
                 </div>
-                <ArrowRight className="w-4 h-4 text-slate-300" />
+                <ArrowRight className="w-4 h-4 text-ink-dim" />
               </button>
 
               {/* Soy tienda */}
               <button
                 onClick={handleRegisterStore}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/8 border border-slate-100 dark:border-white/8 transition-colors text-left"
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-surface-card-2 dark:bg-white/5 hover:bg-surface-card-2 dark:hover:bg-white/8 border border-slate-100 dark:border-white/8 transition-colors text-left"
               >
                 <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
                   <Store className="w-4 h-4 text-amber-500" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-slate-900 dark:text-white">Soy tienda</p>
-                  <p className="text-[11px] text-slate-400">Registrá tu comercio gratis</p>
+                  <p className="text-sm font-bold text-ink">Soy tienda</p>
+                  <p className="text-[11px] text-ink-dim">Registrá tu comercio gratis</p>
                 </div>
-                <ArrowRight className="w-4 h-4 text-slate-300" />
+                <ArrowRight className="w-4 h-4 text-ink-dim" />
               </button>
             </div>
 
@@ -187,7 +190,7 @@ export default function LoginBottomSheet({ open, onClose, context = 'default', o
                 'Chateá con comercios locales',
                 'Recibí notificaciones de respuestas',
               ].map((text, i) => (
-                <div key={i} className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <div key={i} className="flex items-center gap-2 text-xs text-ink-dim">
                   <Sparkles className="w-3.5 h-3.5 text-brand shrink-0" />
                   <span>{text}</span>
                 </div>
@@ -197,7 +200,7 @@ export default function LoginBottomSheet({ open, onClose, context = 'default', o
             {/* Cerrar */}
             <button
               onClick={onClose}
-              className="w-full mt-4 py-2.5 text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+              className="w-full mt-4 py-2.5 text-xs font-semibold text-ink-dim hover:text-ink dark:hover:text-ink-dim transition-colors"
             >
               Seguir explorando sin cuenta
             </button>

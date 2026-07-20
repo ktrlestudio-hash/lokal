@@ -3,9 +3,6 @@
  * Exporta todos los módulos para facilitar importaciones
  */
 
-// Demandas module (búsqueda de necesidades)
-export * from './demandas/index';
-
 // Oportunidades module (ofertas de trabajo)
 export * from './oportunidades/index';
 

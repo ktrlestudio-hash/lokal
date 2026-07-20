@@ -1,8 +1,8 @@
-import React, { useState, useRef } from 'react';
+﻿import React, { useState, useRef } from 'react';
 import { motion, useInView } from 'framer-motion';
 import {
   Check, X, Lock, Zap, CreditCard, CheckCircle,
-  TrendingUp, Award, MessageSquare, Phone, Star, Crown, Sparkles,
+  TrendingUp, Award, MessageSquare, Phone, Star, Crown, Sparkles, Loader2, ChevronDown,
 } from 'lucide-react';
 
 const PRECIO_MENSUAL   = 4990;
@@ -16,7 +16,7 @@ export function PBadge({ children, variant = 'brand', className = '' }) {
     brand:   'bg-brand text-white shadow-lg shadow-brand/30',
     premium: 'bg-gradient-to-r from-amber-400 to-amber-600 text-white shadow-lg shadow-amber-500/30',
     ok:      'bg-ok text-white shadow-lg shadow-ok/30',
-    muted:   'bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/15',
+    muted:   'bg-surface-card-2 dark:bg-white/10 text-ink-dim dark:text-ink-dim border border-slate-200 dark:border-white/15',
   };
   return (
     <span className={`
@@ -56,7 +56,7 @@ export function PHeader({ children, gradient, className = '' }) {
       relative rounded-t-2xl overflow-hidden
       ${gradient
         ? `bg-gradient-to-br ${gradient} text-white`
-        : 'bg-slate-50 dark:bg-white/4 border-b border-slate-100 dark:border-white/8 text-slate-900 dark:text-white'}
+        : 'bg-surface-card-2 dark:bg-white/4 border-b border-slate-100 dark:border-white/8 text-ink'}
       p-6 ${className}
     `}>
       {gradient && (
@@ -75,15 +75,15 @@ export function PPrice({ current, original, period = '/mes', discount, light = f
   return (
     <div className={`flex items-end gap-2 flex-wrap ${className}`}>
       {original && (
-        <span className={`text-lg line-through mb-0.5 ${light ? 'text-white/50' : 'text-slate-400 dark:text-slate-500'}`}>
+        <span className={`text-lg line-through mb-0.5 ${light ? 'text-white/50' : 'text-ink-dim'}`}>
           {original}
         </span>
       )}
-      <span className={`text-4xl font-black tracking-tight ${light ? 'text-white' : 'text-slate-900 dark:text-white'}`}>
+      <span className={`text-4xl font-black tracking-tight ${light ? 'text-white' : 'text-ink'}`}>
         {current}
       </span>
       {period && (
-        <span className={`text-sm pb-1 ${light ? 'text-white/65' : 'text-slate-500 dark:text-slate-400'}`}>
+        <span className={`text-sm pb-1 ${light ? 'text-white/65' : 'text-ink-dim'}`}>
           {period}
         </span>
       )}
@@ -108,7 +108,7 @@ export function PListItem({ children, light = false }) {
         ${light ? 'bg-white/20' : 'bg-brand/10 dark:bg-brand/15'}`}>
         <Check className={`w-3 h-3 ${light ? 'text-white' : 'text-brand'}`} strokeWidth={2.5} />
       </div>
-      <span className={light ? 'text-white/85' : 'text-slate-600 dark:text-slate-300'}>
+      <span className={light ? 'text-white/85' : 'text-ink-dim dark:text-ink-dim'}>
         {children}
       </span>
     </li>
@@ -119,30 +119,73 @@ export function PListItem({ children, light = false }) {
 export function PSeparator({ children = 'o también', className = '' }) {
   return (
     <div className={`flex items-center gap-3 ${className}`}>
-      <span className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
-      <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 shrink-0">{children}</span>
-      <span className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
+      <span className="h-px flex-1 bg-surface-card-2 dark:bg-white/10" />
+      <span className="text-xs font-semibold text-ink-dim shrink-0">{children}</span>
+      <span className="h-px flex-1 bg-surface-card-2 dark:bg-white/10" />
     </div>
   );
 }
 
-// ── Botón primario de pricing ─────────────────────────────────────────────────
-export function PButton({ children, onClick, disabled, variant = 'brand', className = '' }) {
+// ── Botón compartido — jerarquía visual única para toda la app (admin y
+// pricing): variantes + loading (spinner, bloquea el click sin depender de
+// que cada caller recuerde poner disabled) + active:scale para feedback de
+// toque, consistentes en light/dark. fullWidth=false para usarlo en pares
+// grid-cols-2 (ej. Transferencia/MercadoPago) sin forzar w-full. ──────────
+export function PButton({ children, onClick, disabled, loading, variant = 'brand', fullWidth = true, className = '' }) {
   const variants = {
     brand:   'bg-brand hover:bg-brand-dark text-white shadow-lg shadow-brand/25',
     premium: 'bg-gradient-to-r from-amber-400 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-white shadow-lg shadow-amber-500/25',
-    white:   'bg-white hover:bg-slate-50 text-slate-900 shadow-lg shadow-black/10',
-    ghost:   'bg-slate-100 dark:bg-white/8 hover:bg-slate-200 dark:hover:bg-white/15 text-slate-700 dark:text-slate-300',
-    dark:    'bg-slate-900 dark:bg-white/10 hover:bg-slate-800 dark:hover:bg-white/20 text-white',
+    white:   'bg-white hover:bg-surface-card-2 text-ink shadow-lg shadow-black/10',
+    ghost:   'bg-surface-card-2 dark:bg-white/8 hover:bg-surface-card-2 dark:hover:bg-white/15 text-ink dark:text-ink-dim',
+    dark:    'bg-ink dark:bg-white/10 hover:bg-ink/90 dark:hover:bg-white/20 text-white',
+    danger:  'bg-rose-500 hover:bg-rose-600 text-white shadow-lg shadow-rose-500/25',
+    mercadopago: 'bg-[#009EE3] hover:bg-[#007EB5] text-white',
+    transferencia: 'bg-emerald-600 hover:bg-emerald-700 text-white',
   };
   return (
     <button
       onClick={onClick}
-      disabled={disabled}
-      className={`w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${variants[variant]} ${className}`}
+      disabled={disabled || loading}
+      className={`${fullWidth ? 'w-full' : ''} py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 ${variants[variant]} ${className}`}
     >
-      {children}
+      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : children}
     </button>
+  );
+}
+
+// ── FAQ de confianza — acordeón con las dudas típicas antes de pagar
+// (cancelación, reembolso, cambio de plan). Vive detrás de un desglose
+// colapsable, no todo apilado en texto plano en la card. ───────────────────
+const FAQ_ITEMS = [
+  { q: '¿Puedo cancelar cuando quiera?', a: 'Sí, no hay permanencia mínima. Podés cancelar cuando quieras y tu tienda pasa al plan Emprendimiento (gratis).' },
+  { q: '¿Qué pasa si cancelo a mitad de mes?', a: 'Tu plan sigue activo hasta la fecha ya paga — no se descuenta nada de golpe. Al vencer, pasa automáticamente a Emprendimiento sin devolución del tiempo no usado.' },
+  { q: '¿Puedo cambiar de plan más adelante?', a: 'Sí, en cualquier momento. Si subís de plan, el cambio es inmediato. Si bajás, se aplica desde tu próximo período de facturación.' },
+];
+
+export function PFaq({ className = '' }) {
+  const [openIdx, setOpenIdx] = useState(null);
+  return (
+    <div className={`divide-y divide-slate-100 dark:divide-white/8 ${className}`}>
+      {FAQ_ITEMS.map((item, i) => {
+        const open = openIdx === i;
+        return (
+          <div key={item.q}>
+            <button
+              onClick={() => setOpenIdx(open ? null : i)}
+              className="w-full flex items-center justify-between gap-3 py-3 text-left"
+            >
+              <span className="text-sm font-semibold text-ink dark:text-ink-dim">{item.q}</span>
+              <ChevronDown className={`w-4 h-4 text-ink-dim shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+            </button>
+            <div className={`grid transition-all duration-200 ease-out ${open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+              <div className="overflow-hidden">
+                <p className="text-xs text-ink-dim leading-relaxed pb-3">{item.a}</p>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -166,12 +209,12 @@ function PlanRadioCard({ plan, selected, onSelect }) {
       )}
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <p className="font-black text-sm text-slate-900 dark:text-white">{plan.name}</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">{plan.description}</p>
+          <p className="font-black text-sm text-ink">{plan.name}</p>
+          <p className="text-xs text-ink-dim mt-0.5 leading-relaxed">{plan.description}</p>
         </div>
         <div className="text-right shrink-0">
-          <p className="font-black text-xl text-slate-900 dark:text-white">{plan.price}</p>
-          {plan.sub && <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{plan.sub}</p>}
+          <p className="font-black text-xl text-ink">{plan.price}</p>
+          {plan.sub && <p className="text-[10px] text-ink-dim mt-0.5">{plan.sub}</p>}
         </div>
       </div>
       {plan.features && (
@@ -203,7 +246,7 @@ export function PaywallModal({ onClose, onPagar, onTransferencia, vencioEl, reno
       price: `$${PRECIO_MENSUAL.toLocaleString()}`,
       sub: 'ARS / mes',
       description: '+1 mes de regalo al renovar',
-      features: ['Respondé demandas', 'Feed completo', 'Badge verificada'],
+      features: ['Recibí pedidos', 'Feed completo', 'Badge verificada'],
     },
     {
       id: 'anual',
@@ -223,11 +266,14 @@ export function PaywallModal({ onClose, onPagar, onTransferencia, vencioEl, reno
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 50, scale: 0.97 }}
         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-        className="w-full max-w-md"
+        className="w-full max-w-md max-h-[90dvh]"
       >
-        <PCard variant="glass">
+        {/* max-h + flex-col: header fijo, body con scroll propio — con el
+            FAQ sumado el contenido ya no entra siempre en pantallas bajas
+            (mobile landscape, notebook chica) sin esto. */}
+        <PCard variant="glass" className="max-h-[90dvh] flex flex-col overflow-hidden">
           {/* Header */}
-          <PHeader gradient="from-[#0B132B] via-slate-800 to-slate-900">
+          <PHeader gradient="from-[#2A0509] via-[#2e2e2e] to-[#1a1a1a]" className="shrink-0">
             <button onClick={onClose}
               className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors z-20">
               <X className="w-4 h-4 text-white" />
@@ -236,14 +282,14 @@ export function PaywallModal({ onClose, onPagar, onTransferencia, vencioEl, reno
               <Lock className="w-5 h-5 text-rose-300" />
             </div>
             <h2 className="font-black text-xl text-white mb-1">Suscripción vencida</h2>
-            <p className="text-slate-300 text-sm leading-relaxed">
+            <p className="text-ink-dim text-sm leading-relaxed">
               {vencioEl ? `Tu plan venció el ${vencioEl}. ` : 'Tu plan ha vencido. '}
-              Renovalo para seguir respondiendo demandas.
+              Renovalo para seguir recibiendo pedidos.
             </p>
           </PHeader>
 
-          <div className="p-5 space-y-4">
-            <p className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+          <div className="p-5 space-y-4 overflow-y-auto">
+            <p className="text-[11px] font-black text-ink-dim uppercase tracking-widest">
               Elegí tu plan
             </p>
 
@@ -258,24 +304,19 @@ export function PaywallModal({ onClose, onPagar, onTransferencia, vencioEl, reno
             )}
 
             <div className="grid grid-cols-2 gap-2.5 pt-1">
-              <button
-                onClick={() => onTransferencia(selected)}
-                className="flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white transition-colors shadow-lg shadow-emerald-500/20"
-              >
+              <PButton variant="transferencia" onClick={() => onTransferencia(selected)} disabled={renovando} fullWidth={false} className="shadow-lg shadow-emerald-500/20">
                 <CreditCard className="w-4 h-4" /> Transferencia
-              </button>
-              <button
-                onClick={() => onPagar(selected)}
-                disabled={renovando}
-                className="flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm bg-[#009EE3] hover:bg-[#007EB5] text-white transition-colors shadow-lg shadow-sky-500/20 disabled:opacity-50"
-              >
-                {renovando ? 'Procesando...' : 'MercadoPago'}
-              </button>
+              </PButton>
+              <PButton variant="mercadopago" onClick={() => onPagar(selected)} loading={renovando} fullWidth={false} className="shadow-lg">
+                MercadoPago
+              </PButton>
             </div>
 
-            <p className="text-center text-slate-400 dark:text-slate-500 text-xs">
-              Pagos seguros · Cancelás cuando querás
+            <p className="flex items-center justify-center gap-1.5 text-center text-ink-dim text-xs">
+              <Lock className="w-3 h-3" /> Pagos seguros · Cancelás cuando querás
             </p>
+
+            <PFaq className="pt-1 border-t border-slate-100 dark:border-white/8" />
           </div>
         </PCard>
       </motion.div>
@@ -301,10 +342,15 @@ export function PremiumModal({ onClose, onUpgrade, renovando }) {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 50, scale: 0.97 }}
         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-        className="w-full max-w-md"
+        className="w-full max-w-md max-h-[90dvh]"
       >
-        <PCard variant="premium">
-          <PHeader gradient="from-amber-400 via-amber-500 to-amber-700">
+        {/* max-h + flex-col en la card, overflow-y-auto solo en el body:
+            el header con gradiente queda fijo, el contenido (beneficios +
+            pago) scrollea debajo — en pantallas bajas (mobile landscape,
+            notebook chica) antes se cortaba contra el borde sin poder
+            llegar a los botones de pago. */}
+        <PCard variant="premium" className="max-h-[90dvh] flex flex-col overflow-hidden">
+          <PHeader gradient="from-amber-400 via-amber-500 to-amber-700" className="shrink-0">
             <button onClick={onClose}
               className="absolute top-4 right-4 w-8 h-8 rounded-full bg-black/15 hover:bg-black/25 flex items-center justify-center transition-colors z-20">
               <X className="w-4 h-4 text-white" />
@@ -321,14 +367,14 @@ export function PremiumModal({ onClose, onUpgrade, renovando }) {
             </div>
           </PHeader>
 
-          <div className="p-5 space-y-5">
+          <div className="p-5 space-y-5 overflow-y-auto">
             <PList>
               {benefits.map(({ icon: Icon, text }) => (
                 <li key={text} className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center shrink-0">
                     <Icon className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                   </div>
-                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{text}</span>
+                  <span className="text-sm font-semibold text-ink dark:text-ink-dim">{text}</span>
                 </li>
               ))}
             </PList>
@@ -336,20 +382,19 @@ export function PremiumModal({ onClose, onUpgrade, renovando }) {
             <PSeparator>método de pago</PSeparator>
 
             <div className="grid grid-cols-2 gap-2.5">
-              <button
-                onClick={() => onUpgrade('transferencia')}
-                className="flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm bg-emerald-600 hover:bg-emerald-700 text-white transition-colors shadow-lg shadow-emerald-500/20"
-              >
+              <PButton variant="transferencia" onClick={() => onUpgrade('transferencia')} disabled={renovando} fullWidth={false} className="shadow-lg shadow-emerald-500/20">
                 <CreditCard className="w-4 h-4" /> Transferencia
-              </button>
-              <PButton variant="premium" onClick={onUpgrade} disabled={renovando}>
-                <Crown className="w-4 h-4" />
-                {renovando ? 'Procesando...' : 'MercadoPago'}
+              </PButton>
+              <PButton variant="premium" onClick={() => onUpgrade('mercadopago')} loading={renovando} fullWidth={false}>
+                <Crown className="w-4 h-4" /> MercadoPago
               </PButton>
             </div>
+            <p className="flex items-center justify-center gap-1.5 text-center text-ink-dim text-xs">
+              <Lock className="w-3 h-3" /> Pago seguro · Cancelás cuando quieras
+            </p>
 
             <button onClick={onClose}
-              className="w-full py-2.5 text-sm font-semibold text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+              className="w-full py-2.5 text-sm font-semibold text-ink-dim hover:text-ink-dim dark:hover:text-ink-dim transition-colors">
               Ahora no
             </button>
           </div>
@@ -364,12 +409,14 @@ export function SuscripcionContent({
   planActual, isActiva, isEmpresa, isPremium, isEmprendimiento,
   vence, trial, trialHasta, dias,
   historialPagos, loadingHistorial,
-  checkoutLoading, renovando,
+  checkoutLoading, checkoutError, renovando,
   onPagar, onTransferencia,
   setShowPremiumModal,
 }) {
   const ref = useRef(null);
   const inView = useInView(ref, { once: true, amount: 0.05 });
+  const [showNoRenovarModal, setShowNoRenovarModal] = useState(false);
+  const [comparativaOpen, setComparativaOpen] = useState(false);
 
   const PLANES = [
     {
@@ -378,8 +425,8 @@ export function SuscripcionContent({
       price: 'Gratis',
       period: '',
       desc: 'Para arrancar',
-      gradient: 'from-slate-700 to-slate-900',
-      features: ['Hasta 5 productos','Página pública','Ver demandas','1 búsqueda laboral','Mapa'],
+      gradient: 'from-[#333333] to-[#1a1a1a]',
+      features: ['Hasta 5 productos','Página pública','1 búsqueda laboral','Mapa'],
     },
     {
       id: 'basico',
@@ -390,7 +437,7 @@ export function SuscripcionContent({
       desc: 'Para crecer',
       gradient: 'from-brand to-brand-dark',
       popular: true,
-      features: ['Hasta 20 productos','Respondé demandas','Feed completo','Estadísticas','Badge verificada','3 búsquedas laborales'],
+      features: ['Hasta 20 productos','Feed completo','Estadísticas','Badge verificada','3 búsquedas laborales'],
     },
     {
       id: 'premium',
@@ -408,65 +455,141 @@ export function SuscripcionContent({
   const current    = PLANES[currentIdx];
 
   return (
+    <>
     <div ref={ref} className="p-4 lg:p-8 space-y-8 max-w-2xl mx-auto">
 
-      {/* ── Plan activo ── */}
+      {/* ── Resumen de cuenta — panel de estado/gestión de la suscripción,
+          tipo Stripe/ChatGPT: plan + estado, metadata (precio, próxima
+          fecha) en fila, y acciones al pie (mejorar plan / no renovar).
+          Sin lista de features acá — eso vive en "Comparar planes", esto
+          es reporte de cuenta, no vidriera de venta. ── */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.5 }}>
-        <PCard variant={planActual === 'premium' ? 'premium' : 'brand'}>
-          <PHeader gradient={current.gradient}>
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="mb-3">
-                  {isActiva
-                    ? <PBadge variant="ok"><Check className="w-3 h-3" /> Activa</PBadge>
-                    : <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black uppercase bg-rose-500/25 text-rose-200">
-                        <Lock className="w-3 h-3" /> Vencida
-                      </span>}
-                </div>
-                <h2 className="font-black text-2xl text-white">{current.name}</h2>
-                {vence && (
-                  <p className="text-white/70 text-sm mt-1">
-                    {isActiva ? 'Vence el' : 'Venció el'} {vence.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                  </p>
-                )}
-                {dias !== null && dias > 0 && dias <= 7 && (
-                  <p className="text-amber-200 text-sm font-bold mt-1">⚠️ Vence en {dias} día{dias !== 1 ? 's' : ''}</p>
-                )}
-              </div>
-              <div className="w-14 h-14 bg-white/15 rounded-2xl flex items-center justify-center shrink-0">
-                {planActual === 'premium' ? <Crown className="w-7 h-7 text-white" /> : <Zap className="w-7 h-7 text-white" />}
-              </div>
+        <PCard variant="default">
+          <div className="p-5 flex items-start gap-4">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${planActual === 'premium' ? 'bg-amber-100 dark:bg-amber-500/15' : 'bg-brand/10 dark:bg-brand/15'}`}>
+              {planActual === 'premium' ? <Crown className="w-6 h-6 text-amber-600 dark:text-amber-400" /> : <Zap className="w-6 h-6 text-brand" />}
             </div>
-          </PHeader>
-          <div className="p-5">
-            <p className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">Tu plan incluye</p>
-            <PList>
-              {current.features.map(f => <PListItem key={f}>{f}</PListItem>)}
-            </PList>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="font-black text-lg text-ink">{current.name}</h2>
+                {isActiva
+                  ? <PBadge variant="ok"><Check className="w-3 h-3" /> Activa</PBadge>
+                  : <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black uppercase bg-rose-500/10 text-rose-600 dark:text-rose-400">
+                      <Lock className="w-3 h-3" /> Vencida
+                    </span>}
+              </div>
+              {dias !== null && dias > 0 && dias <= 7 && (
+                <p className="text-amber-600 dark:text-amber-400 text-sm font-bold mt-1">Vence en {dias} día{dias !== 1 ? 's' : ''}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="px-5 pb-5">
+            <PSeparator className="mb-4" />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-[10px] font-black text-ink-dim uppercase tracking-widest mb-1">Precio</p>
+                <p className="text-sm font-bold text-ink">{current.price}{current.period && <span className="text-ink-dim font-medium"> {current.period}</span>}</p>
+              </div>
+              {vence && (
+                <div>
+                  <p className="text-[10px] font-black text-ink-dim uppercase tracking-widest mb-1">{isActiva ? 'Próximo vencimiento' : 'Venció'}</p>
+                  <p className="text-sm font-bold text-ink">{vence.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                </div>
+              )}
+            </div>
+
+            {(planActual !== 'emprendimiento' || isActiva) && (
+              <div className="flex gap-2.5 mt-5">
+                {planActual !== 'premium' && (
+                  <PButton variant="brand" onClick={() => setShowPremiumModal(true)} fullWidth={false} className="flex-1 py-2.5 text-sm">
+                    <Crown className="w-4 h-4" /> Mejorar plan
+                  </PButton>
+                )}
+                {planActual !== 'emprendimiento' && isActiva && (
+                  <PButton variant="ghost" onClick={() => setShowNoRenovarModal(true)} fullWidth={false} className="flex-1 py-2.5 text-sm">
+                    No renovar
+                  </PButton>
+                )}
+              </div>
+            )}
           </div>
         </PCard>
       </motion.div>
 
-      {/* ── Comparativa ── */}
+      {/* ── Historial — justo debajo del resumen: es lo que un usuario de
+          cuenta quiere ver seguido, no al fondo de la pantalla. ── */}
       <div>
-        <p className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">Comparar planes</p>
+        <p className="text-[11px] font-black text-ink-dim uppercase tracking-widest mb-4">Historial de pagos</p>
+        <PCard variant="default">
+          <div className="p-4 space-y-2">
+            {loadingHistorial && !historialPagos?.length ? (
+              <div className="flex items-center justify-center gap-2 text-ink-dim text-sm py-6">
+                <div className="w-4 h-4 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+                Cargando historial...
+              </div>
+            ) : !historialPagos?.length ? (
+              <p className="text-center text-ink-dim text-sm py-6">Todavía no registrás pagos.</p>
+            ) : historialPagos.map((pago, i) => (
+              <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-surface-card-2 dark:bg-white/4">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-ok/10 dark:bg-ok/15 flex items-center justify-center shrink-0">
+                    <CheckCircle className="w-4 h-4 text-ok" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-ink capitalize">{pago.plan}</p>
+                    <p className="text-xs text-ink-dim">
+                      {new Date(pago.fecha).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  {pago.monto && <p className="text-sm font-bold text-ink">${Number(pago.monto).toLocaleString()}</p>}
+                  <p className="text-[10px] text-ink-dim">MP #{String(pago.paymentId).slice(-6)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </PCard>
+      </div>
+
+      {/* ── Comparativa — sección de upgrade, separada del resumen de
+          cuenta de arriba. Colapsada por default: la mayoría de las
+          visitas a esta pantalla son para chequear estado, no para
+          comparar planes — mostrar 3 cards completas siempre expandidas
+          empuja el resto de la pantalla (historial, FAQ) fuera de vista
+          sin necesidad. No repite el badge "Tu plan" del plan activo
+          (ya está claro en el resumen): acá el plan actual se muestra
+          simplemente atenuado, sin badge extra. ── */}
+      <div>
+        <button
+          onClick={() => setComparativaOpen(o => !o)}
+          className="w-full flex items-center justify-between gap-3 mb-4"
+        >
+          <p className="text-[11px] font-black text-ink-dim uppercase tracking-widest">Comparar planes</p>
+          <span className="flex items-center gap-1.5 text-xs font-bold text-brand">
+            {comparativaOpen ? 'Ocultar' : 'Ver planes'}
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${comparativaOpen ? 'rotate-180' : ''}`} />
+          </span>
+        </button>
+        <div className={`grid transition-all duration-300 ease-out ${comparativaOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+        <div className="overflow-hidden">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {PLANES.map((plan, i) => {
             const isCurrent = plan.id === planActual;
             const isUpgrade = i > currentIdx;
             return (
-              <motion.div key={plan.id} className="relative pt-4"
-                initial={{ opacity: 0, y: 20 }} animate={inView ? { opacity: 1, y: 0 } : {}}
+              <motion.div key={plan.id} className={`relative pt-4 ${isCurrent ? 'opacity-60' : ''}`}
+                initial={{ opacity: 0, y: 20 }} animate={inView ? { opacity: isCurrent ? 0.6 : 1, y: 0 } : {}}
                 transition={{ duration: 0.45, delay: i * 0.08 }}>
-                {/* Badge FUERA del card para no cortarse */}
+                {/* Badge FUERA del card para no cortarse — el plan actual no
+                    lleva badge acá (ya está claro en el resumen de arriba),
+                    solo se atenúa para no competir visualmente con las
+                    opciones de upgrade, que son la razón de ser de esta
+                    sección. */}
                 {plan.popular && !isCurrent && (
                   <div className="absolute top-0 left-1/2 -translate-x-1/2 z-10">
                     <PBadge variant="brand"><Star className="w-3 h-3" /> Popular</PBadge>
-                  </div>
-                )}
-                {isCurrent && (
-                  <div className="absolute top-0 left-1/2 -translate-x-1/2 z-10">
-                    <PBadge variant="ok"><Check className="w-3 h-3" /> Tu plan</PBadge>
                   </div>
                 )}
                 {plan.id === 'premium' && !isCurrent && (
@@ -477,15 +600,15 @@ export function SuscripcionContent({
 
                 <PCard variant={plan.popular && !isCurrent ? 'brand' : 'default'} className="h-full flex flex-col">
                   <div className={`${plan.popular && !isCurrent ? '' : ''} p-5 flex-1 flex flex-col`}>
-                    <h3 className="font-black text-base text-slate-900 dark:text-white">{plan.name}</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">{plan.desc}</p>
+                    <h3 className="font-black text-base text-ink">{plan.name}</h3>
+                    <p className="text-xs text-ink-dim mb-3">{plan.desc}</p>
                     <PPrice
                       current={plan.price}
                       period={plan.period}
                       discount={plan.id === 'basico' ? '-20% anual' : undefined}
                       className="mb-1"
                     />
-                    {plan.priceSub && <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-4">{plan.priceSub}</p>}
+                    {plan.priceSub && <p className="text-[10px] text-ink-dim mb-4">{plan.priceSub}</p>}
 
                     <PSeparator className="my-3" />
 
@@ -494,7 +617,7 @@ export function SuscripcionContent({
                     </PList>
 
                     {isCurrent ? (
-                      <div className="w-full py-2.5 rounded-xl text-center text-xs font-bold bg-slate-100 dark:bg-white/8 text-slate-500 dark:text-slate-400">
+                      <div className="w-full py-2.5 rounded-xl text-center text-xs font-bold bg-surface-card-2 dark:bg-white/8 text-ink-dim">
                         Plan actual
                       </div>
                     ) : isUpgrade ? (
@@ -504,18 +627,16 @@ export function SuscripcionContent({
                         </PButton>
                       ) : (
                         <div className="grid grid-cols-2 gap-1.5">
-                          <button onClick={() => onTransferencia('mensual')}
-                            className="py-2.5 rounded-xl text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors">
+                          <PButton variant="transferencia" onClick={() => onTransferencia('mensual')} disabled={!!checkoutLoading} fullWidth={false} className="text-[11px] py-2.5">
                             Transferencia
-                          </button>
-                          <button onClick={() => onPagar('mensual')} disabled={checkoutLoading}
-                            className="py-2.5 rounded-xl text-[11px] font-bold bg-[#009EE3] hover:bg-[#007EB5] text-white transition-colors disabled:opacity-50">
+                          </PButton>
+                          <PButton variant="mercadopago" onClick={() => onPagar('mensual')} loading={checkoutLoading === 'mensual'} disabled={!!checkoutLoading && checkoutLoading !== 'mensual'} fullWidth={false} className="text-[11px] py-2.5">
                             MercadoPago
-                          </button>
+                          </PButton>
                         </div>
                       )
                     ) : (
-                      <div className="w-full py-2.5 rounded-xl text-center text-xs font-bold bg-slate-50 dark:bg-white/5 text-slate-400">
+                      <div className="w-full py-2.5 rounded-xl text-center text-xs font-bold bg-surface-card-2 dark:bg-white/5 text-ink-dim">
                         Plan base
                       </div>
                     )}
@@ -525,31 +646,31 @@ export function SuscripcionContent({
             );
           })}
         </div>
+        </div>
+        </div>
       </div>
 
       {/* ── Renovar ── */}
       {(!isActiva || (dias !== null && dias <= 7)) && (
         <motion.div initial={{ opacity: 0, y: 16 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.4, delay: 0.3 }}>
-          <p className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">Renovar suscripción</p>
+          <p className="text-[11px] font-black text-ink-dim uppercase tracking-widest mb-4">Renovar suscripción</p>
           <PCard variant="glass">
             <div className="p-5 space-y-4">
               {/* Mensual */}
-              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-50 dark:bg-white/4 border border-slate-100 dark:border-white/8">
+              <div className="flex items-center justify-between p-4 rounded-xl bg-surface-card-2 dark:bg-white/4 border border-slate-100 dark:border-white/8">
                 <div>
-                  <p className="font-black text-sm text-slate-900 dark:text-white">Plan Mensual</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">+1 mes de regalo</p>
+                  <p className="font-black text-sm text-ink">Plan Mensual</p>
+                  <p className="text-xs text-ink-dim">+1 mes de regalo</p>
                 </div>
                 <PPrice current={`$${PRECIO_MENSUAL.toLocaleString()}`} period="/mes" />
               </div>
               <div className="grid grid-cols-2 gap-2.5">
-                <button onClick={() => onTransferencia('mensual')}
-                  className="flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors">
+                <PButton variant="transferencia" onClick={() => onTransferencia('mensual')} disabled={!!checkoutLoading} fullWidth={false}>
                   <CreditCard className="w-4 h-4" /> Transferencia
-                </button>
-                <button onClick={() => onPagar('mensual')} disabled={checkoutLoading}
-                  className="py-3 rounded-xl text-sm font-bold bg-[#009EE3] hover:bg-[#007EB5] text-white transition-colors disabled:opacity-50">
+                </PButton>
+                <PButton variant="mercadopago" onClick={() => onPagar('mensual')} loading={checkoutLoading === 'mensual'} disabled={!!checkoutLoading && checkoutLoading !== 'mensual'} fullWidth={false}>
                   MercadoPago
-                </button>
+                </PButton>
               </div>
 
               <PSeparator>o ahorrás con el anual</PSeparator>
@@ -557,8 +678,8 @@ export function SuscripcionContent({
               {/* Anual */}
               <div className="flex items-center justify-between p-4 rounded-xl border-2 border-brand/40 bg-brand/5 dark:bg-brand/8 dark:border-brand/30">
                 <div>
-                  <p className="font-black text-sm text-slate-900 dark:text-white">Plan Anual</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Total ${PRECIO_ANUAL.toLocaleString()} · 12+1 meses</p>
+                  <p className="font-black text-sm text-ink">Plan Anual</p>
+                  <p className="text-xs text-ink-dim">Total ${PRECIO_ANUAL.toLocaleString()} · 12+1 meses</p>
                 </div>
                 <div className="text-right">
                   <PBadge variant="ok" className="mb-1.5 text-[10px]">Ahorrás 20%</PBadge>
@@ -566,58 +687,66 @@ export function SuscripcionContent({
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2.5">
-                <button onClick={() => onTransferencia('anual')}
-                  className="flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors">
+                <PButton variant="transferencia" onClick={() => onTransferencia('anual')} disabled={!!checkoutLoading} fullWidth={false}>
                   <CreditCard className="w-4 h-4" /> Transferencia
-                </button>
-                <button onClick={() => onPagar('anual')} disabled={checkoutLoading}
-                  className="py-3 rounded-xl text-sm font-bold bg-[#009EE3] hover:bg-[#007EB5] text-white transition-colors disabled:opacity-50">
+                </PButton>
+                <PButton variant="mercadopago" onClick={() => onPagar('anual')} loading={checkoutLoading === 'anual'} disabled={!!checkoutLoading && checkoutLoading !== 'anual'} fullWidth={false}>
                   MercadoPago
-                </button>
+                </PButton>
               </div>
+
+              {checkoutError && (
+                <p className="text-rose-500 dark:text-rose-400 text-sm text-center font-semibold">{checkoutError}</p>
+              )}
+
+              <p className="flex items-center justify-center gap-1.5 text-center text-ink-dim text-xs">
+                <Lock className="w-3 h-3" /> Pago seguro · Cancelás cuando quieras
+              </p>
             </div>
           </PCard>
         </motion.div>
       )}
 
-      {/* ── Historial ── */}
-      {(historialPagos?.length > 0 || loadingHistorial) && (
-        <div>
-          <p className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">Historial de pagos</p>
-          <PCard variant="default">
-            <div className="p-4 space-y-2">
-              {loadingHistorial && !historialPagos?.length ? (
-                <div className="flex items-center justify-center gap-2 text-slate-400 text-sm py-6">
-                  <div className="w-4 h-4 border-2 border-brand border-t-transparent rounded-full animate-spin" />
-                  Cargando historial...
-                </div>
-              ) : historialPagos?.map((pago, i) => (
-                <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-white/4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-ok/10 dark:bg-ok/15 flex items-center justify-center shrink-0">
-                      <CheckCircle className="w-4 h-4 text-ok" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-slate-900 dark:text-white capitalize">{pago.plan}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {new Date(pago.fecha).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    {pago.monto && <p className="text-sm font-bold text-slate-900 dark:text-white">${Number(pago.monto).toLocaleString()}</p>}
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500">MP #{String(pago.paymentId).slice(-6)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </PCard>
-        </div>
-      )}
+      {/* ── FAQ de confianza ── */}
+      <div>
+        <p className="text-[11px] font-black text-ink-dim uppercase tracking-widest mb-4">Preguntas frecuentes</p>
+        <PCard variant="default">
+          <div className="px-4">
+            <PFaq />
+          </div>
+        </PCard>
+      </div>
 
-      <p className="text-center text-slate-400 dark:text-slate-500 text-xs pb-6">
+      <p className="text-center text-ink-dim text-xs pb-6">
         Pagos seguros con MercadoPago · Cancelás cuando querás
       </p>
     </div>
+
+    {/* ── Modal "No renovar" — no hay cobro recurrente automático que dar
+        de baja (cada pago es una preferencia MP única), así que "cancelar"
+        acá es en realidad "no volver a pagar": el plan sigue activo hasta
+        la fecha ya paga, sin devolución, y después cae solo a
+        Emprendimiento (gratis). El modal comunica eso explícitamente en
+        vez de prometer una cancelación inmediata que no existe. ── */}
+    {showNoRenovarModal && (
+      <div className="fixed inset-0 z-[9500] flex items-end sm:items-center justify-center p-4" onClick={() => setShowNoRenovarModal(false)}>
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+        <div className="relative bg-surface-card rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="w-12 h-12 rounded-2xl bg-surface-card-2 dark:bg-white/8 flex items-center justify-center mx-auto mb-4">
+            <Lock className="w-6 h-6 text-ink-dim" />
+          </div>
+          <h3 className="font-black text-lg text-center mb-1">¿No renovar tu plan?</h3>
+          <p className="text-sm text-ink-dim text-center leading-relaxed mb-6">
+            No hay nada que cancelar ahora mismo: tu plan sigue activo
+            {vence ? ` hasta el ${vence.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}` : ''}, sin devolución del tiempo ya pago.
+            Cuando venza, simplemente no te cobramos de nuevo y tu tienda pasa al plan Emprendimiento (gratis). Podés volver a suscribirte cuando quieras.
+          </p>
+          <button onClick={() => setShowNoRenovarModal(false)} className="w-full py-2.5 rounded-2xl bg-brand hover:bg-brand-dark text-white text-sm font-bold transition-colors">
+            Entendido
+          </button>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

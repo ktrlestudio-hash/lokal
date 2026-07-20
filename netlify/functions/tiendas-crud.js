@@ -1,4 +1,4 @@
-import { getBearerToken, requireAuth, verifyFirebaseIdToken, ensureSameUserOrAdmin } from './_lib/auth.js';
+import { getBearerToken, requireAuth, verifyFirebaseIdToken, ensureSameUserOrAdmin, ensureAdmin } from './_lib/auth.js';
 import { handleError, handleOptions, HttpError, jsonResponse, parseJsonBody } from './_lib/http.js';
 import {
   sanitizeEmail,
@@ -24,6 +24,7 @@ import {
   writeTiendasSafe,
 } from './_lib/tiendas-store.js';
 import { auditLog } from './_lib/audit-store.js';
+import { defaultSecciones } from './_lib/modules.js';
 
 const HTTP_OPTIONS = {
   allowHeaders: 'Content-Type, Authorization',
@@ -41,13 +42,31 @@ async function getOptionalUser(event) {
   }
 }
 
-function buildStorePayload(body, user, token) {
+// Slug único derivado del nombre — "almacen-don-jose", con sufijo numérico
+// si ya existe ("almacen-don-jose-2"). El dueño lo puede personalizar
+// después desde el panel (PATCH), esto solo evita que la tienda nazca sin
+// URL pública hasta que alguien complete el checklist a mano.
+function uniqueSlugFromNombre(nombre, tiendasExistentes) {
+  const base = generateSlug(nombre);
+  let candidate = base;
+  let n = 2;
+  while (tiendasExistentes.some((t) => t.slug === candidate)) {
+    candidate = `${base}-${n}`;
+    n += 1;
+  }
+  return candidate;
+}
+
+function buildStorePayload(body, user, token, tiendasExistentes = []) {
   const foto = sanitizeMediaUrls(body.foto ? [body.foto] : [], { maxItems: 1 })[0] || null;
+  const rubros = sanitizeStringArray(body.rubros, { maxItems: 10, maxItemLength: 48 });
+  const nombre = requireText(body.nombre, { field: 'nombre', min: 2, max: 120, multiline: false });
 
   return {
     id: Date.now(),
-    nombre: requireText(body.nombre, { field: 'nombre', min: 2, max: 120, multiline: false }),
-    rubros: sanitizeStringArray(body.rubros, { maxItems: 10, maxItemLength: 48 }),
+    nombre,
+    slug: uniqueSlugFromNombre(nombre, tiendasExistentes),
+    rubros,
     descripcion: sanitizeText(body.descripcion, { max: 1500 }),
     direccion: sanitizeText(body.direccion, { max: 240 }),
     ciudad: sanitizeText(body.ciudad, { max: 80, multiline: false }),
@@ -65,6 +84,9 @@ function buildStorePayload(body, user, token) {
     activa: true,
     verificada: false,
     creadoEn: new Date().toISOString(),
+    // Módulos de negocio activos según el rubro elegido — ver _lib/modules.js.
+    // El dueño los puede cambiar después desde el panel (PATCH pagina.secciones).
+    pagina: { secciones: defaultSecciones(rubros) },
   };
 }
 
@@ -74,7 +96,21 @@ export const handler = async (event) => {
   try {
     if (event.httpMethod === 'GET') {
       const tiendas = await readTiendas();
-      const { id, googleUid, slug } = event.queryStringParameters || {};
+      const { id, googleUid, slug, pendientes } = event.queryStringParameters || {};
+
+      // Panel de aprobación (super-admin): tiendas activas esperando
+      // verificada:true — el único listado con datos de dueño (owner*), el
+      // resto de vistas GET usa sanitizePublicTienda.
+      if (pendientes === 'true') {
+        const user = await requireAuth(event);
+        ensureAdmin(user);
+        return jsonResponse(
+          event,
+          200,
+          tiendas.filter((t) => t.activa && !t.verificada).map(sanitizeOwnerTienda),
+          HTTP_OPTIONS
+        );
+      }
 
       if (id) {
         const tienda = findTiendaById(tiendas, id);
@@ -97,7 +133,23 @@ export const handler = async (event) => {
         if (!tienda || !tienda.activa) {
           return jsonResponse(event, 404, { error: 'Tienda no encontrada' }, HTTP_OPTIONS);
         }
-        return jsonResponse(event, 200, sanitizePublicTienda(tienda), HTTP_OPTIONS);
+        // getOptionalUser siempre (no solo si !verificada): sin esto, la
+        // vista pública NUNCA sabía si quien pedía la tienda era su propio
+        // dueño — sanitizePublicTienda le borra googleUid a TODOS por igual,
+        // así que "esDueño" (TiendaPublica.jsx, comparación de uid) daba
+        // false siempre, para cualquiera, incluso el dueño real logueado
+        // viendo su propia tienda. El FAB "+"/atajo al panel nunca podían
+        // aparecer. Ahora: si es el dueño o un admin, se devuelve la versión
+        // CON googleUid (sanitizeOwnerTienda) para que esDueño se calcule bien.
+        const user = await getOptionalUser(event);
+        const esDueñoOAdmin = !!user && (user.isAdmin || tienda.googleUid === user.uid);
+        // No verificada: invisible en público hasta que un admin la apruebe
+        // (PATCH verificada:true) — salvo para el propio dueño o un admin,
+        // que necesitan verla para cargar/probar antes de publicar.
+        if (!tienda.verificada && !esDueñoOAdmin) {
+          return jsonResponse(event, 404, { error: 'Tienda no encontrada' }, HTTP_OPTIONS);
+        }
+        return jsonResponse(event, 200, esDueñoOAdmin ? sanitizeOwnerTienda(tienda) : sanitizePublicTienda(tienda), HTTP_OPTIONS);
       }
 
       if (googleUid) {
@@ -112,10 +164,11 @@ export const handler = async (event) => {
         return jsonResponse(event, 200, sanitizeOwnerTienda(tienda), HTTP_OPTIONS);
       }
 
+      // Listado público (sin auth): solo activas y verificadas.
       return jsonResponse(
         event,
         200,
-        tiendas.map(sanitizePublicTienda),
+        tiendas.filter((t) => t.activa && t.verificada).map(sanitizePublicTienda),
         HTTP_OPTIONS
       );
     }
@@ -144,7 +197,7 @@ export const handler = async (event) => {
 
       // Admin: crea la tienda directo sin pasar por MP ni validar token de invitación
       if (user.isAdmin && body.adminBypass === true) {
-        const payload = buildStorePayload(body, user, `admin-${Date.now()}`);
+        const payload = buildStorePayload(body, user, `admin-${Date.now()}`, tiendas);
         payload.suscripcion = { plan: 'admin', vence: null }; // sin vencimiento
         tiendas.push(payload);
         await writeTiendas(tiendas);
@@ -157,6 +210,32 @@ export const handler = async (event) => {
           actorRol: 'admin',
           datosDespues: { nombre: payload.nombre, plan: 'admin' },
           meta: { metodo: 'adminBypass' },
+        });
+        return jsonResponse(event, 201, sanitizeOwnerTienda(payload), HTTP_OPTIONS);
+      }
+
+      // Registro abierto con trial gratis (LOKAL LINKS): cualquier usuario
+      // autenticado sin tienda propia puede crear la suya directo, sin
+      // invitación ni Mercado Pago. Vence a los TRIAL_DAYS días — el dueño
+      // ve el vencimiento en su panel (StoreApp ya lee suscripcion.vence).
+      if (body.trial === true) {
+        const TRIAL_DAYS = 14;
+        const payload = buildStorePayload(body, user, `trial-${Date.now()}`, tiendas);
+        payload.suscripcion = {
+          plan: 'trial',
+          vence: new Date(Date.now() + TRIAL_DAYS * 86400000).toISOString(),
+        };
+        tiendas.push(payload);
+        await writeTiendas(tiendas);
+        await auditLog({
+          accion: 'tienda.creada',
+          entidadTipo: 'tienda',
+          entidadId: payload.id,
+          actorUid: user.uid,
+          actorEmail: user.email,
+          actorRol: 'emprendimiento',
+          datosDespues: { nombre: payload.nombre, plan: 'trial' },
+          meta: { metodo: 'trial-abierto', trialDays: TRIAL_DAYS },
         });
         return jsonResponse(event, 201, sanitizeOwnerTienda(payload), HTTP_OPTIONS);
       }
@@ -192,7 +271,11 @@ export const handler = async (event) => {
         throw new HttpError(409, 'Este link ya fue utilizado para registrar una tienda');
       }
 
-      const nueva = buildStorePayload(body, user, token);
+      const nueva = buildStorePayload(body, user, token, tiendas);
+      // Link de invitación = "visto bueno" previo del admin: la tienda queda
+      // aprobada (verificada) de entrada, sin esperar revisión manual.
+      nueva.verificada = true;
+      nueva.suscripcion = { plan: 'invitado', vence: null };
       tiendas.push(nueva);
       await writeTiendas(tiendas);
 

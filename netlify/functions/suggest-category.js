@@ -7,80 +7,67 @@ const HTTP_OPTIONS = {
 
 // Lista plana de categorías para mandar a la IA (solo id + name + parentId)
 // Se mantiene acá para no depender del bundle del frontend
+// Debe reflejar src/categories.js (CATEGORIES) — comida rápida
 const CATEGORY_TREE = [
-  { id: 'electronica', name: 'Electrónica y Tecnología', parentId: null },
-  { id: 'electrodomesticos', name: 'Electrodomésticos', parentId: null },
-  { id: 'computacion', name: 'Computación', parentId: null },
-  { id: 'hogar', name: 'Hogar y Muebles', parentId: null },
-  { id: 'construccion', name: 'Construcción y Materiales', parentId: null },
-  { id: 'ferreteria', name: 'Ferretería y Herramientas', parentId: null },
-  { id: 'ropa', name: 'Ropa y Accesorios', parentId: null },
-  { id: 'calzado', name: 'Calzado', parentId: null },
-  { id: 'deportes', name: 'Deportes y Fitness', parentId: null },
-  { id: 'automotores', name: 'Automotores y Repuestos', parentId: null },
-  { id: 'alimentos', name: 'Alimentos y Bebidas', parentId: null },
-  { id: 'salud', name: 'Salud y Belleza', parentId: null },
-  { id: 'mascotas', name: 'Mascotas', parentId: null },
-  { id: 'juguetes', name: 'Juguetes y Hobbies', parentId: null },
-  { id: 'libros', name: 'Libros y Revistas', parentId: null },
-  { id: 'servicios', name: 'Servicios', parentId: null },
-  { id: 'gastronomia', name: 'Gastronomía y Restaurantes', parentId: null },
-  { id: 'agro', name: 'Agropecuaria', parentId: null },
-  { id: 'educacion', name: 'Educación y Papelería', parentId: null },
+  { id: 'hamburguesas', name: 'Hamburguesas', parentId: null },
+  { id: 'pizzas', name: 'Pizzas', parentId: null },
+  { id: 'sandwiches', name: 'Sándwiches / Lomitos', parentId: null },
+  { id: 'empanadas', name: 'Empanadas', parentId: null },
+  { id: 'tartas', name: 'Tartas', parentId: null },
+  { id: 'platos', name: 'Platos / Menú del día', parentId: null },
+  { id: 'papas', name: 'Papas fritas y acompañamientos', parentId: null },
+  { id: 'ensaladas', name: 'Ensaladas', parentId: null },
+  { id: 'postres', name: 'Postres', parentId: null },
+  { id: 'bebidas', name: 'Bebidas', parentId: null },
+  { id: 'combos', name: 'Combos', parentId: null },
   { id: 'otros', name: 'Otros', parentId: null },
-  // Electrónica
-  { id: 'celulares', name: 'Celulares y Smartphones', parentId: 'electronica' },
-  { id: 'tablets', name: 'Tablets', parentId: 'electronica' },
-  { id: 'audio', name: 'Audio y Sonido', parentId: 'electronica' },
-  { id: 'tv_video', name: 'TV y Video', parentId: 'electronica' },
-  { id: 'fotografia', name: 'Fotografía y Video', parentId: 'electronica' },
-  { id: 'gaming', name: 'Gaming y Consolas', parentId: 'electronica' },
-  { id: 'smartwatches', name: 'Smartwatches y Wearables', parentId: 'electronica' },
-  { id: 'accesorios_cel', name: 'Accesorios para celulares', parentId: 'electronica' },
-  { id: 'iphone', name: 'iPhone (Apple)', parentId: 'celulares' },
-  { id: 'samsung_cel', name: 'Samsung', parentId: 'celulares' },
-  { id: 'motorola', name: 'Motorola', parentId: 'celulares' },
-  { id: 'xiaomi', name: 'Xiaomi', parentId: 'celulares' },
-  { id: 'otros_cel', name: 'Otros celulares', parentId: 'celulares' },
-  { id: 'auriculares', name: 'Auriculares', parentId: 'audio' },
-  { id: 'parlantes', name: 'Parlantes', parentId: 'audio' },
-  { id: 'eq_sonido', name: 'Equipos de sonido', parentId: 'audio' },
-  { id: 'micros', name: 'Micrófonos', parentId: 'audio' },
-  { id: 'televisores', name: 'Televisores', parentId: 'tv_video' },
-  { id: 'proyectores', name: 'Proyectores', parentId: 'tv_video' },
-  { id: 'streaming', name: 'Streaming (Chromecast, Fire TV…)', parentId: 'tv_video' },
-  { id: 'consolas', name: 'Consolas', parentId: 'gaming' },
-  { id: 'juegos_video', name: 'Videojuegos', parentId: 'gaming' },
-  { id: 'perifericos', name: 'Periféricos gamer', parentId: 'gaming' },
-  // Computación
-  { id: 'notebooks', name: 'Notebooks y Laptops', parentId: 'computacion' },
-  { id: 'pcs', name: 'PCs de escritorio', parentId: 'computacion' },
-  { id: 'monitores', name: 'Monitores', parentId: 'computacion' },
-  { id: 'componentes', name: 'Componentes (placas, RAM…)', parentId: 'computacion' },
-  { id: 'impresoras', name: 'Impresoras y Scanners', parentId: 'computacion' },
-  { id: 'redes', name: 'Redes y Conectividad', parentId: 'computacion' },
-  { id: 'acc_pc', name: 'Accesorios PC', parentId: 'computacion' },
-  // Electrodomésticos
-  { id: 'cocina_electro', name: 'Cocina', parentId: 'electrodomesticos' },
-  { id: 'frio', name: 'Frío (heladeras, freezer)', parentId: 'electrodomesticos' },
-  { id: 'lavado', name: 'Lavado y Secado', parentId: 'electrodomesticos' },
-  { id: 'climatizacion', name: 'Climatización', parentId: 'electrodomesticos' },
-  { id: 'aspiradoras', name: 'Aspiradoras y Limpieza', parentId: 'electrodomesticos' },
-  // Ferretería
-  { id: 'herramientas', name: 'Herramientas', parentId: 'ferreteria' },
-  { id: 'electricidad', name: 'Electricidad', parentId: 'ferreteria' },
-  { id: 'plomeria', name: 'Plomería', parentId: 'ferreteria' },
-  { id: 'pinturas', name: 'Pinturas y Revestimientos', parentId: 'ferreteria' },
-  // Ropa
-  { id: 'ropa_mujer', name: 'Ropa de mujer', parentId: 'ropa' },
-  { id: 'ropa_hombre', name: 'Ropa de hombre', parentId: 'ropa' },
-  { id: 'ropa_ninos', name: 'Ropa de niños', parentId: 'ropa' },
-  { id: 'lenceria', name: 'Lencería y pijamas', parentId: 'ropa' },
-  // Servicios
-  { id: 'reparaciones', name: 'Reparaciones y técnicos', parentId: 'servicios' },
-  { id: 'profesionales', name: 'Servicios profesionales', parentId: 'servicios' },
-  { id: 'hogar_servicios', name: 'Hogar y limpieza', parentId: 'servicios' },
-  { id: 'belleza', name: 'Belleza y estética', parentId: 'servicios' },
+  // Hamburguesas
+  { id: 'hamburguesas_clasicas', name: 'Clásicas', parentId: 'hamburguesas' },
+  { id: 'hamburguesas_dobles', name: 'Dobles / XL', parentId: 'hamburguesas' },
+  { id: 'hamburguesas_veggie', name: 'Veggie', parentId: 'hamburguesas' },
+  // Pizzas
+  { id: 'pizzas_muzzarella', name: 'Muzzarella', parentId: 'pizzas' },
+  { id: 'pizzas_especiales', name: 'Especiales', parentId: 'pizzas' },
+  { id: 'pizzas_individuales', name: 'Individuales', parentId: 'pizzas' },
+  // Sándwiches / Lomitos
+  { id: 'lomitos', name: 'Lomitos', parentId: 'sandwiches' },
+  { id: 'sandwiches_frios', name: 'Sándwiches fríos', parentId: 'sandwiches' },
+  { id: 'choripan_bondiola', name: 'Choripán / Bondiola', parentId: 'sandwiches' },
+  // Empanadas
+  { id: 'empanadas_carne', name: 'Carne', parentId: 'empanadas' },
+  { id: 'empanadas_jamonqueso', name: 'Jamón y queso', parentId: 'empanadas' },
+  { id: 'empanadas_especiales', name: 'Especiales', parentId: 'empanadas' },
+  // Tartas
+  { id: 'tartas_verdura', name: 'Verdura', parentId: 'tartas' },
+  { id: 'tartas_pollo', name: 'Pollo', parentId: 'tartas' },
+  { id: 'tartas_dulces', name: 'Dulces', parentId: 'tartas' },
+  // Platos / Menú del día
+  { id: 'menu_del_dia', name: 'Menú del día', parentId: 'platos' },
+  { id: 'milanesas', name: 'Milanesas', parentId: 'platos' },
+  { id: 'pastas', name: 'Pastas', parentId: 'platos' },
+  // Papas fritas y acompañamientos
+  { id: 'papas_fritas', name: 'Papas', parentId: 'papas' },
+  { id: 'rabas', name: 'Rabas', parentId: 'papas' },
+  { id: 'otros_fritos', name: 'Otros fritos', parentId: 'papas' },
+  // Ensaladas
+  { id: 'ensaladas_clasicas', name: 'Clásicas', parentId: 'ensaladas' },
+  { id: 'ensaladas_polloCarne', name: 'Con pollo/carne', parentId: 'ensaladas' },
+  { id: 'ensaladas_veganas', name: 'Veganas', parentId: 'ensaladas' },
+  // Postres
+  { id: 'helados', name: 'Helados', parentId: 'postres' },
+  { id: 'tortas', name: 'Tortas', parentId: 'postres' },
+  { id: 'flanes_budines', name: 'Flanes/Budines', parentId: 'postres' },
+  // Bebidas
+  { id: 'gaseosas', name: 'Gaseosas', parentId: 'bebidas' },
+  { id: 'cervezas', name: 'Cervezas', parentId: 'bebidas' },
+  { id: 'jugos_aguas', name: 'Jugos/Aguas', parentId: 'bebidas' },
+  { id: 'sin_alcohol', name: 'Sin alcohol', parentId: 'bebidas' },
+  // Combos
+  { id: 'combos_individuales', name: 'Individuales', parentId: 'combos' },
+  { id: 'combos_compartir', name: 'Para compartir', parentId: 'combos' },
+  { id: 'combos_familiares', name: 'Familiares', parentId: 'combos' },
+  // Otros
+  { id: 'otros_varios', name: 'Varios', parentId: 'otros' },
 ];
 
 export const handler = async (event) => {
@@ -111,7 +98,7 @@ export const handler = async (event) => {
       ? `\nAtributos adicionales: ${Object.entries(attributes).map(([k,v]) => `${k}=${v}`).join(', ')}`
       : '';
 
-    const prompt = `Sos un sistema de clasificación de productos para un marketplace local argentino.
+    const prompt = `Sos un sistema de clasificación de productos de menú para locales de comida rápida (rotiserías, hamburgueserías, pizzerías, sandwicherías) en Argentina.
 
 Árbol de categorías disponibles (formato: id: nombre):
 ${treeText}

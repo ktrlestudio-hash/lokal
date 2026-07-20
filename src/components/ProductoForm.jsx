@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+﻿import React, { useRef, useState } from 'react';
 import {
   Camera, X, AlertCircle, Loader2, CheckCircle,
   MessageSquare, Check, Info, Gift, Zap, CreditCard, Tag,
@@ -21,8 +21,8 @@ const CONDICION_OPTS = [
     activeIcon: 'bg-brand/15',
     activeIconColor: 'text-brand',
     inactiveCard: 'border-slate-200 dark:border-white/10 hover:border-slate-300',
-    inactiveIcon: 'bg-slate-100 dark:bg-white/8',
-    inactiveIconColor: 'text-slate-500 dark:text-slate-400',
+    inactiveIcon: 'bg-surface-card-2 dark:bg-white/8',
+    inactiveIconColor: 'text-ink-dim',
   },
   {
     id: 'nuevo',
@@ -36,8 +36,8 @@ const CONDICION_OPTS = [
     activeIcon: 'bg-amber-400/15',
     activeIconColor: 'text-amber-500',
     inactiveCard: 'border-slate-200 dark:border-white/10 hover:border-amber-300',
-    inactiveIcon: 'bg-slate-100 dark:bg-white/8',
-    inactiveIconColor: 'text-slate-500 dark:text-slate-400',
+    inactiveIcon: 'bg-surface-card-2 dark:bg-white/8',
+    inactiveIconColor: 'text-ink-dim',
   },
 ];
 
@@ -64,8 +64,8 @@ const VENTAJA_OPTS = [
     label: 'Financiación',
     tip: 'Ofrecés cuotas, pago en efectivo diferido u otra forma de financiamiento.',
     Icon: CreditCard,
-    activeClass: 'bg-slate-600 border-transparent text-white',
-    iconClass: 'text-slate-500 dark:text-slate-400',
+    activeClass: 'bg-ink-dim border-transparent text-white',
+    iconClass: 'text-ink-dim',
   },
   {
     id: 'combo',
@@ -77,18 +77,37 @@ const VENTAJA_OPTS = [
   },
 ];
 
-const cardCls = 'bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/10 p-4';
-const labelCls = 'text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider';
-const inputCls = 'w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand transition-colors dark:text-white placeholder:text-slate-400';
+const cardCls = 'bg-surface-card rounded-2xl border border-slate-200 dark:border-white/10 p-4';
+const labelCls = 'text-xs font-bold text-ink-dim uppercase tracking-wider';
+const inputCls = 'w-full bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand transition-colors dark:text-white placeholder:text-ink-dim';
 
-const Tip = ({ text }) => (
-  <span className="relative group inline-flex items-center ml-1 cursor-default align-middle">
-    <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" />
-    <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 bg-slate-800 dark:bg-slate-700 text-white text-[11px] leading-snug rounded-xl px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg">
-      {text}
+// Click/tap para abrir (no solo hover) — en mobile no hay hover, así que
+// hover-only dejaba estas 6 explicaciones de campo inalcanzables para el
+// usuario que carga el producto desde el celular.
+const Tip = ({ text }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative inline-flex items-center ml-1 align-middle">
+      <button
+        type="button"
+        onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+        onBlur={() => setOpen(false)}
+        aria-label="Más información"
+        className="flex items-center justify-center text-ink-dim hover:text-brand transition-colors"
+      >
+        <Info className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <>
+          <span className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 bg-[#262626] text-white text-[11px] leading-snug rounded-xl px-3 py-2 z-50 shadow-lg">
+            {text}
+          </span>
+        </>
+      )}
     </span>
-  </span>
-);
+  );
+};
 
 // ─── VentajaSection ───────────────────────────────────────────────────────────
 function VentajaSection({ form, set, inputCls, labelCls }) {
@@ -102,7 +121,7 @@ function VentajaSection({ form, set, inputCls, labelCls }) {
   return (
     <>
       <div className={cardCls}>
-        <p className={`${labelCls} mb-3`}>Ventaja exclusiva <span className="font-normal normal-case text-slate-400">(opcional · podés elegir varias)</span></p>
+        <p className={`${labelCls} mb-3`}>Ventaja exclusiva <span className="font-normal normal-case text-ink-dim">(opcional · podés elegir varias)</span></p>
         <div className="grid grid-cols-2 gap-2">
           {VENTAJA_OPTS.map(v => {
             const Icon = v.Icon;
@@ -112,7 +131,7 @@ function VentajaSection({ form, set, inputCls, labelCls }) {
                 <button
                   onClick={() => toggle(v.id)}
                   className={`w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-2xl border-2 transition-all pr-8
-                    ${isActive ? v.activeClass : 'border-slate-200 dark:border-white/15 hover:border-slate-300 dark:hover:border-white/25 text-slate-700 dark:text-slate-200'}`}
+                    ${isActive ? v.activeClass : 'border-slate-200 dark:border-white/15 hover:border-slate-300 dark:hover:border-white/25 text-ink dark:text-ink-dim'}`}
                 >
                   <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : v.iconClass}`} />
                   <span className="font-semibold text-sm">{v.label}</span>
@@ -120,7 +139,7 @@ function VentajaSection({ form, set, inputCls, labelCls }) {
                 <button
                   onClick={e => { e.stopPropagation(); setInfoModal(v.id); }}
                   className={`absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full transition-colors
-                    ${isActive ? 'text-white/70 hover:text-white' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+                    ${isActive ? 'text-white/70 hover:text-white' : 'text-ink-dim hover:text-ink-dim dark:hover:text-ink-dim'}`}
                 >
                   <Info className="w-3.5 h-3.5" />
                 </button>
@@ -139,20 +158,20 @@ function VentajaSection({ form, set, inputCls, labelCls }) {
       {infoModal && active && (
         <div className="fixed inset-0 z-[6000] flex items-center justify-center p-6" onClick={() => setInfoModal(null)}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative bg-white dark:bg-slate-900 rounded-3xl p-6 w-full max-w-xs shadow-2xl" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setInfoModal(null)} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/15 transition-colors">
+          <div className="relative bg-surface-card rounded-3xl p-6 w-full max-w-xs shadow-2xl" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setInfoModal(null)} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-surface-card-2 dark:bg-white/10 text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/15 transition-colors">
               <X className="w-4 h-4" />
             </button>
             <div className={`w-10 h-10 rounded-2xl flex items-center justify-center mb-4 ${active.activeClass}`}>
               <active.Icon className="w-5 h-5 text-white" />
             </div>
-            <p className="font-bold text-slate-900 dark:text-white text-base mb-2">{active.label}</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">{active.tip}</p>
+            <p className="font-bold text-ink text-base mb-2">{active.label}</p>
+            <p className="text-sm text-ink-dim leading-relaxed">{active.tip}</p>
             <button
               onClick={() => { toggle(active.id); setInfoModal(null); }}
               className={`mt-5 w-full py-2.5 rounded-2xl font-bold text-sm transition-colors
                 ${ventajas.includes(active.id)
-                  ? 'bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300'
+                  ? 'bg-surface-card-2 dark:bg-white/10 text-ink-dim dark:text-ink-dim'
                   : `${active.activeClass} text-white`}`}
             >
               {ventajas.includes(active.id) ? 'Quitar ventaja' : 'Seleccionar'}
@@ -216,14 +235,14 @@ function ContactoSection({ form, set, tiendaWhatsapp, inputCls, labelCls }) {
                   ${isActive ? opt.activeCard : 'border-slate-200 dark:border-white/10 hover:border-slate-300'}`}
               >
                 <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0
-                  ${isActive ? 'bg-white/60 dark:bg-black/20' : 'bg-slate-100 dark:bg-white/8'}`}>
-                  <Icon className={`w-4 h-4 ${isActive ? opt.activeIcon : 'text-slate-400'}`} />
+                  ${isActive ? 'bg-white/60 dark:bg-black/20' : 'bg-surface-card-2 dark:bg-white/8'}`}>
+                  <Icon className={`w-4 h-4 ${isActive ? opt.activeIcon : 'text-ink-dim'}`} />
                 </div>
                 <div className="min-w-0">
-                  <p className={`text-sm font-bold leading-tight ${isActive ? opt.activeLabel : 'text-slate-900 dark:text-white'}`}>
+                  <p className={`text-sm font-bold leading-tight ${isActive ? opt.activeLabel : 'text-ink'}`}>
                     {opt.label}
                   </p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight truncate">{opt.desc}</p>
+                  <p className="text-[11px] text-ink-dim leading-tight truncate">{opt.desc}</p>
                 </div>
                 {isActive && (
                   <div className="ml-auto w-4 h-4 rounded-full bg-green-500 flex items-center justify-center shrink-0">
@@ -240,25 +259,25 @@ function ContactoSection({ form, set, tiendaWhatsapp, inputCls, labelCls }) {
           <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-500/10 rounded-xl border border-green-200 dark:border-green-500/20 mb-3">
             <MessageSquare size={18} className="text-green-600 shrink-0" />
             <div className="flex-1">
-              <p className="text-sm font-semibold text-slate-800 dark:text-white">Chat interno Lokal</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Los interesados te escriben por la app</p>
+              <p className="text-sm font-semibold text-ink">Chat interno Lokal</p>
+              <p className="text-xs text-ink-dim">Los interesados te escriben por la app</p>
             </div>
             <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center shrink-0">
               <Check size={10} className="text-white" />
             </div>
           </div>
           <div>
-            <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1.5">
-              WhatsApp <span className="font-normal text-slate-400">(opcional)</span>
+            <label className="text-xs font-semibold text-ink-dim block mb-1.5">
+              WhatsApp <span className="font-normal text-ink-dim">(opcional)</span>
             </label>
-            <div className="flex items-center bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 gap-2">
-              <span className="text-slate-500 dark:text-slate-400 text-sm">+54</span>
+            <div className="flex items-center bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 gap-2">
+              <span className="text-ink-dim text-sm">+54</span>
               <input
                 type="tel"
                 value={form.contactoWhatsapp}
                 onChange={e => set('contactoWhatsapp', e.target.value.replace(/\D/g, ''))}
                 placeholder="Número sin 0 ni 15"
-                className="flex-1 bg-transparent text-sm outline-none text-slate-900 dark:text-white"
+                className="flex-1 bg-transparent text-sm outline-none text-ink"
               />
             </div>
           </div>
@@ -346,8 +365,8 @@ export default function ProductoForm({
                   <span className={isActive ? opt.activeIconColor : opt.inactiveIconColor}>{opt.icon}</span>
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight">{opt.label}</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
+                  <p className="text-sm font-bold text-ink leading-tight">{opt.label}</p>
+                  <p className="text-[11px] text-ink-dim leading-tight">
                     {opt.id === 'usado' ? 'Segunda mano' : canPostNew ? 'De tu negocio' : 'Solo negocios'}
                   </p>
                   {locked && <span className="text-[10px] font-bold text-amber-600">↑ Subir nivel</span>}
@@ -361,13 +380,13 @@ export default function ProductoForm({
       {/* ── Fotos ── */}
       <div className={cardCls}>
         <p className={`${labelCls} mb-3`}>
-          Fotos <span className="font-normal normal-case text-slate-400">({fotoPreviews.length}/4)</span>
+          Fotos <span className="font-normal normal-case text-ink-dim">({fotoPreviews.length}/4)</span>
           <Tip text="Agregá fotos claras del producto. La primera imagen será la principal." />
         </p>
         <div className="grid grid-cols-4 gap-2">
           {Array.from({ length: 4 }).map((_, i) => {
             if (i < fotoPreviews.length) return (
-              <div key={i} className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 dark:bg-white/10">
+              <div key={i} className="relative aspect-square rounded-xl overflow-hidden bg-surface-card-2 dark:bg-white/10">
                 <img src={fotoPreviews[i]} alt="" className="w-full h-full object-cover" />
                 <button onClick={() => removeFoto(i)} className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center">
                   <X className="w-3 h-3" />
@@ -377,12 +396,12 @@ export default function ProductoForm({
             );
             if (i === fotoPreviews.length && fotoPreviews.length < 4) return (
               <button key={i} onClick={() => fotoInputRef.current?.click()}
-                className="aspect-square rounded-xl border-2 border-dashed border-slate-300 dark:border-white/20 flex flex-col items-center justify-center gap-1 hover:border-brand transition-colors text-slate-400 hover:text-brand">
+                className="aspect-square rounded-xl border-2 border-dashed border-slate-300 dark:border-white/20 flex flex-col items-center justify-center gap-1 hover:border-brand transition-colors text-ink-dim hover:text-brand">
                 <Camera className="w-5 h-5" />
                 <span className="text-[10px]">Agregar</span>
               </button>
             );
-            return <div key={i} className="aspect-square rounded-xl bg-slate-100/40 dark:bg-white/5 border border-dashed border-slate-200 dark:border-white/5" />;
+            return <div key={i} className="aspect-square rounded-xl bg-surface-card-2/40 dark:bg-white/5 border border-dashed border-slate-200 dark:border-white/5" />;
           })}
         </div>
         <input ref={fotoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFotos} />
@@ -404,7 +423,7 @@ export default function ProductoForm({
         </div>
         <div>
           <label className={`${labelCls} block mb-2`}>
-            Descripción <span className="font-normal normal-case text-slate-400">(opcional)</span>
+            Descripción <span className="font-normal normal-case text-ink-dim">(opcional)</span>
             <Tip text="Contá más detalles: características, estado, qué incluye, medidas, etc." />
           </label>
           <textarea
@@ -426,7 +445,7 @@ export default function ProductoForm({
               <Tip text="El precio al que vendés. Si tenés descuento, poné el precio ya rebajado acá." />
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none">$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-dim text-xs pointer-events-none">$</span>
               <input type="number" value={form.precio} onChange={e => set('precio', e.target.value)} placeholder="0" className={`${inputCls} pl-7`} />
             </div>
           </div>

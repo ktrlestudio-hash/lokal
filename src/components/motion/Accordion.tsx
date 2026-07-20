@@ -46,7 +46,7 @@ interface AccordionItemProps {
 export function AccordionItem({ id, children, className = '' }: AccordionItemProps) {
   return (
     <div
-      className={`border border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden bg-white dark:bg-slate-900/50 ${className}`}
+      className={`border border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden bg-surface-card/50 ${className}`}
     >
       {children}
     </div>
@@ -67,10 +67,10 @@ export function AccordionTrigger({ children, id, className = '' }: AccordionTrig
   return (
     <motion.button
       onClick={() => setOpenItem(isOpen ? null : id)}
-      className={`no-press w-full flex items-center justify-between px-6 py-4 text-left hover:bg-slate-50 dark:hover:bg-white/5 transition-colors ${className}`}
+      className={`no-press w-full flex items-center justify-between px-6 py-4 text-left hover:bg-surface-card-2 dark:hover:bg-white/5 transition-colors ${className}`}
       whileTap={{ scale: 0.995 }}
     >
-      <span className="font-semibold text-slate-900 dark:text-white text-sm pr-4">
+      <span className="font-semibold text-ink text-sm pr-4">
         {children}
       </span>
       <motion.div
@@ -78,7 +78,7 @@ export function AccordionTrigger({ children, id, className = '' }: AccordionTrig
         transition={{ type: 'spring', stiffness: 300, damping: 25 }}
       >
         <ChevronDown
-          className={`w-4 h-4 shrink-0 ${isOpen ? 'text-brand' : 'text-slate-400'}`}
+          className={`w-4 h-4 shrink-0 ${isOpen ? 'text-brand' : 'text-ink-dim'}`}
         />
       </motion.div>
     </motion.button>
@@ -122,7 +122,7 @@ export function AccordionContent({ children, id, className = '' }: AccordionCont
         >
           <div
             ref={contentRef}
-            className={`px-6 pb-5 text-slate-600 dark:text-slate-400 text-sm leading-relaxed border-t border-slate-100 dark:border-white/5 pt-4 ${className}`}
+            className={`px-6 pb-5 text-ink-dim text-sm leading-relaxed border-t border-slate-100 dark:border-white/5 pt-4 ${className}`}
           >
             {children}
           </div>

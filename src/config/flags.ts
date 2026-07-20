@@ -11,14 +11,6 @@ import type { FeatureFlag, AppConfig } from '../types/index';
 
 export const FEATURE_FLAGS: Record<string, FeatureFlag> = {
   // Core features
-  DEMANDAS: {
-    key: 'module.demandas',
-    name: 'Demandas',
-    description: 'Usuarios publican necesidades/productos buscados',
-    enabled: true,
-    beta: false,
-  },
-
   OPORTUNIDADES: {
     key: 'module.oportunidades',
     name: 'Oportunidades Laborales',
@@ -116,7 +108,6 @@ export const FEATURE_FLAGS: Record<string, FeatureFlag> = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const DEFAULT_MODULES = {
-  demandas: true,
   oportunidades: true,
   servicios: true,
   viajes: true,
@@ -134,7 +125,6 @@ export const CITY_CONFIGS: Record<string, { enabled: boolean; modules: Record<st
   'buenos_aires': {
     enabled: true,
     modules: {
-      demandas: true,
       oportunidades: true,
       servicios: true,
       viajes: true,
@@ -147,7 +137,6 @@ export const CITY_CONFIGS: Record<string, { enabled: boolean; modules: Record<st
   'cordoba': {
     enabled: true,
     modules: {
-      demandas: true,
       oportunidades: true,
       servicios: true,
       viajes: false, // No activo
@@ -281,7 +270,7 @@ export const APP_CONFIG: AppConfig = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const API_BASE = '/.netlify/functions';
-export const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || 'katryelmmartinez@gmail.com')
+export const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || 'ktrlestudio@gmail.com')
   .split(',')
   .map(e => e.trim().toLowerCase())
   .filter(Boolean);

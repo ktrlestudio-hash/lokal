@@ -67,7 +67,7 @@ export function Modal({
           transition={{ duration: 0.2 }}
         >
           <motion.div
-            className={`bg-white dark:bg-slate-800 rounded-lg shadow-xl max-h-screen overflow-y-auto ${sizeClasses[size]}`}
+            className={`bg-surface-card rounded-lg shadow-xl max-h-screen overflow-y-auto ${sizeClasses[size]}`}
             onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, scale: 0.92, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -80,11 +80,11 @@ export function Modal({
           >
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700">
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{title}</h2>
+              <h2 className="text-lg font-semibold text-ink">{title}</h2>
               {closeButton && (
                 <motion.button
                   onClick={onClose}
-                  className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 text-xl w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+                  className="text-ink-dim hover:text-ink text-xl w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-card-2 dark:hover:bg-white/10 transition-colors"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                 >
@@ -98,7 +98,7 @@ export function Modal({
 
             {/* Footer */}
             {footer && (
-              <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
+              <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-surface-card-2">
                 {footer}
               </div>
             )}
@@ -158,7 +158,7 @@ export function AlertDialog({
   variant = 'info',
 }: AlertDialogProps) {
   const variantColors = {
-    info: 'text-blue-600 dark:text-blue-400',
+    info: 'text-ink-dim',
     warning: 'text-yellow-600 dark:text-yellow-400',
     error: 'text-red-600 dark:text-red-400',
     success: 'text-green-600 dark:text-green-400',

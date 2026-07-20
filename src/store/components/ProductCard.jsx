@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Package, Edit3, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
 
 export default function ProductCard({ product, onEdit, onDelete, onToggleActive }) {
@@ -6,14 +6,14 @@ export default function ProductCard({ product, onEdit, onDelete, onToggleActive 
   const isActive = o.activa !== false;
 
   return (
-    <div className={`bg-white dark:bg-slate-900 rounded-2xl border ${isActive ? 'border-slate-100 dark:border-white/8' : 'border-dashed border-slate-200 dark:border-white/15 opacity-60'} overflow-hidden`}>
+    <div className={`bg-surface-card rounded-2xl border ${isActive ? 'border-slate-100 dark:border-white/8' : 'border-dashed border-slate-200 dark:border-white/15 opacity-60'} overflow-hidden`}>
       <div className="flex gap-3 p-4">
         {/* Foto */}
-        <div className="w-16 h-16 rounded-xl bg-slate-100 dark:bg-white/8 overflow-hidden shrink-0 flex items-center justify-center">
+        <div className="w-16 h-16 rounded-xl bg-surface-card-2 dark:bg-white/8 overflow-hidden shrink-0 flex items-center justify-center">
           {o.fotos?.[0] ? (
-            <img src={o.fotos[0]} alt="" className="w-full h-full object-cover" />
+            <img src={o.fotos[0]} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
           ) : (
-            <Package className="w-7 h-7 text-slate-400" />
+            <Package className="w-7 h-7 text-ink-dim" />
           )}
         </div>
         {/* Info */}
@@ -21,7 +21,7 @@ export default function ProductCard({ product, onEdit, onDelete, onToggleActive 
           <div className="flex items-start justify-between gap-2">
             <p className="font-bold text-sm line-clamp-1">{o.titulo}</p>
           </div>
-          {o.descripcion && <p className="text-xs text-slate-400 line-clamp-1 mt-0.5">{o.descripcion}</p>}
+          {o.descripcion && <p className="text-xs text-ink-dim line-clamp-1 mt-0.5">{o.descripcion}</p>}
           <div className="flex items-center gap-2 mt-1.5">
             {o.precio && (
               <span className="text-sm font-black text-brand-dark dark:text-brand">
@@ -29,12 +29,12 @@ export default function ProductCard({ product, onEdit, onDelete, onToggleActive 
               </span>
             )}
             {o.precioOriginal && o.precio && Number(o.precioOriginal) > Number(o.precio) && (
-              <span className="text-xs text-slate-400 line-through">
+              <span className="text-xs text-ink-dim line-through">
                 ${Number(o.precioOriginal).toLocaleString()}
               </span>
             )}
             {o.stock != null && (
-              <span className="text-xs text-slate-400 ml-auto">Stock: {o.stock}</span>
+              <span className="text-xs text-ink-dim ml-auto">Stock: {o.stock}</span>
             )}
           </div>
         </div>
@@ -44,7 +44,7 @@ export default function ProductCard({ product, onEdit, onDelete, onToggleActive 
         {onToggleActive && (
           <button
             onClick={() => onToggleActive(o)}
-            className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors ${isActive ? 'bg-brand/8 dark:bg-brand/15 text-brand-dark dark:text-brand' : 'bg-slate-100 dark:bg-white/8 text-slate-500'}`}
+            className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors ${isActive ? 'bg-brand/8 dark:bg-brand/15 text-brand-dark dark:text-brand' : 'bg-surface-card-2 dark:bg-white/8 text-ink-dim'}`}
           >
             {isActive ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
             {isActive ? 'Activa' : 'Inactiva'}
@@ -53,7 +53,7 @@ export default function ProductCard({ product, onEdit, onDelete, onToggleActive 
         {onEdit && (
           <button
             onClick={() => onEdit(o)}
-            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/8 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/15 transition-colors"
+            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-surface-card-2 dark:bg-white/8 text-ink-dim dark:text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/15 transition-colors"
           >
             <Edit3 className="w-3.5 h-3.5" /> Editar
           </button>

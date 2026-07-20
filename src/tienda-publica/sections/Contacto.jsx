@@ -32,16 +32,29 @@ function buildLinks(tienda, cart, note) {
   return links;
 }
 
+// Feedback táctil de los <a> (la regla global de index.css solo cubre
+// <button>/[role=button], no <a> — mismo hueco que .cm-hero-social/.oi-wa-btn).
+const CONTACTO_CSS = `
+  .ct-link, .ct-bar-btn { -webkit-tap-highlight-color: transparent; }
+  @media (hover: hover) {
+    .ct-link:hover { border-color: var(--tp-primary) !important; filter: brightness(0.985); }
+    .ct-bar-btn:hover { filter: brightness(1.06); }
+  }
+  .ct-link:active { transform: scale(0.97); }
+  .ct-bar-btn:active { transform: scale(0.95); }
+`;
+
 export function Contacto({ tienda, variant = 'minimal', cart = [], note = '' }) {
   const links = buildLinks(tienda, cart, note);
   if (!links.length) return null;
 
   if (variant === 'minimal') return (
     <section style={{ padding: '2rem 1.25rem' }}>
+      <style>{CONTACTO_CSS}</style>
       <h2 style={{ fontSize: FONT.size.xl, fontWeight: FONT.weight.black, color: 'var(--tp-text)', margin: '0 0 1rem', ...F }}>Contacto</h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {links.map(({ href, Icon, label, color, key }) => (
-          <a key={key} href={href} target="_blank" rel="noopener noreferrer"
+          <a key={key} href={href} target="_blank" rel="noopener noreferrer" className="ct-link"
             style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'var(--tp-surface)', border: '1px solid var(--tp-border)', borderRadius: RADIUS.lg, textDecoration: 'none', transition: TRANSITION.fast, boxShadow: SHADOW.sm }}>
             <div style={{ width: 40, height: 40, borderRadius: 12, background: color + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Icon size={19} style={{ color }} />
@@ -58,10 +71,11 @@ export function Contacto({ tienda, variant = 'minimal', cart = [], note = '' }) 
 
   if (variant === 'cards') return (
     <section style={{ padding: '2rem 1.25rem' }}>
+      <style>{CONTACTO_CSS}</style>
       <h2 style={{ fontSize: FONT.size.xl, fontWeight: FONT.weight.black, color: 'var(--tp-text)', margin: '0 0 1rem', ...F }}>Contacto</h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
         {links.map(({ href, Icon, label, color, key, sublabel }) => (
-          <a key={key} href={href} target="_blank" rel="noopener noreferrer"
+          <a key={key} href={href} target="_blank" rel="noopener noreferrer" className="ct-link"
             style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'var(--tp-surface)', border: '1px solid var(--tp-border)', borderRadius: RADIUS.lg, textDecoration: 'none', transition: TRANSITION.fast, boxShadow: SHADOW.sm, minWidth: 0 }}>
             <div style={{ width: 40, height: 40, borderRadius: 12, background: color + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Icon size={19} style={{ color }} />
@@ -78,8 +92,9 @@ export function Contacto({ tienda, variant = 'minimal', cart = [], note = '' }) 
 
   if (variant === 'bar') return (
     <div style={{ position: 'sticky', bottom: 0, zIndex: 100, background: 'var(--tp-surface)', borderTop: '1px solid var(--tp-border)', padding: '10px 1rem', display: 'flex', gap: 8, boxShadow: '0 -4px 20px rgba(0,0,0,.08)' }}>
+      <style>{CONTACTO_CSS}</style>
       {links.slice(0, 3).map(({ href, Icon, label, color, key }, i) => (
-        <a key={key} href={href} target="_blank" rel="noopener noreferrer"
+        <a key={key} href={href} target="_blank" rel="noopener noreferrer" className="ct-bar-btn"
           style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 0', borderRadius: RADIUS.md, border: 'none', textDecoration: 'none', fontWeight: FONT.weight.bold, fontSize: FONT.size.sm, transition: TRANSITION.fast, ...F,
             ...(i === 0 ? { background: 'var(--tp-primary)', color: 'var(--tp-on-primary)' } : { background: 'var(--tp-surface2)', color: 'var(--tp-text)' }),
           }}>

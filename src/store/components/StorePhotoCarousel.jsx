@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { ChevronDown } from 'lucide-react';
 
 export default function StorePhotoCarousel({ photos = [] }) {
@@ -7,8 +7,8 @@ export default function StorePhotoCarousel({ photos = [] }) {
   const prev = () => setIdx(i => (i - 1 + photos.length) % photos.length);
   const next = () => setIdx(i => (i + 1) % photos.length);
   return (
-    <div className="relative bg-slate-100 dark:bg-black/30 select-none">
-      <img src={photos[idx]} alt="" className="w-full object-contain max-h-64" style={{ aspectRatio: '16/9' }} />
+    <div className="relative bg-surface-card-2 dark:bg-black/30 select-none">
+      <img src={photos[idx]} alt="" decoding="async" className="w-full object-contain max-h-64" style={{ aspectRatio: '16/9' }} />
       {photos.length > 1 && (
         <>
           <button

@@ -1,15 +1,16 @@
+// ofertas.js — CRUD de ofertas de LOKAL LINKS: imagen + link compartible.
+// A diferencia del modelo "producto de comercio" (precio/stock/categoría),
+// una oferta acá es una imagen con vigencia (publishAt/expireAt), slug para
+// /o/:slug, y contadores de views/uniques. El OG dinámico al compartir vive
+// en oferta-ssr.js (SSR real, esta función es solo la API JSON).
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { getBearerToken, requireAuth, verifyFirebaseIdToken } from './_lib/auth.js';
 import { handleError, handleOptions, HttpError, jsonResponse, parseJsonBody } from './_lib/http.js';
-import {
-  requireText,
-  sanitizeMediaUrls,
-  sanitizeNumber,
-  sanitizeText,
-} from './_lib/validation.js';
+import { sanitizeMediaUrls, sanitizeText, requireText } from './_lib/validation.js';
 import { ensureStoreOwner, findTiendaById, findTiendaBySlug, readTiendas } from './_lib/tiendas-store.js';
+import { isModuleActive } from './_lib/modules.js';
 
 const LOCAL_FILE = join('/tmp', 'lokal-ofertas.json');
 const DATA_KEY = 'data/ofertas.json';
@@ -50,7 +51,6 @@ async function readOfertas() {
       throw err;
     }
   }
-
   if (!existsSync(LOCAL_FILE)) return [];
   return JSON.parse(readFileSync(LOCAL_FILE, 'utf8'));
 }
@@ -65,7 +65,6 @@ async function writeOfertas(data) {
     }));
     return;
   }
-
   writeFileSync(LOCAL_FILE, JSON.stringify(data, null, 2));
 }
 
@@ -79,59 +78,34 @@ async function getOptionalUser(event) {
   }
 }
 
-// Límites por rol
-const ROLE_LIMITS = {
-  usuario:        { usado: 3,  nuevo: 0  },
-  emprendimiento: { usado: 10, nuevo: 5  },
-  empresa:        { usado: 999, nuevo: 3 }, // 3 en free, backend no distingue plan aún
-};
-
-function getLimits(role) {
-  return ROLE_LIMITS[role] || ROLE_LIMITS.usuario;
+function generateSlug(nombre) {
+  return String(nombre || '')
+    .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'oferta';
 }
 
-function sanitizeOfertaInput(body, tienda) {
-  const precio = sanitizeNumber(body.precio, { field: 'precio', min: 0, max: 999999999, nullable: true });
-  const precioOriginal = sanitizeNumber(body.precioOriginal, { field: 'precioOriginal', min: 0, max: 999999999, nullable: true });
+// ¿Está vigente? (visible + dentro de la ventana de fechas)
+function esVigente(o, now = Date.now()) {
+  if (!o || o.visible === false) return false;
+  const pub = o.publishAt ? new Date(o.publishAt).getTime() : 0;
+  const exp = o.expireAt ? new Date(o.expireAt).getTime() : Infinity;
+  return now >= pub && now <= exp;
+}
 
-  if (precio !== null && precioOriginal !== null && precioOriginal < precio) {
-    throw new HttpError(400, 'precioOriginal debe ser mayor o igual al precio');
-  }
-
-  const ventaja = sanitizeText(body.ventaja, { max: 32, multiline: false }) || null;
-  if (ventaja && !['precio', 'disponibilidad', 'financiacion', 'combo'].includes(ventaja)) {
-    throw new HttpError(400, 'ventaja invalida');
-  }
+function sanitizeOfertaInput(body, tienda, existingSlug) {
+  const nombre = requireText(body.nombre, { field: 'nombre', min: 2, max: 160, multiline: false });
+  const imageUrl = sanitizeMediaUrls(body.imageUrl ? [body.imageUrl] : [], { maxItems: 1 })[0] || null;
+  const thumbUrl = sanitizeMediaUrls(body.thumbUrl ? [body.thumbUrl] : [], { maxItems: 1 })[0] || imageUrl;
 
   return {
     tiendaId: tienda.id,
-    tiendaNombre: tienda.nombre || '',
-    tiendaFoto: tienda.foto || null,
-    tiendaCiudad: tienda.ciudad || '',
-    tiendaTelefono: tienda.telefono || '',
-    titulo: requireText(body.titulo, { field: 'titulo', min: 2, max: 160, multiline: false }),
-    descripcion: sanitizeText(body.descripcion, { max: 2000 }),
-    fotos: sanitizeMediaUrls(body.fotos, { maxItems: 6 }),
-    precio,
-    precioOriginal,
-    ventaja,
-    financiacion: sanitizeText(body.financiacion, { max: 120, multiline: false }) || null,
-    categoryId: sanitizeText(body.categoryId, { max: 80, multiline: false }) || null,
-    stock: sanitizeNumber(body.stock, { field: 'stock', min: 0, max: 999999, integer: true, nullable: true }),
-  };
-}
-
-function sanitizeUserProductInput(body) {
-  const precio = sanitizeNumber(body.precio, { field: 'precio', min: 0, max: 999999999, nullable: true });
-  const condicion = ['usado', 'nuevo'].includes(body.condicion) ? body.condicion : 'usado';
-  return {
-    titulo: requireText(body.titulo, { field: 'titulo', min: 2, max: 160, multiline: false }),
-    descripcion: sanitizeText(body.descripcion, { max: 2000 }),
-    fotos: sanitizeMediaUrls(body.fotos, { maxItems: 6 }),
-    precio,
-    categoryId: sanitizeText(body.categoryId, { max: 80, multiline: false }) || null,
-    condicion,
-    contactoWhatsapp: sanitizeText(body.contactoWhatsapp, { max: 20, multiline: false }) || null,
+    nombre,
+    slug: existingSlug || generateSlug(nombre),
+    imageUrl,
+    thumbUrl,
+    publishAt: body.publishAt || new Date().toISOString(),
+    expireAt: body.expireAt || null,
+    visible: body.visible !== false,
   };
 }
 
@@ -141,106 +115,68 @@ export const handler = async (event) => {
   try {
     if (event.httpMethod === 'GET') {
       const ofertas = await readOfertas();
-      const { tiendaId, slug, activa } = event.queryStringParameters || {};
+      const { tiendaId, slug, ofertaSlug, all } = event.queryStringParameters || {};
+      const now = Date.now();
 
-      let result = ofertas;
+      // /o/:slug — resolver una oferta puntual por tienda+slug (para el SSR de OG)
+      if (slug && ofertaSlug) {
+        const tiendas = await readTiendas();
+        const tienda = findTiendaBySlug(tiendas, slug);
+        if (!tienda) return jsonResponse(event, 404, { error: 'Tienda no encontrada' }, HTTP_OPTIONS);
+        const oferta = ofertas.find((o) => String(o.tiendaId) === String(tienda.id) && (o.id === ofertaSlug || o.slug === ofertaSlug));
+        if (!oferta) return jsonResponse(event, 404, { error: 'Oferta no encontrada' }, HTTP_OPTIONS);
+        return jsonResponse(event, 200, { oferta, tienda }, HTTP_OPTIONS);
+      }
 
+      // Listado de una tienda pública por slug — solo vigentes
       if (slug) {
         const tiendas = await readTiendas();
         const tienda = findTiendaBySlug(tiendas, slug);
-        if (!tienda || !tienda.activa) {
-          return jsonResponse(event, 404, { error: 'Tienda no encontrada' }, HTTP_OPTIONS);
-        }
-        result = ofertas.filter((item) => String(item.tiendaId) === String(tienda.id) && item.activa !== false);
+        if (!tienda || !tienda.activa) return jsonResponse(event, 404, { error: 'Tienda no encontrada' }, HTTP_OPTIONS);
+        const result = ofertas
+          .filter((o) => String(o.tiendaId) === String(tienda.id) && esVigente(o, now))
+          .map(({ views, uniques, lastVisit, ...pub }) => pub);
         return jsonResponse(event, 200, result, HTTP_OPTIONS);
       }
 
-      const { vendedorId } = event.queryStringParameters || {};
-
+      // Listado admin (todas, incluidas vencidas/ocultas) — requiere ser dueño
       if (tiendaId) {
         const user = await getOptionalUser(event);
-        if (user) {
+        let result = ofertas.filter((o) => String(o.tiendaId) === String(tiendaId));
+        if (all === '1') {
           const tiendas = await readTiendas();
           const tienda = findTiendaById(tiendas, tiendaId);
-          const canSeePrivate = tienda && (user.isAdmin || tienda.googleUid === user.uid);
-          result = ofertas.filter((item) => String(item.tiendaId) === String(tiendaId) && (canSeePrivate || item.activa !== false));
+          const canSeePrivate = user && tienda && (user.isAdmin || tienda.googleUid === user.uid);
+          if (!canSeePrivate) throw new HttpError(403, 'No autorizado');
         } else {
-          result = ofertas.filter((item) => String(item.tiendaId) === String(tiendaId) && item.activa !== false);
+          result = result.filter((o) => esVigente(o, now)).map(({ views, uniques, lastVisit, ...pub }) => pub);
         }
-      } else if (vendedorId) {
-        // Productos de usuario/emprendimiento — solo el dueño ve los pausados
-        const user = await getOptionalUser(event);
-        const isOwner = user && user.uid === vendedorId;
-        result = ofertas.filter((item) =>
-          item.vendedorId === vendedorId && (isOwner || item.activa !== false)
-        );
-      } else {
-        result = ofertas.filter((item) => item.activa !== false);
+        return jsonResponse(event, 200, result, HTTP_OPTIONS);
       }
 
-      if (activa === 'true') {
-        result = result.filter((item) => item.activa !== false);
-      }
-
-      return jsonResponse(event, 200, result, HTTP_OPTIONS);
+      return jsonResponse(event, 200, [], HTTP_OPTIONS);
     }
 
     if (event.httpMethod === 'POST') {
       const user = await requireAuth(event);
       const body = parseJsonBody(event);
       const tiendaId = sanitizeText(String(body.tiendaId || ''), { max: 64, multiline: false });
-      const isUserProduct = !tiendaId && !!body.vendedorId;
-
-      if (isUserProduct) {
-        // Publicación de usuario/emprendimiento/empresa
-        if (body.vendedorId !== user.uid) {
-          throw new HttpError(403, 'No autorizado');
-        }
-        const role = sanitizeText(body.vendedorRol || 'usuario', { max: 32, multiline: false });
-        const condicion = body.condicion === 'nuevo' ? 'nuevo' : 'usado';
-        const limits = getLimits(role);
-
-        if (condicion === 'nuevo' && limits.nuevo === 0) {
-          throw new HttpError(403, 'Tu rol no permite publicar productos nuevos');
-        }
-
-        const ofertas = await readOfertas();
-        const activos = ofertas.filter(
-          (o) => o.vendedorId === user.uid && o.condicion === condicion && o.activa !== false
-        );
-        const limit = condicion === 'nuevo' ? limits.nuevo : limits.usado;
-        if (activos.length >= limit) {
-          throw new HttpError(403, `Límite de ${limit} productos ${condicion}s alcanzado para tu rol`);
-        }
-
-        const nueva = {
-          id: `prod_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-          ...sanitizeUserProductInput(body),
-          vendedorId: user.uid,
-          vendedorNombre: sanitizeText(body.vendedorNombre || '', { max: 100, multiline: false }),
-          vendedorRol: role,
-          activa: true,
-          createdAt: new Date().toISOString(),
-        };
-        ofertas.unshift(nueva);
-        await writeOfertas(ofertas);
-        return jsonResponse(event, 201, nueva, HTTP_OPTIONS);
-      }
-
-      // Publicación de tienda (flujo original)
-      if (!tiendaId) {
-        throw new HttpError(400, 'tiendaId o vendedorId es requerido');
-      }
+      if (!tiendaId) throw new HttpError(400, 'tiendaId es requerido');
 
       const tiendas = await readTiendas();
       const tienda = findTiendaById(tiendas, tiendaId);
       ensureStoreOwner(user, tienda);
+      if (!isModuleActive(tienda, 'ofertas')) {
+        throw new HttpError(403, 'El módulo de Ofertas no está activo para esta tienda');
+      }
 
       const ofertas = await readOfertas();
       const nueva = {
         id: `oferta_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         ...sanitizeOfertaInput(body, tienda),
-        activa: true,
+        views: 0,
+        uniques: 0,
+        lastVisit: null,
         createdAt: new Date().toISOString(),
       };
 
@@ -253,50 +189,23 @@ export const handler = async (event) => {
       const user = await requireAuth(event);
       const body = parseJsonBody(event);
       const id = sanitizeText(body.id, { max: 80, multiline: false });
-      if (!id) {
-        throw new HttpError(400, 'id requerido');
-      }
+      if (!id) throw new HttpError(400, 'id requerido');
 
       const ofertas = await readOfertas();
       const idx = ofertas.findIndex((item) => item.id === id);
-      if (idx === -1) {
-        return jsonResponse(event, 404, { error: 'No encontrada' }, HTTP_OPTIONS);
-      }
+      if (idx === -1) return jsonResponse(event, 404, { error: 'No encontrada' }, HTTP_OPTIONS);
 
-      const isUserProduct = !!ofertas[idx].vendedorId;
-      if (isUserProduct) {
-        if (ofertas[idx].vendedorId !== user.uid && !user.isAdmin) {
-          throw new HttpError(403, 'No autorizado');
-        }
-      } else {
-        const tiendas = await readTiendas();
-        const tienda = findTiendaById(tiendas, ofertas[idx].tiendaId);
-        ensureStoreOwner(user, tienda);
-      }
+      const tiendas = await readTiendas();
+      const tienda = findTiendaById(tiendas, ofertas[idx].tiendaId);
+      ensureStoreOwner(user, tienda);
 
       const update = {};
-      if (isUserProduct) {
-        const editFields = ['titulo', 'descripcion', 'fotos', 'precio', 'categoryId', 'condicion', 'contactoWhatsapp'];
-        if (editFields.some((f) => f in body)) {
-          Object.assign(update, sanitizeUserProductInput({ ...ofertas[idx], ...body }));
-        }
-      } else {
-        const tiendas = await readTiendas();
-        const tienda = findTiendaById(tiendas, ofertas[idx].tiendaId);
-        if ('titulo' in body || 'descripcion' in body || 'fotos' in body || 'precio' in body || 'precioOriginal' in body || 'ventaja' in body || 'financiacion' in body || 'categoryId' in body || 'stock' in body) {
-          Object.assign(update, sanitizeOfertaInput({ ...ofertas[idx], ...body }, tienda));
-        }
+      if ('nombre' in body || 'imageUrl' in body || 'thumbUrl' in body || 'publishAt' in body || 'expireAt' in body) {
+        Object.assign(update, sanitizeOfertaInput({ ...ofertas[idx], ...body }, tienda, ofertas[idx].slug));
       }
-      if ('activa' in body) {
-        update.activa = !!body.activa;
-      }
+      if ('visible' in body) update.visible = !!body.visible;
 
-      ofertas[idx] = {
-        ...ofertas[idx],
-        ...update,
-        updatedAt: new Date().toISOString(),
-      };
-
+      ofertas[idx] = { ...ofertas[idx], ...update, updatedAt: new Date().toISOString() };
       await writeOfertas(ofertas);
       return jsonResponse(event, 200, ofertas[idx], HTTP_OPTIONS);
     }
@@ -304,25 +213,15 @@ export const handler = async (event) => {
     if (event.httpMethod === 'DELETE') {
       const user = await requireAuth(event);
       const { id } = event.queryStringParameters || {};
-      if (!id) {
-        throw new HttpError(400, 'id requerido');
-      }
+      if (!id) throw new HttpError(400, 'id requerido');
 
       const ofertas = await readOfertas();
       const idx = ofertas.findIndex((item) => item.id === id);
-      if (idx === -1) {
-        return jsonResponse(event, 404, { error: 'No encontrada' }, HTTP_OPTIONS);
-      }
+      if (idx === -1) return jsonResponse(event, 404, { error: 'No encontrada' }, HTTP_OPTIONS);
 
-      if (ofertas[idx].vendedorId) {
-        if (ofertas[idx].vendedorId !== user.uid && !user.isAdmin) {
-          throw new HttpError(403, 'No autorizado');
-        }
-      } else {
-        const tiendas = await readTiendas();
-        const tienda = findTiendaById(tiendas, ofertas[idx].tiendaId);
-        ensureStoreOwner(user, tienda);
-      }
+      const tiendas = await readTiendas();
+      const tienda = findTiendaById(tiendas, ofertas[idx].tiendaId);
+      ensureStoreOwner(user, tienda);
 
       ofertas.splice(idx, 1);
       await writeOfertas(ofertas);

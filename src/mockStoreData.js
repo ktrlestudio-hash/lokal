@@ -143,23 +143,6 @@ export const MOCK_INBOX = [
   },
 ];
 
-// Demandas mock que aparecen en el feed
-export const MOCK_DEMANDAS = [
-  { id: 'd1', titulo: 'Necesito amoladora angular para obra', descripcion: 'Obra en Villa Allende, necesito amoladora con disco de desbaste. Cuánto salen?', categoria: 'herramientas', localidad: 'Villa Allende', createdAt: hace(0), estado: 'activa', urgente: true },
-  { id: 'd2', titulo: 'Busco cemento x bolsa, entrega en domicilio', descripcion: 'Necesito 20 bolsas de cemento portland 50kg. Zona norte capital. Cotizar con flete.', categoria: 'materiales', localidad: 'Córdoba Norte', createdAt: hace(1), estado: 'activa', urgente: false },
-  { id: 'd3', titulo: 'Cerradura para puerta exterior', descripcion: 'Doble paleta, que sea de buena calidad. Zona centro.', categoria: 'cerrajeria', localidad: 'Córdoba Capital', createdAt: hace(1), estado: 'activa', urgente: true },
-  { id: 'd4', titulo: 'Pintura para exterior 10 litros aprox', descripcion: 'Para frente de casa, color terracota o similar. Presupuesto hasta $25.000.', categoria: 'pintureria', localidad: 'Córdoba Capital', createdAt: hace(2), estado: 'activa', urgente: false },
-  { id: 'd5', titulo: 'Cable eléctrico 4mm y 6mm, varios metros', descripcion: 'Instalación de tablero trifásico. Necesito precios por metro y por bobina.', categoria: 'electricidad', localidad: 'Río Cuarto', createdAt: hace(3), estado: 'activa', urgente: false },
-  { id: 'd6', titulo: 'Tornillos y tarugos varios, compra al por mayor', descripcion: 'Empresa constructora busca proveedor estable para fijaciones. Consultar precios mayoristas.', categoria: 'fijaciones', localidad: 'Córdoba Capital', createdAt: hace(4), estado: 'activa', urgente: false },
-];
-
-// Respuestas que "la tienda" ya envió
-export const MOCK_RESPUESTAS = [
-  { id: 'r1', demandaId: 'd1', demandaTitulo: 'Necesito amoladora angular para obra', texto: 'Tenemos la Bosch GWS 750 a $29.900 con disco incluido. Local en B° Centro.', precio: 29900, tiempoRespuesta: 'Hoy', createdAt: hace(0) },
-  { id: 'r2', demandaId: 'd2', demandaTitulo: 'Busco cemento x bolsa, entrega en domicilio', texto: 'Sí trabajamos con cemento Portland en bolsa. 20 bolsas: $164.000 + flete $4.500 zona norte.', precio: 168500, tiempoRespuesta: 'Ayer', createdAt: hace(1) },
-  { id: 'r3', demandaId: 'd4', demandaTitulo: 'Pintura para exterior 10 litros aprox', texto: 'Tenemos látex exterior en varios colores. Para terracota hacemos a pedido en 24hs. 10L aprox $22.000.', precio: 22000, tiempoRespuesta: 'Hace 2 días', createdAt: hace(2) },
-];
-
 // Datos para StatsScreen
 export const MOCK_STATS = {
   visitasHoy: 47,

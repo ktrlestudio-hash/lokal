@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { ArrowLeft, Package, Store, MapPin, MessageSquare, Navigation, Heart, ChevronRight, Zap, CheckCircle, Bell, Search, User } from 'lucide-react';
 import NavArrowBtn from '../components/ui/NavArrowBtn';
 import useScrollEdges from '../hooks/useScrollEdges';
@@ -8,7 +8,6 @@ export default function ProductDetailScreen({
   oferta,
   tiendas,
   visibleOfertas,
-  allDemandas,
   firebaseUser,
   unreadCount,
   toggleProfileMenu,
@@ -18,7 +17,6 @@ export default function ProductDetailScreen({
   openChat,
   setSelectedProduct,
   setSelectedTienda,
-  setSelectedDemanda,
   setMapaFocusStore,
   setMapaFocusProduct,
   setMapaAutoRoute,
@@ -34,15 +32,13 @@ export default function ProductDetailScreen({
     return [
       ...visibleOfertas.filter(o => o.activa !== false && (ms(o.titulo) || ms(o.tiendaNombre))).slice(0, 4).map(o => ({ _t: 'oferta', ...o })),
       ...tiendas.filter(t => ms(t.nombre) || ms(t.rubro)).slice(0, 3).map(t => ({ _t: 'tienda', ...t })),
-      ...allDemandas.filter(d => d.estado !== 'resuelto' && (ms(d.titulo) || ms(d.descripcion))).slice(0, 2).map(d => ({ _t: 'demanda', ...d })),
     ];
-  }, [lq, visibleOfertas, tiendas, allDemandas]);
+  }, [lq, visibleOfertas, tiendas]);
 
   const lSelect = (item) => {
     setLq(''); setLOpen(false);
     if (item._t === 'oferta')  { setSelectedProduct(item); navigate('product-detail'); }
     if (item._t === 'tienda')  { setSelectedTienda(item); navigate('tienda-detail'); }
-    if (item._t === 'demanda') { setSelectedDemanda(item); navigate('detalle'); }
   };
 
   const photos = oferta.galeria?.length ? oferta.galeria : oferta.fotos?.length ? oferta.fotos : [];
@@ -133,12 +129,12 @@ export default function ProductDetailScreen({
             <p className="text-white font-black text-lg text-center leading-tight">{info.label}</p>
           </div>
           <div className="px-6 py-5">
-            <p className="font-bold text-slate-900 mb-2">{title}</p>
-            <p className="text-sm text-slate-500 leading-relaxed">{body}</p>
+            <p className="font-bold text-ink mb-2">{title}</p>
+            <p className="text-sm text-ink-dim leading-relaxed">{body}</p>
           </div>
           <div className="px-6 pb-6">
             <button onClick={() => setBadgeModal(null)}
-              className="w-full h-11 bg-slate-100 hover:bg-slate-200 rounded-2xl font-bold text-sm text-slate-700 transition-colors">
+              className="w-full h-11 bg-surface-card-2 hover:bg-surface-card-2 rounded-2xl font-bold text-sm text-ink transition-colors">
               Entendido
             </button>
           </div>
@@ -163,8 +159,8 @@ export default function ProductDetailScreen({
           }}
           className={`flex items-center gap-2 ${bg} rounded-2xl px-3 py-2.5 text-left hover:brightness-95 active:scale-[0.98] transition-all`}>
           <Icon className="w-4 h-4 text-primary shrink-0" />
-          <span className="text-xs font-semibold text-slate-700">{text}</span>
-          <ChevronRight className="w-3 h-3 text-slate-300 ml-auto shrink-0" />
+          <span className="text-xs font-semibold text-ink">{text}</span>
+          <ChevronRight className="w-3 h-3 text-ink-dim ml-auto shrink-0" />
         </button>
       ))}
     </div>
@@ -181,24 +177,24 @@ export default function ProductDetailScreen({
     const ovc = VENTAJA_CONFIG[o.ventaja] || {};
     return (
       <div onClick={() => { setSelectedProduct(o); }}
-        className="shrink-0 w-44 bg-white dark:bg-slate-900 rounded-3xl overflow-hidden hover:shadow-lg hover:shadow-black/8 active:scale-[0.98] cursor-pointer transition-all select-none">
-        <div className="h-44 bg-slate-100 dark:bg-white/6 relative overflow-hidden pointer-events-none">
+        className="shrink-0 w-44 bg-surface-card rounded-3xl overflow-hidden hover:shadow-lg hover:shadow-black/8 active:scale-[0.98] cursor-pointer transition-all select-none">
+        <div className="h-44 bg-surface-card-2 relative overflow-hidden pointer-events-none">
           {img
             ? <img src={img} alt="" className="w-full h-full object-cover" draggable={false} />
-            : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 dark:from-white/4 dark:to-white/8"><Package className="w-12 h-12 text-slate-300 dark:text-white/20" /></div>
+            : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-surface-card-2 to-surface-card-2 dark:from-white/4 dark:to-white/8"><Package className="w-12 h-12 text-ink-dim dark:text-white/20" /></div>
           }
           {ovc.label && ovc.Icon && (
-            <span className={`absolute top-2 left-2 ${ovc.pastel} text-slate-700 dark:text-slate-200 text-[10px] font-bold px-2 py-1 rounded-xl flex items-center gap-1`}>
+            <span className={`absolute top-2 left-2 ${ovc.pastel} text-ink dark:text-ink-dim text-[10px] font-bold px-2 py-1 rounded-xl flex items-center gap-1`}>
               <ovc.Icon className={`w-2.5 h-2.5 shrink-0 ${ovc.iconColor || ''}`} />{ovc.label}
             </span>
           )}
         </div>
         <div className="p-3 pointer-events-none">
           <p className="font-bold text-[13px] leading-snug line-clamp-2 mb-0.5">{o.titulo}</p>
-          <p className="text-[11px] text-slate-400 truncate mb-1.5">{o.tiendaNombre}</p>
+          <p className="text-[11px] text-ink-dim truncate mb-1.5">{o.tiendaNombre}</p>
           {o.precio
-            ? <p className="text-base font-black text-slate-900 dark:text-slate-100">${Number(o.precio).toLocaleString()}</p>
-            : <p className="text-[11px] text-slate-400 italic">Consultá precio</p>
+            ? <p className="text-base font-black text-ink dark:text-ink-dim">${Number(o.precio).toLocaleString()}</p>
+            : <p className="text-[11px] text-ink-dim italic">Consultá precio</p>
           }
         </div>
       </div>
@@ -212,7 +208,7 @@ export default function ProductDetailScreen({
     return (
       <div>
         <div className="flex items-center justify-between px-4 mb-3">
-          <h2 className="font-black text-[15px] text-slate-900">{title}</h2>
+          <h2 className="font-black text-[15px] text-ink">{title}</h2>
           {onVerTienda && <button onClick={onVerTienda} className="text-xs text-primary font-bold">Ver tienda →</button>}
         </div>
         <div className="relative group/rel">
@@ -224,62 +220,53 @@ export default function ProductDetailScreen({
           <div className={`pointer-events-none absolute left-0 top-0 bottom-0 w-10 bg-gradient-to-r from-surface-dim to-transparent transition-opacity duration-200 ${edges.left ? 'opacity-100' : 'opacity-0'}`} />
           <div className={`pointer-events-none absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-surface-dim to-transparent transition-opacity duration-200 ${edges.right ? 'opacity-100' : 'opacity-0'}`} />
           <NavArrowBtn dir="left" onClick={() => rScroll(-1)}
-            className={`absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white shadow-md border border-slate-200 text-slate-500 hover:text-slate-800 z-10 lg:opacity-0 lg:group-hover/rel:opacity-100 ${!edges.left ? 'pointer-events-none !opacity-0' : ''}`} />
+            className={`absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white shadow-md border border-slate-200 text-ink-dim hover:text-ink z-10 lg:opacity-0 lg:group-hover/rel:opacity-100 ${!edges.left ? 'pointer-events-none !opacity-0' : ''}`} />
           <NavArrowBtn dir="right" onClick={() => rScroll(1)}
-            className={`absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white shadow-md border border-slate-200 text-slate-500 hover:text-slate-800 z-10 lg:opacity-0 lg:group-hover/rel:opacity-100 ${!edges.right ? 'pointer-events-none !opacity-0' : ''}`} />
+            className={`absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white shadow-md border border-slate-200 text-ink-dim hover:text-ink z-10 lg:opacity-0 lg:group-hover/rel:opacity-100 ${!edges.right ? 'pointer-events-none !opacity-0' : ''}`} />
         </div>
       </div>
     );
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-surface-card-2">
 
       {/* ════════════════════ MOBILE (< lg) ════════════════════ */}
       <div className="lg:hidden">
-        <div className="sticky top-0 z-20 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-white/8">
+        <div className="sticky top-0 z-20 bg-surface-card border-b border-slate-100 dark:border-white/8">
           <div className="px-3 h-14 flex items-center gap-2">
-            <button onClick={goBack} className="ui-icon-btn hover:bg-slate-100 dark:hover:bg-white/8 shrink-0">
+            <button onClick={goBack} className="ui-icon-btn hover:bg-surface-card-2 dark:hover:bg-white/8 shrink-0">
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="flex-1 relative min-w-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none z-10" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-dim w-4 h-4 pointer-events-none z-10" />
               <input type="text"
                 value={lq}
                 onChange={e => { setLq(e.target.value); setLOpen(true); }}
                 onFocus={() => setLOpen(true)}
                 onBlur={() => setTimeout(() => setLOpen(false), 150)}
                 placeholder="Buscar productos y tiendas..."
-                className="ui-input w-full pl-9 pr-3 bg-slate-100 dark:bg-white/6 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary transition-all" />
+                className="ui-input w-full pl-9 pr-3 bg-surface-card-2 text-sm placeholder:text-ink-dim focus:outline-none focus:ring-2 focus:ring-primary transition-all" />
               {lOpen && lResults.length > 0 && (
-                <div className="absolute top-full mt-1 left-0 right-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl shadow-xl z-[999] overflow-hidden max-h-96 overflow-y-auto">
+                <div className="absolute top-full mt-1 left-0 right-0 bg-surface-card border border-slate-200 dark:border-white/10 rounded-2xl shadow-xl z-[999] overflow-hidden max-h-96 overflow-y-auto">
                   {lResults.filter(r => r._t === 'oferta').length > 0 && (<div>
-                    <p className="px-4 pt-3 pb-1 text-[10px] font-bold tracking-widest uppercase text-slate-400">Productos</p>
+                    <p className="px-4 pt-3 pb-1 text-[10px] font-bold tracking-widest uppercase text-ink-dim">Productos</p>
                     {lResults.filter(r => r._t === 'oferta').map(item => (
-                      <button key={item.id} onMouseDown={() => lSelect(item)} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-white/5 text-left">
-                        <div className="w-9 h-9 rounded-xl bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center">
-                          {item.galeria?.[0] || item.fotos?.[0] ? <img src={item.galeria?.[0] || item.fotos?.[0]} alt="" className="w-full h-full object-cover" /> : <Package className="w-4 h-4 text-slate-300" />}
+                      <button key={item.id} onMouseDown={() => lSelect(item)} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-surface-card-2 dark:hover:bg-white/5 text-left">
+                        <div className="w-9 h-9 rounded-xl bg-surface-card-2 overflow-hidden shrink-0 flex items-center justify-center">
+                          {item.galeria?.[0] || item.fotos?.[0] ? <img src={item.galeria?.[0] || item.fotos?.[0]} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : <Package className="w-4 h-4 text-ink-dim" />}
                         </div>
-                        <div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate">{item.titulo}</p><p className="text-xs text-slate-400 truncate">{item.tiendaNombre}</p></div>
+                        <div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate">{item.titulo}</p><p className="text-xs text-ink-dim truncate">{item.tiendaNombre}</p></div>
                         {item.precio && <p className="text-sm font-bold text-primary shrink-0">${Number(item.precio).toLocaleString()}</p>}
                       </button>
                     ))}
                   </div>)}
                   {lResults.filter(r => r._t === 'tienda').length > 0 && (<div>
-                    <p className="px-4 pt-3 pb-1 text-[10px] font-bold tracking-widest uppercase text-slate-400">Tiendas</p>
+                    <p className="px-4 pt-3 pb-1 text-[10px] font-bold tracking-widest uppercase text-ink-dim">Tiendas</p>
                     {lResults.filter(r => r._t === 'tienda').map(item => (
-                      <button key={item.id} onMouseDown={() => lSelect(item)} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-white/5 text-left">
+                      <button key={item.id} onMouseDown={() => lSelect(item)} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-surface-card-2 dark:hover:bg-white/5 text-left">
                         <div className="w-9 h-9 rounded-xl bg-primary/10 shrink-0 flex items-center justify-center"><Store className="w-4 h-4 text-primary" /></div>
-                        <div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate">{item.nombre}</p><p className="text-xs text-slate-400 truncate">{item.rubro}</p></div>
-                      </button>
-                    ))}
-                  </div>)}
-                  {lResults.filter(r => r._t === 'demanda').length > 0 && (<div>
-                    <p className="px-4 pt-3 pb-1 text-[10px] font-bold tracking-widest uppercase text-slate-400">Demandas</p>
-                    {lResults.filter(r => r._t === 'demanda').map(item => (
-                      <button key={item.id} onMouseDown={() => lSelect(item)} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-white/5 text-left">
-                        <div className="w-9 h-9 rounded-xl bg-slate-100 shrink-0 flex items-center justify-center"><MessageSquare className="w-4 h-4 text-slate-400" /></div>
-                        <div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate">{item.titulo}</p></div>
+                        <div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate">{item.nombre}</p><p className="text-xs text-ink-dim truncate">{item.rubro}</p></div>
                       </button>
                     ))}
                   </div>)}
@@ -287,7 +274,7 @@ export default function ProductDetailScreen({
                 </div>
               )}
             </div>
-            <button onClick={openNotifications} className="ui-icon-btn hover:bg-slate-100 dark:hover:bg-white/8 relative text-slate-500 transition-colors shrink-0">
+            <button onClick={openNotifications} className="ui-icon-btn hover:bg-surface-card-2 dark:hover:bg-white/8 relative text-ink-dim transition-colors shrink-0">
               <Bell className="w-[18px] h-[18px]" />
               {unreadCount > 0 && <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-rose-500 rounded-full" />}
             </button>
@@ -301,22 +288,22 @@ export default function ProductDetailScreen({
         </div>
 
         <div className="bg-white">
-          <div className="relative bg-slate-100 overflow-hidden" style={{ height: '60vw', maxHeight: 340, minHeight: 220 }}>
+          <div className="relative bg-surface-card-2 overflow-hidden" style={{ height: '60vw', maxHeight: 340, minHeight: 220 }}>
             {photos[photoIdx]
               ? <img src={photos[photoIdx]} alt="" className="w-full h-full object-cover" />
-              : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
-                  <Package className="w-20 h-20 text-slate-300" />
+              : <div className="w-full h-full flex items-center justify-center bg-surface-card-2">
+                  <Package className="w-20 h-20 text-ink-dim" />
                 </div>
             }
             <button className="absolute top-3 right-3 w-9 h-9 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-sm z-10 hover:bg-white transition-colors">
-              <Heart className="w-4 h-4 text-slate-400" />
+              <Heart className="w-4 h-4 text-ink-dim" />
             </button>
             {photos.length > 1 && (
               <>
                 <NavArrowBtn dir="left" onClick={() => setPhotoIdx(i => (i - 1 + photos.length) % photos.length)}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/90 backdrop-blur-sm shadow-sm text-slate-700" />
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/90 backdrop-blur-sm shadow-sm text-ink" />
                 <NavArrowBtn dir="right" onClick={() => setPhotoIdx(i => (i + 1) % photos.length)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/90 backdrop-blur-sm shadow-sm text-slate-700" />
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/90 backdrop-blur-sm shadow-sm text-ink" />
                 <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5">
                   {photos.map((_, i) => (
                     <button key={i} onClick={() => setPhotoIdx(i)}
@@ -329,55 +316,55 @@ export default function ProductDetailScreen({
 
           <div className="px-5 pt-5">
             <div className="flex items-start gap-2 mb-2">
-              <h1 className="flex-1 font-black text-2xl leading-tight text-slate-900">{oferta.titulo}</h1>
+              <h1 className="flex-1 font-black text-2xl leading-tight text-ink">{oferta.titulo}</h1>
               {vc.label && vc.Icon && (
-                <span className={`shrink-0 mt-1 ${vc.pastel} text-slate-700 dark:text-slate-200 text-[11px] font-bold px-2.5 py-1.5 rounded-xl flex items-center gap-1`}>
+                <span className={`shrink-0 mt-1 ${vc.pastel} text-ink dark:text-ink-dim text-[11px] font-bold px-2.5 py-1.5 rounded-xl flex items-center gap-1`}>
                   <vc.Icon className={`w-3 h-3 shrink-0 ${vc.iconColor || ''}`} />{vc.label}
                 </span>
               )}
             </div>
             <div className="flex items-center gap-2 mb-4">
-              {oferta.distancia && <><span className="text-slate-300">·</span><span className="text-sm text-slate-500">A {oferta.distancia} de vos</span></>}
+              {oferta.distancia && <><span className="text-ink-dim">·</span><span className="text-sm text-ink-dim">A {oferta.distancia} de vos</span></>}
             </div>
             {oferta.precioOriginal && oferta.precio && Number(oferta.precioOriginal) > Number(oferta.precio) && (
-              <p className="text-sm text-slate-400 line-through">${Number(oferta.precioOriginal).toLocaleString()}</p>
+              <p className="text-sm text-ink-dim line-through">${Number(oferta.precioOriginal).toLocaleString()}</p>
             )}
             <div className="mb-1">
               {oferta.precio
-                ? <p className="text-4xl font-black text-slate-900">${Number(oferta.precio).toLocaleString()}</p>
-                : <p className="text-xl font-bold text-slate-500">Consultá el precio</p>}
+                ? <p className="text-4xl font-black text-ink">${Number(oferta.precio).toLocaleString()}</p>
+                : <p className="text-xl font-bold text-ink-dim">Consultá el precio</p>}
             </div>
             {oferta.financiacion && <p className="text-sm text-brand font-semibold mb-1">💳 {oferta.financiacion}</p>}
-            <p className="text-sm text-slate-400 mb-5">3 cuotas sin interés disponibles</p>
-            {oferta.descripcion && <p className="text-sm text-slate-600 leading-relaxed mb-5">{oferta.descripcion}</p>}
+            <p className="text-sm text-ink-dim mb-5">3 cuotas sin interés disponibles</p>
+            {oferta.descripcion && <p className="text-sm text-ink-dim leading-relaxed mb-5">{oferta.descripcion}</p>}
             {tiendaMatch && (
-              <div className="bg-slate-50 rounded-3xl p-4 mb-4 flex items-center gap-3">
+              <div className="bg-surface-card-2 rounded-3xl p-4 mb-4 flex items-center gap-3">
                 <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center shrink-0">
                   <Store className="w-6 h-6 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 mb-0.5">
-                    <p className="font-bold text-sm truncate text-slate-900">{tiendaMatch.nombre}</p>
+                    <p className="font-bold text-sm truncate text-ink">{tiendaMatch.nombre}</p>
                     <div className="w-1.5 h-1.5 rounded-full bg-ok shrink-0" />
                   </div>
-                  <p className="text-xs text-slate-500">Tienda verificada · {tiendaMatch.distancia}</p>
+                  <p className="text-xs text-ink-dim">Tienda verificada · {tiendaMatch.distancia}</p>
                 </div>
                 <button onClick={handleVerTienda}
-                  className="shrink-0 px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors">
+                  className="shrink-0 px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold text-ink hover:bg-surface-card-2 transition-colors">
                   Ver tienda
                 </button>
               </div>
             )}
-            <BenefitCards bg="bg-slate-50" />
+            <BenefitCards bg="bg-surface-card-2" />
           </div>
         </div>
 
         <div className="bg-white border-t border-slate-100 px-5 py-4">
           {isUserProduct ? (
             <div className="flex gap-2">
-              <div className="flex-1 flex flex-col items-center gap-1 py-3 rounded-2xl bg-slate-50">
-                <User className="w-5 h-5 text-slate-500" />
-                <span className="text-[11px] font-bold text-slate-500 truncate max-w-full px-1">{oferta.vendedorNombre || 'Vendedor'}</span>
+              <div className="flex-1 flex flex-col items-center gap-1 py-3 rounded-2xl bg-surface-card-2">
+                <User className="w-5 h-5 text-ink-dim" />
+                <span className="text-[11px] font-bold text-ink-dim truncate max-w-full px-1">{oferta.vendedorNombre || 'Vendedor'}</span>
               </div>
               <button onClick={handleConsultar} disabled={!canConsultar}
                 className="flex-[2] flex items-center justify-center gap-2 py-3 rounded-2xl bg-emerald-500 text-white disabled:opacity-40 active:scale-95 transition-all font-bold text-sm"
@@ -389,9 +376,9 @@ export default function ProductDetailScreen({
           ) : (
             <div className="flex gap-2">
               <button onClick={handleVerTienda} disabled={!canVerTienda}
-                className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-slate-100 dark:bg-white/8 disabled:opacity-40 active:scale-95 transition-all">
-                <Store className="w-5 h-5 text-slate-700 dark:text-slate-300" />
-                <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Ver tienda</span>
+                className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-surface-card-2 dark:bg-white/8 disabled:opacity-40 active:scale-95 transition-all">
+                <Store className="w-5 h-5 text-ink dark:text-ink-dim" />
+                <span className="text-[11px] font-bold text-ink dark:text-ink-dim">Ver tienda</span>
               </button>
               <button onClick={handleNavegar} disabled={!canNavegar}
                 className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-brand text-white disabled:opacity-40 active:scale-95 transition-all"
@@ -401,15 +388,15 @@ export default function ProductDetailScreen({
               </button>
               {canChatTienda ? (
                 <button onClick={handleChatTienda}
-                  className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-slate-100 dark:bg-white/8 active:scale-95 transition-all">
+                  className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-surface-card-2 dark:bg-white/8 active:scale-95 transition-all">
                   <MessageSquare className="w-5 h-5 text-brand" />
                   <span className="text-[11px] font-bold text-brand">Chat</span>
                 </button>
               ) : (
                 <button onClick={handleConsultar} disabled={!canConsultar}
-                  className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-slate-100 dark:bg-white/8 disabled:opacity-40 active:scale-95 transition-all">
-                  <MessageSquare className="w-5 h-5 text-slate-700 dark:text-slate-300" />
-                  <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Consultar</span>
+                  className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-surface-card-2 dark:bg-white/8 disabled:opacity-40 active:scale-95 transition-all">
+                  <MessageSquare className="w-5 h-5 text-ink dark:text-ink-dim" />
+                  <span className="text-[11px] font-bold text-ink dark:text-ink-dim">Consultar</span>
                 </button>
               )}
             </div>
@@ -435,11 +422,11 @@ export default function ProductDetailScreen({
       {/* ════════════════════ DESKTOP (≥ lg) ════════════════════ */}
       <div className="hidden lg:block">
         <div className="bg-white border-b border-slate-100 px-8 h-14 flex items-center gap-3 sticky top-0 z-20">
-          <button onClick={goBack} className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors">
+          <button onClick={goBack} className="flex items-center gap-2 text-sm font-semibold text-ink-dim hover:text-ink transition-colors">
             <ArrowLeft className="w-4 h-4" /> Volver
           </button>
-          <span className="text-slate-300">/</span>
-          <span className="text-sm text-slate-400 truncate">{oferta.titulo}</span>
+          <span className="text-ink-dim">/</span>
+          <span className="text-sm text-ink-dim truncate">{oferta.titulo}</span>
         </div>
 
         <div className="max-w-6xl mx-auto px-8 py-8">
@@ -448,23 +435,23 @@ export default function ProductDetailScreen({
               <div className="relative bg-white rounded-3xl overflow-hidden border border-slate-100 shadow-sm" style={{ height: 420 }}>
                 {photos[photoIdx]
                   ? <img src={photos[photoIdx]} alt="" className="w-full h-full object-cover" />
-                  : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
-                      <Package className="w-24 h-24 text-slate-300" />
+                  : <div className="w-full h-full flex items-center justify-center bg-surface-card-2">
+                      <Package className="w-24 h-24 text-ink-dim" />
                     </div>
                 }
                 {vc.label && vc.Icon && (
-                  <span className={`absolute top-4 left-4 ${vc.pastel} text-slate-700 dark:text-slate-200 text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5`}>
+                  <span className={`absolute top-4 left-4 ${vc.pastel} text-ink dark:text-ink-dim text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5`}>
                     <vc.Icon className={`w-3.5 h-3.5 shrink-0 ${vc.iconColor || ''}`} />{vc.label}
                   </span>
                 )}
                 <button className="absolute top-4 right-4 w-9 h-9 bg-white/90 backdrop-blur-sm rounded-xl flex items-center justify-center shadow-sm">
-                  <Heart className="w-4 h-4 text-slate-400" />
+                  <Heart className="w-4 h-4 text-ink-dim" />
                 </button>
                 {photos.length > 1 && <>
                   <NavArrowBtn dir="left" onClick={() => setPhotoIdx(i => (i - 1 + photos.length) % photos.length)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/90 backdrop-blur-sm shadow-sm text-slate-700 hover:bg-white" />
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/90 backdrop-blur-sm shadow-sm text-ink hover:bg-white" />
                   <NavArrowBtn dir="right" onClick={() => setPhotoIdx(i => (i + 1) % photos.length)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/90 backdrop-blur-sm shadow-sm text-slate-700 hover:bg-white" />
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/90 backdrop-blur-sm shadow-sm text-ink hover:bg-white" />
                 </>}
               </div>
               {photos.length > 1 && (
@@ -487,37 +474,37 @@ export default function ProductDetailScreen({
                   </div>
                   <span className="text-sm font-bold text-primary group-hover:underline">{tiendaMatch.nombre}</span>
                   <div className="w-1.5 h-1.5 rounded-full bg-ok" />
-                  <span className="text-xs text-slate-400">{tiendaMatch.distancia}</span>
+                  <span className="text-xs text-ink-dim">{tiendaMatch.distancia}</span>
                 </button>
               )}
 
-              <h1 className="font-black text-3xl leading-tight text-slate-900 mb-3">{oferta.titulo}</h1>
+              <h1 className="font-black text-3xl leading-tight text-ink mb-3">{oferta.titulo}</h1>
 
               <div className="flex items-center gap-2 mb-5">
                 <div className="flex items-center gap-1.5">
                   <div className="w-2 h-2 rounded-full bg-ok" />
                   <span className="text-sm font-semibold text-ok">En stock</span>
                 </div>
-                {oferta.distancia && <><span className="text-slate-300">·</span><span className="text-sm text-slate-500">A {oferta.distancia} de vos</span></>}
+                {oferta.distancia && <><span className="text-ink-dim">·</span><span className="text-sm text-ink-dim">A {oferta.distancia} de vos</span></>}
               </div>
 
               <div className="mb-2">
                 {oferta.precioOriginal && oferta.precio && Number(oferta.precioOriginal) > Number(oferta.precio) && (
-                  <p className="text-base text-slate-400 line-through">${Number(oferta.precioOriginal).toLocaleString()}</p>
+                  <p className="text-base text-ink-dim line-through">${Number(oferta.precioOriginal).toLocaleString()}</p>
                 )}
                 {oferta.precio
-                  ? <p className="text-5xl font-black text-slate-900">${Number(oferta.precio).toLocaleString()}</p>
-                  : <p className="text-2xl font-bold text-slate-500">Consultá el precio</p>}
+                  ? <p className="text-5xl font-black text-ink">${Number(oferta.precio).toLocaleString()}</p>
+                  : <p className="text-2xl font-bold text-ink-dim">Consultá el precio</p>}
               </div>
               {oferta.financiacion && <p className="text-sm text-brand font-semibold mb-1">💳 {oferta.financiacion}</p>}
-              <p className="text-sm text-slate-400 mb-6">3 cuotas sin interés disponibles</p>
+              <p className="text-sm text-ink-dim mb-6">3 cuotas sin interés disponibles</p>
 
               <div className="flex gap-3 mb-7">
                 {isUserProduct ? (
                   <>
-                    <div className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-slate-50 border border-slate-100">
-                      <User className="w-5 h-5 text-slate-400" />
-                      <span className="text-[11px] font-bold text-slate-500 truncate max-w-full px-1">{oferta.vendedorNombre || 'Vendedor'}</span>
+                    <div className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-surface-card-2 border border-slate-100">
+                      <User className="w-5 h-5 text-ink-dim" />
+                      <span className="text-[11px] font-bold text-ink-dim truncate max-w-full px-1">{oferta.vendedorNombre || 'Vendedor'}</span>
                     </div>
                     <button onClick={handleConsultar} disabled={!canConsultar}
                       className="flex-[2] flex items-center justify-center gap-2 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white disabled:opacity-40 transition-all font-bold text-sm"
@@ -529,9 +516,9 @@ export default function ProductDetailScreen({
                 ) : (
                   <>
                     <button onClick={handleVerTienda} disabled={!canVerTienda}
-                      className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-slate-100 dark:bg-white/8 hover:bg-slate-200 dark:hover:bg-white/12 disabled:opacity-40 transition-all">
-                      <Store className="w-5 h-5 text-slate-700 dark:text-slate-300" />
-                      <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Ver tienda</span>
+                      className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-surface-card-2 dark:bg-white/8 hover:bg-surface-card-2 dark:hover:bg-white/12 disabled:opacity-40 transition-all">
+                      <Store className="w-5 h-5 text-ink dark:text-ink-dim" />
+                      <span className="text-[11px] font-bold text-ink dark:text-ink-dim">Ver tienda</span>
                     </button>
                     <button onClick={handleNavegar} disabled={!canNavegar}
                       className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-brand hover:bg-brand-dark text-white disabled:opacity-40 transition-all"
@@ -548,9 +535,9 @@ export default function ProductDetailScreen({
                       </button>
                     ) : (
                       <button onClick={handleConsultar} disabled={!canConsultar}
-                        className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-slate-100 dark:bg-white/8 hover:bg-slate-200 dark:hover:bg-white/12 disabled:opacity-40 transition-all">
-                        <MessageSquare className="w-5 h-5 text-slate-700 dark:text-slate-300" />
-                        <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Consultar</span>
+                        className="flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl bg-surface-card-2 dark:bg-white/8 hover:bg-surface-card-2 dark:hover:bg-white/12 disabled:opacity-40 transition-all">
+                        <MessageSquare className="w-5 h-5 text-ink dark:text-ink-dim" />
+                        <span className="text-[11px] font-bold text-ink dark:text-ink-dim">Consultar</span>
                       </button>
                     )}
                   </>
@@ -559,8 +546,8 @@ export default function ProductDetailScreen({
 
               {oferta.descripcion && (
                 <div className="border-t border-slate-100 pt-5 mb-5">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Descripción</p>
-                  <p className="text-sm text-slate-600 leading-relaxed">{oferta.descripcion}</p>
+                  <p className="text-xs font-bold text-ink-dim uppercase tracking-wider mb-2">Descripción</p>
+                  <p className="text-sm text-ink-dim leading-relaxed">{oferta.descripcion}</p>
                 </div>
               )}
 

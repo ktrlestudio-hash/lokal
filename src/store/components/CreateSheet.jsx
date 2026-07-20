@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Tag, Package, Lock } from 'lucide-react';
 
 export default function CreateSheet({ open, onClose, onCreateProduct, onCreateJob, productLimit, currentProductCount, isEmprendimiento }) {
@@ -8,7 +8,7 @@ export default function CreateSheet({ open, onClose, onCreateProduct, onCreateJo
   const opts = [
     {
       icon: Tag,
-      color: atProductLimit ? 'bg-slate-100 dark:bg-white/8 text-slate-400' : 'bg-primary/10 text-primary',
+      color: atProductLimit ? 'bg-surface-card-2 dark:bg-white/8 text-ink-dim' : 'bg-primary/10 text-primary',
       title: 'Nuevo producto',
       desc: atProductLimit
         ? `Límite alcanzado: ${productLimit} productos (${isEmprendimiento ? 'upgrade a Empresa' : 'upgrade a Premium'})`
@@ -21,7 +21,7 @@ export default function CreateSheet({ open, onClose, onCreateProduct, onCreateJo
     },
     {
       icon: Package,
-      color: 'bg-slate-100 dark:bg-white/8 text-slate-400',
+      color: 'bg-surface-card-2 dark:bg-white/8 text-ink-dim',
       title: 'Búsqueda laboral',
       desc: 'Próximamente disponible',
       locked: true,
@@ -33,11 +33,11 @@ export default function CreateSheet({ open, onClose, onCreateProduct, onCreateJo
     <div className="lg:hidden fixed inset-0 z-[4000] flex flex-col justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
       <div
-        className="relative bg-white dark:bg-slate-900 rounded-t-3xl px-4 pt-3 shadow-2xl"
+        className="relative bg-surface-card rounded-t-3xl px-4 pt-3 shadow-2xl"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 6rem)' }}
         onClick={e => e.stopPropagation()}
       >
-        <div className="w-10 h-1 rounded-full bg-slate-200 dark:bg-white/15 mx-auto mb-4" />
+        <div className="w-10 h-1 rounded-full bg-surface-card-2 dark:bg-white/15 mx-auto mb-4" />
         <p className="font-bold text-base px-1 mb-3">¿Qué querés crear?</p>
         <div className="space-y-2 pb-2">
           {opts.map(opt => {
@@ -54,10 +54,10 @@ export default function CreateSheet({ open, onClose, onCreateProduct, onCreateJo
                 </div>
                 <div>
                   <p className="font-bold text-sm">{opt.title}</p>
-                  <p className="text-xs text-slate-400">{opt.desc}</p>
+                  <p className="text-xs text-ink-dim">{opt.desc}</p>
                 </div>
                 {opt.locked && (
-                  <span className="ml-auto flex items-center gap-1 text-xs bg-slate-100 dark:bg-white/10 text-slate-400 px-2 py-1 rounded-lg font-semibold">
+                  <span className="ml-auto flex items-center gap-1 text-xs bg-surface-card-2 dark:bg-white/10 text-ink-dim px-2 py-1 rounded-lg font-semibold">
                     <Lock className="w-3 h-3" /> Pronto
                   </span>
                 )}

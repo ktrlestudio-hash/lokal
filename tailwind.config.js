@@ -28,9 +28,24 @@ export default {
            (mismo patrón: -light -dark -muted -fg para cada semántico)
          ════════════════════════════════════════════════════════════════════ */
       colors: {
-        /* ── Superficies (adaptan al tema automáticamente) ── */
+        /* ── Superficies (adaptan al tema automáticamente) ──
+           surface/surface-dim: para gradientes (from-surface, etc.), formato "R G B".
+           surface-card/surface-card-2: superficie sólida de card/input — MISMOS
+           tokens que consume commerce-modern vía deriveColorPalette(). Reemplazan
+           bg-white/dark:bg-slate-900 en código nuevo: bg-surface-card en vez de
+           bg-white dark:bg-slate-900, un solo nombre que ya cambia con el tema. */
         surface:     'rgb(var(--surface)     / <alpha-value>)',
         'surface-dim': 'rgb(var(--surface-dim) / <alpha-value>)',
+        'surface-card':   'rgb(var(--surface-solid-rgb)   / <alpha-value>)',
+        'surface-card-2': 'rgb(var(--surface-solid-2-rgb) / <alpha-value>)',
+
+        /* ── Texto (adapta al tema automáticamente) — reemplaza text-slate-900/
+           dark:text-white y text-slate-500/dark:text-slate-400 por un solo nombre.
+           rgb(var / <alpha-value>) en vez de var() plano para soportar
+           modificadores de opacidad (text-ink/50, bg-surface-card/80, etc.) */
+        ink:      'rgb(var(--text-primary-rgb)   / <alpha-value>)',
+        'ink-dim':'rgb(var(--text-secondary-rgb) / <alpha-value>)',
+
 
         /* ── Primario de marca ── */
         brand: {
@@ -46,6 +61,14 @@ export default {
           hover:   'rgb(var(--brand-light)   / <alpha-value>)',
           muted:   'rgb(var(--brand-muted)   / <alpha-value>)',
           fg:      'rgb(var(--brand-fg)       / <alpha-value>)',
+        },
+
+        /* ── Acento secundario de marca (amarillo — badges de descuento, precios destacados) ── */
+        accent: {
+          DEFAULT: 'rgb(var(--accent)         / <alpha-value>)',
+          light:   'rgb(var(--accent-light)   / <alpha-value>)',
+          dark:    'rgb(var(--accent-dark)     / <alpha-value>)',
+          muted:   'rgb(var(--accent-muted)   / <alpha-value>)',
         },
 
         /* ── Semánticos ── */

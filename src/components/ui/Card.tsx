@@ -21,7 +21,7 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
  */
 export function Card({ hoverable = false, bordered = true, className, children, ...props }: CardProps) {
   const baseClass =
-    'bg-white dark:bg-slate-800 rounded-lg shadow-sm transition-shadow duration-200';
+    'bg-surface-card rounded-lg shadow-sm transition-shadow duration-200';
   const hoverClass = hoverable ? 'hover:shadow-md' : '';
   const borderClass = bordered ? 'border border-slate-200 dark:border-slate-700' : '';
 

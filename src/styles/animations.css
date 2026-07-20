@@ -251,6 +251,30 @@
   animation: pulse 2s ease infinite;
 }
 
+/* Shimmer con barrido de gradiente (más "premium" que el pulse de opacidad).
+   Se aplica ENCIMA del color base del skeleton vía ::after, así el bloque
+   conserva su color de superficie tematizado (bg-surface-card-2) y solo le
+   pasa por arriba el brillo. Técnica cosechada de detail-3.jsx del padre. */
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.skeleton-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 40%, rgba(255, 255, 255, 0.35) 50%, transparent 60%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease infinite;
+}
+.dark .skeleton-shimmer::after {
+  background: linear-gradient(110deg, transparent 40%, rgba(255, 255, 255, 0.09) 50%, transparent 60%);
+  background-size: 200% 100%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer::after { animation: none; }
+}
+
 .animate-spin {
   animation: spin 1s linear infinite;
 }

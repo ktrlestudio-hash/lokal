@@ -53,7 +53,7 @@ export function ProductGrid({ productos = [], variant = 'grid2', cart = [], onAd
           return (
             <div key={p.id} style={{ display: 'flex', gap: 14, alignItems: 'center', padding: '12px 14px', background: 'var(--tp-surface)', border: '1px solid var(--tp-border)', borderRadius: RADIUS.lg, boxShadow: SHADOW.sm }}>
               {img
-                ? <img src={img} alt={p.nombre} style={{ width: 60, height: 60, borderRadius: RADIUS.md, objectFit: 'cover', flexShrink: 0 }} />
+                ? <img src={img} alt={p.nombre} loading="lazy" decoding="async" style={{ width: 60, height: 60, borderRadius: RADIUS.md, objectFit: 'cover', flexShrink: 0 }} />
                 : <div style={{ width: 60, height: 60, borderRadius: RADIUS.md, background: 'var(--tp-primary-soft)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ShoppingBag size={20} style={{ color: 'var(--tp-primary)' }} /></div>
               }
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -85,7 +85,7 @@ export function ProductGrid({ productos = [], variant = 'grid2', cart = [], onAd
             <div key={p.id} style={{ background: 'var(--tp-surface)', border: '1px solid var(--tp-border)', borderRadius: RADIUS.lg, overflow: 'hidden', boxShadow: SHADOW.sm, display: 'flex', flexDirection: 'column' }}>
               <div style={{ aspectRatio: '1', background: 'var(--tp-surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                 {img
-                  ? <img src={img} alt={p.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ? <img src={img} alt={p.nombre} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   : <ShoppingBag size={28} style={{ color: 'var(--tp-primary)', opacity: .4 }} />
                 }
               </div>

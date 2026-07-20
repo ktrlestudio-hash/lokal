@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
   CheckCircle, Edit3, Eye, X, Package,
   Tag, Zap, CreditCard, Gift,
@@ -8,13 +8,13 @@ import {
 
 const CONDICION_LABEL = {
   nuevo: { label: 'Nuevo', cls: 'bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30' },
-  usado: { cls: 'bg-slate-100 dark:bg-white/8 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10', label: 'Usado' },
+  usado: { cls: 'bg-surface-card-2 dark:bg-white/8 text-ink-dim dark:text-ink-dim border border-slate-200 dark:border-white/10', label: 'Usado' },
 };
 
 const VENTAJA_MAP = {
   precio:        { label: 'Mejor precio',   Icon: Tag,        cls: 'bg-primary/10 dark:bg-primary/20 text-primary border border-primary/20' },
   disponibilidad:{ label: 'Tenelo hoy',     Icon: Zap,        cls: 'bg-amber-50 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30' },
-  financiacion:  { label: 'Financiación',   Icon: CreditCard, cls: 'bg-slate-100 dark:bg-white/8 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/10' },
+  financiacion:  { label: 'Financiación',   Icon: CreditCard, cls: 'bg-surface-card-2 dark:bg-white/8 text-ink-dim border border-slate-200 dark:border-white/10' },
   combo:         { label: 'Combo especial', Icon: Gift,       cls: 'bg-amber-50 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30' },
 };
 
@@ -65,14 +65,14 @@ export default function ProductoSuccessModal({ product, onEdit, onView, onMisPro
 
           {/* Título + foto */}
           <div className="flex gap-3 items-center">
-            <div className="w-14 h-14 rounded-2xl overflow-hidden bg-slate-100 dark:bg-white/8 shrink-0">
+            <div className="w-14 h-14 rounded-2xl overflow-hidden bg-surface-card-2 dark:bg-white/8 shrink-0">
               {foto
                 ? <img src={foto} alt="" className="w-full h-full object-cover" />
-                : <div className="w-full h-full flex items-center justify-center"><Package className="w-6 h-6 text-slate-300 dark:text-slate-600" /></div>
+                : <div className="w-full h-full flex items-center justify-center"><Package className="w-6 h-6 text-ink-dim dark:text-ink-dim" /></div>
               }
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-slate-900 dark:text-white text-sm leading-snug">{product?.titulo}</p>
+              <p className="font-bold text-ink text-sm leading-snug">{product?.titulo}</p>
               {precio && (
                 <p className="text-green-600 dark:text-green-400 font-black text-lg mt-0.5 leading-none">{precio}</p>
               )}
@@ -88,12 +88,12 @@ export default function ProductoSuccessModal({ product, onEdit, onView, onMisPro
                 </span>
               )}
               {stock != null && (
-                <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-white/8 text-slate-500 dark:text-slate-400 text-xs px-2.5 py-1 rounded-full border border-slate-200 dark:border-white/10">
+                <span className="inline-flex items-center gap-1 bg-surface-card-2 dark:bg-white/8 text-ink-dim text-xs px-2.5 py-1 rounded-full border border-slate-200 dark:border-white/10">
                   Stock: {stock}
                 </span>
               )}
               {catName && (
-                <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-white/8 text-slate-500 dark:text-slate-400 text-xs px-2.5 py-1 rounded-full border border-slate-200 dark:border-white/10">
+                <span className="inline-flex items-center gap-1 bg-surface-card-2 dark:bg-white/8 text-ink-dim text-xs px-2.5 py-1 rounded-full border border-slate-200 dark:border-white/10">
                   {catName}
                 </span>
               )}
@@ -113,7 +113,7 @@ export default function ProductoSuccessModal({ product, onEdit, onView, onMisPro
                 );
               })}
               {financiacion && (
-                <span className="text-xs text-slate-500 dark:text-slate-400 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-white/8 border border-slate-200 dark:border-white/10 italic">
+                <span className="text-xs text-ink-dim px-2.5 py-1 rounded-full bg-surface-card-2 dark:bg-white/8 border border-slate-200 dark:border-white/10 italic">
                   {financiacion}
                 </span>
               )}
@@ -121,14 +121,14 @@ export default function ProductoSuccessModal({ product, onEdit, onView, onMisPro
           )}
 
           {/* Contacto */}
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <div className="flex items-center gap-2 text-xs text-ink-dim">
             {hasWsp
               ? <Phone className="w-3.5 h-3.5 shrink-0 text-green-500" />
               : <MessageSquare className="w-3.5 h-3.5 shrink-0 text-brand" />
             }
             <span>
               Contacto por{' '}
-              <span className="font-semibold text-slate-700 dark:text-slate-200">
+              <span className="font-semibold text-ink dark:text-ink-dim">
                 {hasWsp ? 'WhatsApp' : 'chat LOKAL'}
               </span>
             </span>
@@ -139,13 +139,13 @@ export default function ProductoSuccessModal({ product, onEdit, onView, onMisPro
             <div className="border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden">
               <button
                 onClick={() => setDescOpen(o => !o)}
-                className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+                className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold text-ink-dim dark:text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/5 transition-colors"
               >
                 <span>Ver descripción</span>
                 {descOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
               </button>
               {descOpen && (
-                <p className="px-3 pb-3 text-xs text-slate-500 dark:text-slate-400 leading-relaxed border-t border-slate-100 dark:border-white/8 pt-2">
+                <p className="px-3 pb-3 text-xs text-ink-dim leading-relaxed border-t border-slate-100 dark:border-white/8 pt-2">
                   {desc}
                 </p>
               )}
@@ -168,14 +168,14 @@ export default function ProductoSuccessModal({ product, onEdit, onView, onMisPro
           <div className="flex gap-2">
             <button
               onClick={onEdit}
-              className="flex-1 flex items-center justify-between px-4 py-3 rounded-2xl border-2 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 font-semibold text-sm hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+              className="flex-1 flex items-center justify-between px-4 py-3 rounded-2xl border-2 border-slate-200 dark:border-white/10 text-ink-dim dark:text-ink-dim font-semibold text-sm hover:bg-surface-card-2 dark:hover:bg-white/5 transition-colors"
             >
               <span>Editar</span>
               <Edit3 className="w-4 h-4" />
             </button>
             <button
               onClick={onMisProductos || onClose}
-              className="flex-1 flex items-center justify-between px-4 py-3 rounded-2xl border-2 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 font-semibold text-sm hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+              className="flex-1 flex items-center justify-between px-4 py-3 rounded-2xl border-2 border-slate-200 dark:border-white/10 text-ink-dim dark:text-ink-dim font-semibold text-sm hover:bg-surface-card-2 dark:hover:bg-white/5 transition-colors"
             >
               <span>Mis productos</span>
               <LayoutList className="w-4 h-4" />

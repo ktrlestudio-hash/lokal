@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+﻿import React, { useEffect } from 'react';
 import { ArrowLeft, Store, Shield, FileText, ShoppingBag } from 'lucide-react';
 import { LogoFull, KtrlMark } from './Brand';
 
@@ -9,12 +9,12 @@ function LegalLayout({ title, subtitle, icon: Icon, iconBg, children, onBack }) 
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
+    <div className="min-h-screen bg-[#0a0a0a] text-white">
       {/* Navbar */}
-      <nav className="sticky top-0 z-50 flex items-center justify-between px-6 py-4 bg-slate-950/90 backdrop-blur border-b border-white/5">
+      <nav className="sticky top-0 z-50 flex items-center justify-between px-6 py-4 bg-[#0a0a0a]/90 backdrop-blur border-b border-white/5">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-sm font-medium"
+          className="flex items-center gap-2 text-ink-dim hover:text-white transition-colors text-sm font-medium"
         >
           <ArrowLeft className="w-4 h-4" />
           Volver
@@ -29,8 +29,8 @@ function LegalLayout({ title, subtitle, icon: Icon, iconBg, children, onBack }) 
           {Icon && <Icon className="w-7 h-7 text-brand" />}
         </div>
         <h1 className="text-3xl sm:text-4xl font-black mb-3">{title}</h1>
-        {subtitle && <p className="text-slate-400 text-base max-w-xl mx-auto">{subtitle}</p>}
-        <p className="text-slate-600 text-xs mt-4">Última actualización: abril 2026</p>
+        {subtitle && <p className="text-ink-dim text-base max-w-xl mx-auto">{subtitle}</p>}
+        <p className="text-ink-dim text-xs mt-4">Última actualización: abril 2026</p>
       </div>
 
       {/* Contenido */}
@@ -43,17 +43,17 @@ function LegalLayout({ title, subtitle, icon: Icon, iconBg, children, onBack }) 
         <div className="flex items-center justify-center mb-3">
           <LogoFull size={18} light />
         </div>
-        <p className="text-slate-600 text-xs mb-2">© 2026 Lokal. Todos los derechos reservados.</p>
+        <p className="text-ink-dim text-xs mb-2">© 2026 Lokal. Todos los derechos reservados.</p>
         <div className="flex items-center justify-center gap-1.5 mt-3 opacity-30">
-          <span className="text-[10px] text-slate-500">por</span>
-          <KtrlMark className="h-2.5 text-slate-500" />
+          <span className="text-[10px] text-ink-dim">por</span>
+          <KtrlMark className="h-2.5 text-ink-dim" />
         </div>
-        <div className="flex items-center justify-center gap-4 text-xs text-slate-600">
-          <button onClick={() => navigateLegal('terminos')} className="hover:text-slate-300 transition-colors">Términos</button>
+        <div className="flex items-center justify-center gap-4 text-xs text-ink-dim">
+          <button onClick={() => navigateLegal('terminos')} className="hover:text-ink-dim transition-colors">Términos</button>
           <span>·</span>
-          <button onClick={() => navigateLegal('privacidad')} className="hover:text-slate-300 transition-colors">Privacidad</button>
+          <button onClick={() => navigateLegal('privacidad')} className="hover:text-ink-dim transition-colors">Privacidad</button>
           <span>·</span>
-          <button onClick={() => navigateLegal('comercios')} className="hover:text-slate-300 transition-colors">Para comercios</button>
+          <button onClick={() => navigateLegal('comercios')} className="hover:text-ink-dim transition-colors">Para comercios</button>
         </div>
       </footer>
     </div>
@@ -68,7 +68,7 @@ function Section({ title, children }) {
   return (
     <section>
       <h2 className="text-xl font-black mb-4 text-white border-b border-white/8 pb-3">{title}</h2>
-      <div className="space-y-3 text-slate-300 text-sm leading-relaxed">
+      <div className="space-y-3 text-ink-dim text-sm leading-relaxed">
         {children}
       </div>
     </section>
@@ -121,10 +121,10 @@ function TerminosPage({ onBack }) {
 
       <Section title="1. Qué es Lokal">
         <p>
-          Lokal es un servicio digital que permite a usuarios publicar demandas de productos o servicios, y a comercios locales responder con ofertas. Actuamos exclusivamente como intermediador: facilitamos el contacto pero no somos parte de ningún acuerdo comercial entre usuarios y comercios.
+          Lokal es un servicio digital que te permite explorar el catálogo de comercios de comida locales y hacer tu pedido, ya sea a través de la plataforma o por WhatsApp con el comercio. Actuamos exclusivamente como intermediador: facilitamos el contacto pero no somos parte de ningún acuerdo comercial entre usuarios y comercios.
         </p>
         <p>
-          No somos un marketplace, no procesamos pagos entre compradores y vendedores, no almacenamos inventario y no tenemos relación con los productos o servicios que los comercios ofrecen.
+          No somos un marketplace, no procesamos pagos entre compradores y vendedores, no almacenamos inventario y no tenemos relación con los productos que los comercios ofrecen.
         </p>
       </Section>
 
@@ -138,8 +138,8 @@ function TerminosPage({ onBack }) {
       </Section>
 
       <Section title="3. Qué podés hacer en Lokal">
-        <p><strong className="text-white">Como usuario:</strong> publicar demandas de productos o servicios, recibir respuestas de comercios, consultar el historial de tus publicaciones y comunicarte con comercios a través de la plataforma.</p>
-        <p><strong className="text-white">Como comercio:</strong> ver el feed de demandas activas, responder a las que apliquen a tu rubro, gestionar tu perfil público y medir tu alcance mediante estadísticas básicas.</p>
+        <p><strong className="text-white">Como usuario:</strong> explorar el catálogo de comercios, armar tu pedido, consultar el historial de tus pedidos anteriores y comunicarte con comercios a través de la plataforma.</p>
+        <p><strong className="text-white">Como comercio:</strong> recibir pedidos de clientes, gestionar tu catálogo y perfil público, y medir tu alcance mediante estadísticas básicas.</p>
       </Section>
 
       <Section title="4. Lo que está prohibido">
@@ -218,17 +218,17 @@ function PrivacidadPage({ onBack }) {
 
       <Section title="1. Qué datos recolectamos">
         <p><strong className="text-white">Datos de cuenta (vía Google):</strong> nombre, dirección de email y foto de perfil. No almacenamos contraseñas.</p>
-        <p><strong className="text-white">Datos de uso:</strong> demandas que publicás, respuestas que recibís, historial de interacciones dentro de la plataforma.</p>
+        <p><strong className="text-white">Datos de uso:</strong> pedidos que realizás, historial de interacciones dentro de la plataforma.</p>
         <p><strong className="text-white">Datos técnicos:</strong> dirección IP, tipo de dispositivo y navegador, para seguridad y funcionamiento del servicio.</p>
         <p><strong className="text-white">Preferencias locales:</strong> guardamos en tu dispositivo datos como tema visual, vista elegida del mapa y ubicaciones guardadas para mejorar tu experiencia. Esa información no se comparte automáticamente con terceros.</p>
         <p><strong className="text-white">Ubicación:</strong> si usás funciones de mapa o geolocalización, pedimos permiso al navegador y usamos esa información para mostrarte comercios o resultados cercanos.</p>
-        <p><strong className="text-white">Imágenes y archivos:</strong> fotos o videos que subís voluntariamente a tus demandas o respuestas.</p>
+        <p><strong className="text-white">Imágenes y archivos:</strong> fotos o videos que subís voluntariamente a tu perfil o pedidos.</p>
       </Section>
 
       <Section title="2. Para qué usamos tus datos">
         <List items={[
           'Identificarte como usuario y mantener tu sesión activa.',
-          'Mostrarte demandas o respuestas relevantes según tu actividad.',
+          'Mostrarte comercios y productos relevantes según tu actividad.',
           'Mejorar el funcionamiento y la experiencia de la plataforma.',
           'Comunicarnos con vos si hay algo importante sobre tu cuenta.',
           'Detectar y prevenir usos fraudulentos o abusivos.',
@@ -279,7 +279,7 @@ function PrivacidadPage({ onBack }) {
           Tus datos se conservan mientras tu cuenta esté activa. Si solicitás la eliminación de tu cuenta, borramos tus datos personales en un plazo máximo de 30 días, salvo obligación legal de conservarlos por más tiempo.
         </p>
         <p>
-          Las demandas e interacciones eliminadas pueden conservarse de manera anonimizada para fines estadísticos.
+          Los pedidos e interacciones eliminadas pueden conservarse de manera anonimizada para fines estadísticos.
         </p>
       </Section>
 
@@ -320,7 +320,7 @@ function ComerciosPage({ onBack }) {
 
       <Section title="1. Tu rol en la plataforma">
         <p>
-          Como comercio registrado en Lokal, sos un participante independiente. Lokal te da visibilidad y acceso al feed de demandas activas, pero <strong className="text-white">no somos tu empleador, franquiciante ni socio comercial</strong>. Las condiciones de cada venta o acuerdo son responsabilidad tuya.
+          Como comercio registrado en Lokal, sos un participante independiente. Lokal te da visibilidad y te permite recibir pedidos de clientes, pero <strong className="text-white">no somos tu empleador, franquiciante ni socio comercial</strong>. Las condiciones de cada venta o acuerdo son responsabilidad tuya.
         </p>
         <Warning>
           Lokal no garantiza ventas, clientes o conversiones. La plataforma es una herramienta de contacto — los resultados dependen de la propuesta de valor de tu negocio.
@@ -366,24 +366,24 @@ function ComerciosPage({ onBack }) {
         </p>
       </Section>
 
-      <Section title="5. Calidad de las respuestas">
+      <Section title="5. Calidad del servicio">
         <p>
-          Te pedimos que respondas demandas solo cuando realmente podés cubrir lo que el usuario busca. Respuestas irrelevantes o de mala calidad afectan la experiencia de los usuarios y pueden derivar en la suspensión de tu cuenta.
+          Te pedimos que confirmes pedidos solo cuando realmente podés cubrirlos. Confirmaciones incumplidas o de mala calidad afectan la experiencia de los usuarios y pueden derivar en la suspensión de tu cuenta.
         </p>
         <List items={[
-          'Respondé solo a demandas donde tengas el producto o servicio disponible.',
-          'Incluí información útil: precio, stock, condiciones de entrega.',
-          'No uses las respuestas para publicitar otros productos no relacionados.',
+          'Confirmá solo los pedidos que podés preparar y entregar.',
+          'Incluí información útil: precio, tiempos de espera, condiciones de entrega.',
+          'No uses el chat para publicitar otros productos no relacionados.',
         ]} />
       </Section>
 
       <Section title="6. Suscripción y acceso">
         <p>
-          El acceso al feed de demandas y la posibilidad de responder está condicionado a tener una suscripción activa. Si tu suscripción vence:
+          El acceso al panel de pedidos está condicionado a tener una suscripción activa. Si tu suscripción vence:
         </p>
         <List items={[
           'Tu perfil puede seguir visible para los usuarios.',
-          'No podrás ver ni responder nuevas demandas.',
+          'No podrás recibir ni gestionar nuevos pedidos.',
           'Podés renovar cuando quieras para recuperar el acceso completo.',
         ]} />
         <p>

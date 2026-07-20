@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+﻿import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { ChevronRight, ChevronLeft, Search, X, Check, Tag, Plus, Sparkles, Loader2 } from 'lucide-react';
 import CategoryIcon from './CategoryIcon';
 import {
@@ -250,32 +250,32 @@ export default function CategoryPicker({
         tabIndex={0}
         onClick={handleOpen}
         onKeyDown={e => e.key === 'Enter' && handleOpen()}
-        className="w-full flex items-center gap-2 px-4 py-3 rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 text-left transition-colors hover:border-primary dark:hover:border-primary cursor-pointer select-none active:scale-100"
+        className="w-full flex items-center gap-2 px-4 py-3 rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-surface-card text-left transition-colors hover:border-primary dark:hover:border-primary cursor-pointer select-none active:scale-100"
       >
-        <Tag className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0" />
+        <Tag className="w-4 h-4 text-ink-dim shrink-0" />
         {selectedLabel ? (
-          <span className="flex-1 text-sm text-slate-800 dark:text-slate-100 truncate">{selectedLabel}</span>
+          <span className="flex-1 text-sm text-ink dark:text-ink-dim truncate">{selectedLabel}</span>
         ) : (
-          <span className="flex-1 text-sm text-slate-400 dark:text-slate-500">{placeholder}</span>
+          <span className="flex-1 text-sm text-ink-dim">{placeholder}</span>
         )}
         {selectedLabel ? (
           <button type="button" onClick={e => { e.stopPropagation(); handleClear(e); }}
-            className="shrink-0 p-1 rounded-full hover:bg-slate-100 dark:hover:bg-white/10 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+            className="shrink-0 p-1 rounded-full hover:bg-surface-card-2 dark:hover:bg-white/10 text-ink-dim hover:text-ink-dim dark:hover:text-ink-dim transition-colors">
             <X className="w-3.5 h-3.5" />
           </button>
         ) : (
-          <ChevronRight className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0" />
+          <ChevronRight className="w-4 h-4 text-ink-dim shrink-0" />
         )}
       </div>
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute z-50 left-0 right-0 mt-1.5 rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-xl overflow-hidden animate-dropdown-in">
+        <div className="absolute z-50 left-0 right-0 mt-1.5 rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-surface-card shadow-xl overflow-hidden animate-dropdown-in">
 
           {/* Search */}
           <div className="p-2 border-b border-slate-100 dark:border-white/8">
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10">
-              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+              <Search className="w-3.5 h-3.5 text-ink-dim shrink-0" />
               <input
                 ref={searchRef}
                 type="text"
@@ -283,11 +283,11 @@ export default function CategoryPicker({
                 onChange={e => { setQuery(e.target.value); setCreating(false); }}
                 placeholder="Buscar por nombre, marca, tipo..."
                 autoFocus
-                className="flex-1 text-sm bg-transparent outline-none text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+                className="flex-1 text-sm bg-transparent outline-none text-ink dark:text-ink-dim placeholder:text-ink-dim dark:placeholder:text-ink-dim"
               />
               {query && (
                 <button type="button" onClick={() => setQuery('')}>
-                  <X className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" />
+                  <X className="w-3.5 h-3.5 text-ink-dim hover:text-ink-dim dark:hover:text-ink-dim" />
                 </button>
               )}
             </div>
@@ -296,7 +296,7 @@ export default function CategoryPicker({
           {/* Sugerencia IA */}
           {suggestionContext && !query && (() => {
             if (suggLoading) return (
-              <div className="px-3 py-2.5 border-b border-slate-100 dark:border-white/8 flex items-center gap-2 text-xs text-slate-400">
+              <div className="px-3 py-2.5 border-b border-slate-100 dark:border-white/8 flex items-center gap-2 text-xs text-ink-dim">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 Analizando con IA...
               </div>
@@ -304,8 +304,8 @@ export default function CategoryPicker({
 
             if (suggestion?.source === 'error') return (
               <div className="px-3 py-2 border-b border-slate-100 dark:border-white/8 flex items-center justify-between">
-                <span className="text-xs text-slate-400">IA no disponible en este momento</span>
-                <button type="button" onClick={dismissSuggestion} className="p-1 text-slate-400 hover:text-slate-600">
+                <span className="text-xs text-ink-dim">IA no disponible en este momento</span>
+                <button type="button" onClick={dismissSuggestion} className="p-1 text-ink-dim hover:text-ink-dim">
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -321,7 +321,7 @@ export default function CategoryPicker({
                   <Sparkles className="w-3.5 h-3.5 shrink-0" />
                   Sugerir categoría con IA
                 </button>
-                <button type="button" onClick={dismissSuggestion} className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                <button type="button" onClick={dismissSuggestion} className="p-1.5 text-ink-dim hover:text-ink-dim dark:hover:text-ink-dim">
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -364,12 +364,12 @@ export default function CategoryPicker({
               <button
                 type="button"
                 onClick={handleBack}
-                className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8 transition-colors"
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8 transition-colors"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
                 Atrás
               </button>
-              <div className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500 overflow-hidden">
+              <div className="flex items-center gap-1 text-xs text-ink-dim overflow-hidden">
                 {breadcrumb.map((cat, i) => (
                   <React.Fragment key={cat.id}>
                     {i > 0 && <ChevronRight className="w-3 h-3 shrink-0" />}
@@ -395,7 +395,7 @@ export default function CategoryPicker({
                 className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-colors text-left
                   ${value === breadcrumb[breadcrumb.length - 1].id
                     ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                    : 'bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-slate-300 hover:bg-emerald-500/8 hover:text-emerald-600 dark:hover:text-emerald-400'
+                    : 'bg-surface-card-2 dark:bg-white/5 text-ink-dim dark:text-ink-dim hover:bg-emerald-500/8 hover:text-emerald-600 dark:hover:text-emerald-400'
                   }`}
               >
                 <Check className="w-3.5 h-3.5 shrink-0" />
@@ -408,13 +408,13 @@ export default function CategoryPicker({
           <div className="p-2 max-h-56 overflow-y-auto space-y-0.5">
             {/* hint cuando hay resultados de búsqueda con taxonomy */}
             {query && visibleCategories.length > 0 && (
-              <p className="text-xs text-slate-400 dark:text-slate-500 px-2 pb-1">
+              <p className="text-xs text-ink-dim px-2 pb-1">
                 {visibleCategories.length} resultado{visibleCategories.length !== 1 ? 's' : ''} para "<span className="font-medium">{query}</span>"
               </p>
             )}
 
             {visibleCategories.length === 0 && !creating && (
-              <p className="text-center text-sm text-slate-400 dark:text-slate-500 py-4">
+              <p className="text-center text-sm text-ink-dim py-4">
                 {query ? 'Sin resultados — probá con otro término' : 'Sin subcategorías'}
               </p>
             )}
@@ -432,7 +432,7 @@ export default function CategoryPicker({
                     className={`flex-1 flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-left transition-colors
                       ${isSelected
                         ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                        : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/8'
+                        : 'text-ink dark:text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8'
                       }`}
                   >
                     {cat.icon && <CategoryIcon name={cat.icon} className="w-4 h-4 shrink-0 opacity-60" />}
@@ -440,7 +440,7 @@ export default function CategoryPicker({
                       <span className="truncate block">{cat.name}</span>
                       {/* En búsqueda mostrar el path completo como contexto */}
                       {catPath && catPath.length > 1 && (
-                        <span className="text-xs text-slate-400 dark:text-slate-500 truncate block">
+                        <span className="text-xs text-ink-dim truncate block">
                           {catPath.slice(0, -1).map(c => c.name).join(' › ')}
                         </span>
                       )}
@@ -452,7 +452,7 @@ export default function CategoryPicker({
                     <button
                       type="button"
                       onClick={() => handleDrillDown(cat)}
-                      className="flex items-center px-2 rounded-xl text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-white/8 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                      className="flex items-center px-2 rounded-xl text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8 hover:text-ink-dim dark:hover:text-ink-dim transition-colors"
                       title="Ver subcategorías"
                     >
                       <ChevronRight className="w-4 h-4" />
@@ -469,7 +469,7 @@ export default function CategoryPicker({
               <button
                 type="button"
                 onClick={() => { setCreating(true); setNewName(query); }}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8 hover:text-ink dark:hover:text-ink-dim transition-colors"
               >
                 <Plus className="w-3.5 h-3.5 shrink-0" />
                 No encuentro mi categoría
@@ -479,7 +479,7 @@ export default function CategoryPicker({
 
           {creating && (
             <div className="px-2 pb-2 border-t border-slate-100 dark:border-white/8 pt-2 space-y-2">
-              <p className="text-xs text-slate-500 dark:text-slate-400 px-1">
+              <p className="text-xs text-ink-dim px-1">
                 Ingresá el nombre de tu categoría.
               </p>
               <div className="flex gap-1.5">
@@ -490,7 +490,7 @@ export default function CategoryPicker({
                   onChange={e => setNewName(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleCreateConfirm(); if (e.key === 'Escape') setCreating(false); }}
                   placeholder="Ej: Repuestos de tractor..."
-                  className="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:border-primary"
+                  className="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-surface-card-2 dark:bg-white/5 text-sm text-ink dark:text-ink-dim placeholder:text-ink-dim dark:placeholder:text-ink-dim outline-none focus:border-primary"
                 />
                 <button
                   type="button"
@@ -503,7 +503,7 @@ export default function CategoryPicker({
                 <button
                   type="button"
                   onClick={() => setCreating(false)}
-                  className="px-2 py-2 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8 transition-colors"
+                  className="px-2 py-2 rounded-xl text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8 transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>

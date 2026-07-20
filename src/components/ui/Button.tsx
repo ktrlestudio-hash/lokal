@@ -19,9 +19,9 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses = {
   primary:
-    'bg-cyan-500 hover:bg-cyan-600 text-white dark:bg-cyan-600 dark:hover:bg-cyan-700 shadow-sm',
-  secondary: 'bg-slate-100 hover:bg-slate-200 text-slate-900 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-white',
-  ghost: 'bg-transparent hover:bg-slate-100 text-slate-900 dark:hover:bg-slate-800 dark:text-white',
+    'bg-brand hover:bg-brand-dark text-white dark:bg-brand dark:hover:bg-brand-dark shadow-sm',
+  secondary: 'bg-surface-card-2 hover:bg-surface-card-2/70 text-ink',
+  ghost: 'bg-transparent hover:bg-surface-card-2 text-ink',
   danger: 'bg-red-500 hover:bg-red-600 text-white dark:bg-red-600 dark:hover:bg-red-700 shadow-sm',
   success: 'bg-green-500 hover:bg-green-600 text-white dark:bg-green-600 dark:hover:bg-green-700 shadow-sm',
 };
@@ -53,7 +53,7 @@ export function Button({
   ...props
 }: ButtonProps) {
   const baseClass =
-    'font-medium transition-colors duration-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2 justify-center relative overflow-hidden';
+    'font-medium transition-colors duration-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2 justify-center relative overflow-hidden';
 
   const widthClass = fullWidth ? 'w-full' : '';
   const combinedClass = `${baseClass} ${variantClasses[variant]} ${sizeClasses[size]} ${widthClass} ${className || ''}`;

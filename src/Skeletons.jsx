@@ -1,10 +1,10 @@
-import React from 'react';
+﻿import React from 'react';
 
 // ── Primitivos ────────────────────────────────────────────────────────────────
 function Bone({ w = '100%', h = 14, r = 8, className = '', style = {} }) {
   return (
     <div
-      className={`animate-pulse bg-slate-200 dark:bg-white/8 ${className}`}
+      className={`skeleton-shimmer bg-surface-card-2 dark:bg-white/8 ${className}`}
       style={{ width: w, height: h, borderRadius: r, flexShrink: 0, ...style }}
     />
   );
@@ -23,8 +23,8 @@ export function SkeletonProductosGrid({ cols = 2, count = 6 }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 10, padding: '4px 0' }}>
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden border border-slate-100 dark:border-white/8">
-          <div className="animate-pulse bg-slate-200 dark:bg-white/8" style={{ aspectRatio: '1' }} />
+        <div key={i} className="bg-surface-card rounded-2xl overflow-hidden border border-slate-100 dark:border-white/8">
+          <div className="skeleton-shimmer bg-surface-card-2 dark:bg-white/8" style={{ aspectRatio: '1' }} />
           <div style={{ padding: 10 }}>
             <Col gap={6}>
               <Bone w="75%" h={12} />
@@ -47,8 +47,8 @@ export function SkeletonProductosList({ count = 5 }) {
   return (
     <Col gap={8} style={{ padding: '4px 0' }}>
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-white/8 overflow-hidden flex">
-          <div className="animate-pulse bg-slate-200 dark:bg-white/8" style={{ width: 96, flexShrink: 0 }} />
+        <div key={i} className="bg-surface-card rounded-2xl border border-slate-100 dark:border-white/8 overflow-hidden flex">
+          <div className="skeleton-shimmer bg-surface-card-2 dark:bg-white/8" style={{ width: 96, flexShrink: 0 }} />
           <div style={{ flex: 1, padding: 12 }}>
             <Col gap={7}>
               <Bone w="70%" h={13} />
@@ -91,12 +91,12 @@ export function SkeletonInbox({ count = 6 }) {
   );
 }
 
-// ── Skeleton: Feed / Demandas (StoreApp - FeedScreen) ────────────────────────
+// ── Skeleton: Feed (StoreApp - FeedScreen) ────────────────────────────────────
 export function SkeletonFeed({ count = 4 }) {
   return (
     <Col gap={12} style={{ padding: '4px 0' }}>
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-white/8 p-4">
+        <div key={i} className="bg-surface-card rounded-2xl border border-slate-100 dark:border-white/8 p-4">
           <Col gap={10}>
             <Row gap={10}>
               <Bone w={40} h={40} r={20} />
@@ -120,38 +120,13 @@ export function SkeletonFeed({ count = 4 }) {
   );
 }
 
-// ── Skeleton: Demandas usuario (App - HomeScreen) ─────────────────────────────
-export function SkeletonDemandas({ count = 4 }) {
-  return (
-    <Col gap={12} style={{ padding: '4px 0' }}>
-      {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-white/8 p-4">
-          <Col gap={10}>
-            <Row gap={8}>
-              <Bone w="55%" h={14} />
-              <Bone w={50} h={22} r={11} style={{ marginLeft: 'auto' }} />
-            </Row>
-            <Bone w="80%" h={12} />
-            <Bone w="60%" h={12} />
-            <Row gap={8} style={{ marginTop: 2 }}>
-              <Bone w={80} h={26} r={13} />
-              <Bone w={70} h={26} r={13} />
-              <Bone w="25%" h={12} style={{ marginLeft: 'auto' }} />
-            </Row>
-          </Col>
-        </div>
-      ))}
-    </Col>
-  );
-}
-
 // ── Skeleton: Ofertas / Marketplace (App) ─────────────────────────────────────
 export function SkeletonOfertas({ count = 6 }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, padding: '4px 0' }}>
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden border border-slate-100 dark:border-white/8">
-          <div className="animate-pulse bg-slate-200 dark:bg-white/8" style={{ aspectRatio: '1' }} />
+        <div key={i} className="bg-surface-card rounded-2xl overflow-hidden border border-slate-100 dark:border-white/8">
+          <div className="skeleton-shimmer bg-surface-card-2 dark:bg-white/8" style={{ aspectRatio: '1' }} />
           <div style={{ padding: 10 }}>
             <Col gap={7}>
               <Bone w="80%" h={12} />
@@ -170,7 +145,7 @@ export function SkeletonPerfil() {
   return (
     <Col gap={0}>
       {/* Portada */}
-      <div className="animate-pulse bg-slate-200 dark:bg-white/8" style={{ height: 140 }} />
+      <div className="skeleton-shimmer bg-surface-card-2 dark:bg-white/8" style={{ height: 140 }} />
       {/* Avatar + info */}
       <div style={{ padding: '0 16px' }}>
         <div style={{ marginTop: -32, marginBottom: 16 }}>
@@ -184,7 +159,7 @@ export function SkeletonPerfil() {
         {/* Stats row */}
         <Row gap={12} style={{ marginBottom: 24 }}>
           {[1,2,3].map(i => (
-            <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-white/8 p-3" style={{ flex: 1 }}>
+            <div key={i} className="bg-surface-card rounded-2xl border border-slate-100 dark:border-white/8 p-3" style={{ flex: 1 }}>
               <Col gap={6} style={{ alignItems: 'center' }}>
                 <Bone w="60%" h={20} />
                 <Bone w="80%" h={10} />
@@ -195,7 +170,7 @@ export function SkeletonPerfil() {
         {/* Campos editables */}
         <Col gap={12}>
           {[1,2,3,4].map(i => (
-            <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-white/8 p-4">
+            <div key={i} className="bg-surface-card rounded-2xl border border-slate-100 dark:border-white/8 p-4">
               <Col gap={7}>
                 <Bone w="30%" h={10} />
                 <Bone w="70%" h={14} />
@@ -215,7 +190,7 @@ export function SkeletonStats() {
       {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
         {[1,2,3,4].map(i => (
-          <div key={i} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-white/8 p-4">
+          <div key={i} className="bg-surface-card rounded-2xl border border-slate-100 dark:border-white/8 p-4">
             <Col gap={8}>
               <Bone w="50%" h={10} />
               <Bone w="70%" h={24} />
@@ -225,14 +200,14 @@ export function SkeletonStats() {
         ))}
       </div>
       {/* Chart placeholder */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-white/8 p-4">
+      <div className="bg-surface-card rounded-2xl border border-slate-100 dark:border-white/8 p-4">
         <Col gap={12}>
           <Bone w="40%" h={14} />
-          <div className="animate-pulse bg-slate-200 dark:bg-white/8" style={{ height: 120, borderRadius: 8 }} />
+          <div className="skeleton-shimmer bg-surface-card-2 dark:bg-white/8" style={{ height: 120, borderRadius: 8 }} />
         </Col>
       </div>
       {/* List */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-white/8 p-4">
+      <div className="bg-surface-card rounded-2xl border border-slate-100 dark:border-white/8 p-4">
         <Col gap={10}>
           <Bone w="35%" h={14} />
           {[1,2,3].map(i => (

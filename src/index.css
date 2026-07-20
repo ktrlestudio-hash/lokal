@@ -23,13 +23,24 @@
 
 /* ── 1. BRAND — EDITÁ SOLO ESTA SECCIÓN PARA REPINTAR TODA LA APP ──────────── */
 :root {
-  /* Primario de marca (RGB separado por espacios — requerido por Tailwind) */
-  --brand:           0 184 217;   /* #00B8D9  turquesa     — base          */
-  --brand-light:    51 201 226;   /* #33C9E2               — hover / foco  */
-  --brand-dark:      0 154 183;   /* #009AB7               — pressed       */
-  --brand-muted:   224 247 251;   /* #E0F7FB               — fondo suave   */
+  /* Primario de marca — turquesa LOKAL (coherente con LOKAL global, no el
+     rojo de comida rápida). RGB separado por espacios (requerido por Tailwind). */
+  --brand:           0 184 217;   /* #00B8D9  turquesa — base              */
+  --brand-light:    51 201 226;   /* #33C9E2                — hover / foco  */
+  --brand-dark:      0 154 183;   /* #009AB7                — pressed       */
+  --brand-muted:   224 247 251;   /* #E0F7FB                — fondo suave   */
   --brand-fg:      255 255 255;   /* texto sobre fondo brand               */
   --brand-hex:     #00B8D9;       /* para inline styles, SVGs, canvas      */
+  --brand-deep:     8  51  68;    /* #083344  cyan-950 profundo — reserva para detalles puntuales (sombras, degradados), no un fondo de base */
+  --brand-deep-hex:#083344;
+
+  /* Acento secundario — amarillo cálido (badges de descuento, precios destacados, chip activo en dark) */
+  --accent:        255 197  48;   /* #FFC530  amarillo dorado             */
+  --accent-light:  255 214  99;   /* #FFD663               — hover / foco  */
+  --accent-dark:   235 170  10;   /* #EBAA0A               — pressed       */
+  --accent-muted:  255 240 204;   /* #FFF0CC               — fondo suave   */
+  --accent-fg:     #1a1714;       /* texto oscuro sobre fondo accent       */
+  --accent-hex:    #FFC530;
 
   /* Alias legacy — código existente que usa bg-primary sigue funcionando */
   --primary:       var(--brand);
@@ -37,6 +48,12 @@
   --primary-muted: var(--brand-muted);
   --primary-fg:    var(--brand-fg);
   --primary-hex:   var(--brand-hex);
+
+  /* Degradado pastel rojo→amarillo — usa los mismos --brand-muted/--accent-muted
+     de arriba (ya son la versión pastel de cada color), no hex nuevos. Pensado
+     para fondos suaves (banners, secciones destacadas) donde bg-brand/bg-accent
+     sólidos son demasiado fuertes. Clase lista: .bg-gradient-pastel (abajo). */
+  --gradient-pastel: linear-gradient(135deg, rgb(var(--brand-muted)) 0%, rgb(var(--accent-muted)) 100%);
 }
 
 /* ── 2. COLORES SEMÁNTICOS (no tocar salvo redesign intencional) ─────────────── */
@@ -65,13 +82,13 @@
   --warn-fg:      255 255 255;
   --warn-hex:     #F59E0B;
 
-  /* Información: neutro, tip, recordatorio */
-  --info:          59 130 246;    /* #3B82F6  blue-500    */
-  --info-light:    96 165 250;    /* #60A5FA  blue-400    */
-  --info-dark:     37 99  235;    /* #2563EB  blue-600    */
-  --info-muted:   219 234 254;    /* #DBEAFE  blue-100    */
+  /* Información: neutro, tip, recordatorio — gris neutro puro R=G=B, sin tinte azul */
+  --info:          82  82  82;    /* #525252  gris neutro (era slate-600, azulado) */
+  --info-light:   107 107 107;    /* #6B6B6B  gris neutro (era slate-500)          */
+  --info-dark:     64  64  64;    /* #404040  gris neutro (era slate-700)          */
+  --info-muted:   240 240 240;    /* #F0F0F0  gris neutro (era slate-100)          */
   --info-fg:      255 255 255;
-  --info-hex:     #3B82F6;
+  --info-hex:     #525252;
 
   /* Nuevo: badges "nuevo", "estreno", novedades */
   --new:          139  92 246;    /* #8B5CF6  violet-500  */
@@ -89,23 +106,34 @@
   --urgent-fg:    255 255 255;
   --urgent-hex:   #EF4444;
 
-  /* Proceso: cargando, pendiente, en curso */
-  --pending:       59 130 246;    /* mismo que info       */
-  --pending-light: 96 165 250;
-  --pending-dark:  37  99 235;
-  --pending-muted:219 234 254;
+  /* Proceso: cargando, pendiente, en curso — gris neutro puro R=G=B, mismo criterio que info */
+  --pending:       82  82  82;    /* #525252  gris neutro (era slate-600) */
+  --pending-light:107 107 107;    /* #6B6B6B  gris neutro (era slate-500) */
+  --pending-dark:  64  64  64;    /* #404040  gris neutro (era slate-700) */
+  --pending-muted:240 240 240;    /* #F0F0F0  gris neutro (era slate-100) */
   --pending-fg:   255 255 255;
-  --pending-hex:  #3B82F6;
+  --pending-hex:  #525252;
 }
 
 /* ── 3. DARK MODE — ajuste automático de todos los tokens ────────────────────── */
 .dark {
-  /* Brand: más claro en dark para mantener contraste */
-  --brand:        34 211 238;    /* cyan-400  #22D3EE  */
-  --brand-light: 103 232 249;    /* cyan-300  #67E8F9  */
-  --brand-dark:    0 184 217;    /* turquesa  #00B8D9  */
-  --brand-muted:   8  51  68;    /* cyan-950  #083344  */
+  /* Brand: más claro en dark para mantener contraste (cyan-400), igual que
+     LOKAL global. */
+  --brand:        34 211 238;    /* #22D3EE  cyan-400 */
+  --brand-light: 103 232 249;    /* #67E8F9  cyan-300 */
+  --brand-dark:    0 184 217;    /* #00B8D9  turquesa base */
+  --brand-muted:   8  51  68;    /* #083344  cyan-950 fondo suave */
   --brand-hex:   #22D3EE;
+  --brand-deep:   6  20  27;     /* #06141B  casi negro azulado — reserva dark */
+  --brand-deep-hex:#06141B;
+
+  /* Accent (amarillo) — mismo tono en dark, ya tiene buen contraste sobre fondo oscuro */
+  --accent:       255 197  48;   /* #FFC530 */
+  --accent-light: 255 214  99;   /* #FFD663 */
+  --accent-dark:  235 170  10;   /* #EBAA0A */
+  --accent-muted:  58  42   4;   /* #3A2A04  fondo suave dark */
+  --accent-fg:    #1a1714;
+  --accent-hex:   #FFC530;
 
   /* OK */
   --ok:          74 222 128;
@@ -128,12 +156,12 @@
   --warn-muted:   69  26   3;
   --warn-hex:   #FBBF24;
 
-  /* Info */
-  --info:         96 165 250;
-  --info-light:  147 197 253;
-  --info-dark:    59 130 246;
-  --info-muted:   23  37  84;
-  --info-hex:   #60A5FA;
+  /* Info — gris neutro puro R=G=B, sin tinte azul */
+  --info:        168 168 168;    /* #A8A8A8  gris neutro (era slate-400) */
+  --info-light:  212 212 212;    /* #D4D4D4  gris neutro (era slate-300) */
+  --info-dark:   107 107 107;    /* #6B6B6B  gris neutro (era slate-500) */
+  --info-muted:   38  38  38;    /* #262626  gris neutro (era slate-800) */
+  --info-hex:   #A8A8A8;
 
   /* New */
   --new:         167 139 250;
@@ -147,9 +175,9 @@
   --urgent-muted:  69  10  10;
   --urgent-hex:  #F87171;
 
-  --pending:       96 165 250;
-  --pending-muted: 23  37  84;
-  --pending-hex: #60A5FA;
+  --pending:      168 168 168;    /* #A8A8A8  gris neutro (era slate-400) */
+  --pending-muted: 38  38  38;    /* #262626  gris neutro (era slate-800) */
+  --pending-hex: #A8A8A8;
 }
 
 /* ── 4. UI CONTROL TOKENS (tamaños y radios globales) ────────────────────────── */
@@ -161,11 +189,11 @@
      from-surface     → sobre fondos blancos (headers, cards blancas)
      from-surface-dim → sobre fondos slate-50/gris claro (secciones de contenido) */
   --surface:     255 255 255;      /* blanco puro */
-  --surface-dim: 248 250 252;      /* slate-50    */
+  --surface-dim: 245 245 245;      /* #f5f5f5 gris neutro (era slate-50 248 250 252, azulado → neutralizado, "cero azul") */
 }
 .dark {
-  --surface:     18  24  38;       /* equiv .dark .bg-white    (rgb 18 24 38)  */
-  --surface-dim:  8  13  26;       /* fondo de página — MISMO matiz azulado que --surface-solid (#141b2e), no gris neutro; antes (5 7 13) quedaba desentonado */
+  --surface:     31  31  31;       /* #1F1F1F  gris neutro puro R=G=B (equiv .dark .bg-white) */
+  --surface-dim:  8   8   8;       /* #080808  fondo de página, casi negro puro, neutro */
 }
 
 /* ── 4.bis TOKENS DE SUPERFICIE/TEXTO CONSUMIBLES CON var() ───────────────────
@@ -178,20 +206,33 @@
    paralela — un solo lugar de verdad. Consumido por src/tienda-publica/. */
 :root {
   --surface-solid:       #ffffff;   /* bg-white */
-  --surface-solid-2:     #f1f5f9;   /* slate-100, superficie secundaria/inputs */
+  --surface-solid-2:     #f0f0f0;   /* superficie secundaria/inputs — gris neutro (era slate-100 #f1f5f9, azulado → neutralizado) */
   --border-solid:        rgba(0,0,0,.07);
-  --text-primary:        #0f172a;   /* slate-900 */
-  --text-secondary:      #64748b;   /* slate-500 */
+  --text-primary:        #18181b;   /* gris neutro casi-negro (equiv slate-900, sin tinte) */
+  --text-secondary:      #6b6b6b;   /* gris neutro medio — mismo peso visual que slate-500 #64748b pero SIN tinte azul; contraste 5.33:1 sobre card / 4.89:1 sobre surface-dim (AA ok) */
+  /* Variantes "R G B" (sin función) de los mismos 4 tokens de arriba —
+     solo para que Tailwind pueda generar bg-surface-card/80, text-ink/50,
+     etc. vía rgb(var(--x-rgb) / <alpha-value>). Mismos valores, otro
+     formato de escritura — no es una paleta paralela, mantenerlos en
+     sync con los hex de arriba si se cambian. */
+  --surface-solid-rgb:    255 255 255;
+  --surface-solid-2-rgb:  240 240 240;
+  --text-primary-rgb:     24 24 27;
+  --text-secondary-rgb:   107 107 107;
 }
 .dark {
-  /* Escalera de elevación con salto de luminosidad perceptible (antes
-     #0d1526/#16213a quedaban casi pegados entre sí y con --surface-dim del
-     fondo — 1.1:1 de contraste, prácticamente indistinguibles). */
-  --surface-solid:       #141b2e;   /* card — un escalón sobre --surface-dim */
-  --surface-solid-2:     #263252;   /* input/superficie secundaria — más claro para que se note bien como "control", antes (#212a42) apenas se distinguía del fondo (1.36:1) */
+  /* Gris neutro puro (R=G=B, sin sesgo cálido ni frío) — escalera de
+     elevación con salto de luminosidad perceptible (bg casi negro → card →
+     input, cada uno más claro). */
+  --surface-solid:       #1f1f1f;   /* card — un escalón sobre --surface-dim */
+  --surface-solid-2:     #3a3a3a;   /* input/superficie secundaria — claramente más claro que la card */
   --border-solid:        rgba(255,255,255,.10);
-  --text-primary:        #f1f5f9;   /* slate-100 */
-  --text-secondary:      #94a3b8;   /* slate-400 — más claro que slate-500, mejor AA sobre fondos oscuros */
+  --text-primary:        #f2f2f2;   /* casi blanco neutro */
+  --text-secondary:      #a8a8a8;   /* gris medio neutro — buen AA sobre fondos oscuros */
+  --surface-solid-rgb:    31 31 31;
+  --surface-solid-2-rgb:  58 58 58;
+  --text-primary-rgb:     242 242 242;
+  --text-secondary-rgb:   168 168 168;
 }
 
 /* ── Utilidades de degradado adaptativas al tema ─────────────────────────────
@@ -257,6 +298,9 @@ body {
 
 .ui-chip  { border-radius: var(--ui-control-radius); }
 .ui-input { min-height: var(--ui-control-size); border-radius: var(--ui-control-radius); }
+
+/* Degradado pastel rojo→amarillo (ver --gradient-pastel, §1) — fondos suaves */
+.bg-gradient-pastel { background: var(--gradient-pastel); }
 
 /* ══════════════════════════════════════════════════════════════════════════════
    FEEDBACK TÁCTIL
@@ -436,19 +480,26 @@ html.theme-transitioning *::after {
    ══════════════════════════════════════════════════════════════════════════════ */
 
 .dark body {
-  color: rgb(241 245 249);
-  background-color: rgb(10 13 22);
+  color: var(--text-primary);
+  background-color: var(--surface-dim);
 }
 
-/* Fondos */
-.dark .bg-white:not(button):not([role="button"]):not(a) { background-color: rgb(18 24 38) !important; }
-.dark .bg-slate-50:not(button):not([role="button"]):not(a)  { background-color: rgb(10 13 22)          !important; }
+/* Fondos — apuntan a los MISMOS tokens gris-neutro que --surface-solid/--surface-dim
+   (§4.bis), para que bg-white/bg-slate-* usados en cualquier componente terminen
+   pintando exactamente la misma superficie que el resto de la app, sin un segundo
+   valor propio acá. */
+.dark .bg-white:not(button):not([role="button"]):not(a) { background-color: var(--surface-solid) !important; }
+.dark .bg-slate-50:not(button):not([role="button"]):not(a)  { background-color: var(--surface-dim)      !important; }
 .dark .bg-slate-100:not(button):not([role="button"]):not(a) { background-color: rgba(255,255,255,0.07) !important; }
 .dark .bg-slate-200:not(button):not([role="button"]):not(a) { background-color: rgba(255,255,255,0.11) !important; }
 .dark .bg-slate-300:not(button):not([role="button"]):not(a) { background-color: rgba(255,255,255,0.16) !important; }
-.dark .bg-gray-50:not(button):not([role="button"]):not(a)   { background-color: rgb(10 13 22)          !important; }
+.dark .bg-slate-800:not(button):not([role="button"]):not(a) { background-color: var(--surface-solid)   !important; }
+.dark .bg-slate-900:not(button):not([role="button"]):not(a) { background-color: var(--surface-solid)   !important; }
+.dark .bg-gray-50:not(button):not([role="button"]):not(a)   { background-color: var(--surface-dim)      !important; }
 .dark .bg-gray-100:not(button):not([role="button"]):not(a)  { background-color: rgba(255,255,255,0.07) !important; }
 .dark .bg-gray-200:not(button):not([role="button"]):not(a)  { background-color: rgba(255,255,255,0.11) !important; }
+.dark .bg-gray-800:not(button):not([role="button"]):not(a)  { background-color: var(--surface-solid)   !important; }
+.dark .bg-gray-900:not(button):not([role="button"]):not(a)  { background-color: var(--surface-solid)   !important; }
 
 /* Fondos de colores tintados */
 .dark .bg-amber-50     { background-color: rgba(245,158,11,0.12)   !important; }
@@ -459,20 +510,21 @@ html.theme-transitioning *::after {
 .dark .bg-rose-100     { background-color: rgba(244,63,94,0.16)    !important; }
 .dark .bg-emerald-50   { background-color: rgba(16,185,129,0.10)   !important; }
 .dark .bg-emerald-100  { background-color: rgba(16,185,129,0.16)   !important; }
-.dark .bg-blue-50      { background-color: rgba(59,130,246,0.10)   !important; }
-.dark .bg-blue-100     { background-color: rgba(59,130,246,0.16)   !important; }
+.dark .bg-indigo-50    { background-color: rgba(99,102,241,0.10)   !important; }
+.dark .bg-indigo-100   { background-color: rgba(99,102,241,0.16)   !important; }
 
-/* Textos — ratios WCAG sobre bg rgb(10 13 22) */
-.dark .text-slate-900  { color: rgb(241 245 249) !important; } /* 17:1 ✓ */
-.dark .text-slate-800  { color: rgb(226 232 240) !important; } /* 14:1 ✓ */
-.dark .text-slate-700  { color: rgb(203 213 225) !important; } /* 11:1 ✓ */
-.dark .text-slate-600  { color: rgb(148 163 184) !important; } /*  7:1 ✓ */
-.dark .text-slate-500  { color: rgb(100 116 139) !important; } /*  4.3:1 ✓ */
-.dark .text-slate-400  { color: rgb(126 143 163) !important; } /*  5.5:1 ✓ muted */
-.dark .text-slate-300  { color: rgb(148 163 184) !important; } /*  7.0:1 ✓ visible */
-.dark .text-gray-900   { color: rgb(241 245 249) !important; } /* 17:1 ✓ */
-.dark .text-gray-700   { color: rgb(203 213 225) !important; } /* 11:1 ✓ */
-.dark .text-gray-500   { color: rgb(100 116 139) !important; } /*  4.3:1 ✓ */
+/* Textos — apuntan a --text-primary/--text-secondary (§4.bis), gris neutro puro,
+   mismos valores que usa el resto de la app (ratios WCAG ya verificados ahí). */
+.dark .text-slate-900  { color: var(--text-primary) !important; }
+.dark .text-slate-800  { color: var(--text-primary) !important; }
+.dark .text-slate-700  { color: var(--text-secondary) !important; }
+.dark .text-slate-600  { color: var(--text-secondary) !important; }
+.dark .text-slate-500  { color: var(--text-secondary) !important; }
+.dark .text-slate-400  { color: var(--text-secondary) !important; }
+.dark .text-slate-300  { color: var(--text-secondary) !important; }
+.dark .text-gray-900   { color: var(--text-primary) !important; }
+.dark .text-gray-700   { color: var(--text-secondary) !important; }
+.dark .text-gray-500   { color: var(--text-secondary) !important; }
 
 /* Bordes */
 .dark .border-slate-100 { border-color: rgba(255,255,255,0.07) !important; }
@@ -491,12 +543,12 @@ html.theme-transitioning *::after {
 .dark textarea,
 .dark select {
   background-color: rgba(255,255,255,0.05) !important;
-  color: rgb(226 232 240)                   !important;
+  color: var(--text-primary)                !important;
   border-color: rgba(255,255,255,0.1)       !important;
 }
 .dark input::placeholder,
 .dark textarea::placeholder {
-  color: rgb(100 116 139) !important;
+  color: var(--text-secondary) !important;
   opacity: 1              !important;
 }
 
@@ -507,6 +559,57 @@ html.theme-transitioning *::after {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
+   LIGHT MODE — PUENTE gris-neutro (espejo del bloque .dark de arriba)
+   ──────────────────────────────────────────────────────────────────────────────
+   La app usa clases Tailwind estándar (bg-slate-50, text-slate-500, etc.) por
+   TODOS lados. En dark ya se redirigen a los tokens neutros (bloque de arriba),
+   pero en LIGHT renderizaban el slate REAL de Tailwind (#64748b, #f1f5f9…), que
+   tiene tinte azul → la página se veía "azulada" en modo claro.
+   Este bloque hace lo mismo que el .dark pero para light: redirige esas clases a
+   los MISMOS tokens gris-neutro (--surface-dim/--surface-solid-2/--text-*) que
+   usa commerce-modern (/preview-comida), para "cero azul" en toda la app.
+   Se eligió CSS (no remapear `slate` en tailwind.config) a propósito: remapear el
+   color global afectaría light Y dark a la vez y rompería casos donde slate-100
+   sí debe ser un gris claro distinto por nivel; un puente CSS con la MISMA
+   especificidad y exclusiones (:not(button)…) que el bloque .dark es quirúrgico y
+   no toca botones/links con estado propio.
+   Se scopea con :root:not(.dark) para que jamás compita con el bloque dark.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* Superficies (mismas exclusiones que el bloque dark: no botones/links) */
+:root:not(.dark) .bg-slate-50:not(button):not([role="button"]):not(a)  { background-color: rgb(var(--surface-dim)) !important; }
+:root:not(.dark) .bg-slate-100:not(button):not([role="button"]):not(a) { background-color: var(--surface-solid-2) !important; }
+:root:not(.dark) .bg-slate-200:not(button):not([role="button"]):not(a) { background-color: #e5e5e5 !important; }
+:root:not(.dark) .bg-slate-300:not(button):not([role="button"]):not(a) { background-color: #d4d4d4 !important; }
+:root:not(.dark) .bg-gray-50:not(button):not([role="button"]):not(a)   { background-color: rgb(var(--surface-dim)) !important; }
+:root:not(.dark) .bg-gray-100:not(button):not([role="button"]):not(a)  { background-color: var(--surface-solid-2) !important; }
+:root:not(.dark) .bg-gray-200:not(button):not([role="button"]):not(a)  { background-color: #e5e5e5 !important; }
+
+/* Textos — neutralizados (slate-900..300 → primary/secondary neutro) */
+:root:not(.dark) .text-slate-900 { color: var(--text-primary) !important; }
+:root:not(.dark) .text-slate-800 { color: var(--text-primary) !important; }
+:root:not(.dark) .text-slate-700 { color: var(--text-secondary) !important; }
+:root:not(.dark) .text-slate-600 { color: var(--text-secondary) !important; }
+:root:not(.dark) .text-slate-500 { color: var(--text-secondary) !important; }
+:root:not(.dark) .text-slate-400 { color: #9a9a9a !important; }
+:root:not(.dark) .text-slate-300 { color: #b8b8b8 !important; }
+:root:not(.dark) .text-gray-900  { color: var(--text-primary) !important; }
+:root:not(.dark) .text-gray-700  { color: var(--text-secondary) !important; }
+:root:not(.dark) .text-gray-500  { color: var(--text-secondary) !important; }
+
+/* Bordes */
+:root:not(.dark) .border-slate-100 { border-color: #efefef !important; }
+:root:not(.dark) .border-slate-200 { border-color: #e5e5e5 !important; }
+:root:not(.dark) .border-slate-300 { border-color: #d4d4d4 !important; }
+:root:not(.dark) .border-gray-200  { border-color: #e5e5e5 !important; }
+
+/* Hovers */
+:root:not(.dark) .hover\:bg-slate-50:hover  { background-color: rgb(var(--surface-dim)) !important; }
+:root:not(.dark) .hover\:bg-slate-100:hover { background-color: var(--surface-solid-2) !important; }
+:root:not(.dark) .hover\:bg-slate-200:hover { background-color: #e5e5e5 !important; }
+:root:not(.dark) .hover\:bg-gray-100:hover  { background-color: var(--surface-solid-2) !important; }
+
+/* ══════════════════════════════════════════════════════════════════════════════
    SCROLLBARS
    ══════════════════════════════════════════════════════════════════════════════ */
 
@@ -514,15 +617,15 @@ html.theme-transitioning *::after {
 ::-webkit-scrollbar-button        { display: none; width: 0; height: 0; }
 ::-webkit-scrollbar-track         { background: transparent; }
 ::-webkit-scrollbar-track-piece   { background: transparent; }
-::-webkit-scrollbar-thumb         { background: #cbd5e1; border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover   { background: #94a3b8; }
+::-webkit-scrollbar-thumb         { background: #d4d4d4; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover   { background: #a8a8a8; }
 ::-webkit-scrollbar-corner        { background: transparent; }
 
 .dark ::-webkit-scrollbar-thumb       { background: rgba(255,255,255,0.18); }
 .dark ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.35); }
 
 /* Firefox */
-* { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+* { scrollbar-width: thin; scrollbar-color: #d4d4d4 transparent; }
 .dark * { scrollbar-color: rgba(255,255,255,0.18) transparent; }
 
 
@@ -535,9 +638,9 @@ html.theme-transitioning *::after {
 
 .leaflet-container {
   font-family: 'Inter', system-ui, sans-serif;
-  background: #f8fafc;
+  background: rgb(var(--surface-dim));
 }
-.dark .leaflet-container { background: #0d111e; }
+.dark .leaflet-container { background: var(--surface-dim); }
 
 .leaflet-popup-content-wrapper {
   border-radius: 14px !important;
@@ -548,8 +651,8 @@ html.theme-transitioning *::after {
 .leaflet-popup-content { margin: 0 !important; }
 .leaflet-popup-tip-container { display: none !important; }
 .dark .leaflet-popup-content-wrapper {
-  background: #1e2536 !important;
-  color: #e2e8f0    !important;
+  background: var(--surface-solid) !important;
+  color: var(--text-primary)       !important;
 }
 .lokal-map-compact .leaflet-control-attribution { display: none; }
 
@@ -612,21 +715,9 @@ html.theme-transitioning *::after {
 /* ── Touch targets mínimo 36px — solo botones con clase explícita ───────────── */
 button.no-min-size { min-height: unset; min-width: unset; }
 
-/* ── Dark mode refinado — profundidad y contraste mejorado ─────────────────── */
+/* ── Dark mode refinado — color-scheme del navegador (scrollbars nativos, etc.) ── */
 .dark body {
-  background-color: #060d1a;
   color-scheme: dark;
-}
-.dark .bg-white:not(button):not([role="button"]):not(a) {
-  background-color: #0d1526 !important;
-}
-.dark .bg-slate-900:not(button):not([role="button"]):not(a) {
-  background-color: #0a1020 !important;
-}
-/* Micro-textura sutil en fondos oscuros — profundidad sin ruido */
-.dark [class*="bg-slate-50"],
-.dark [class*="bg-gray-50"] {
-  background-color: #080f1e !important;
 }
 
 /* Glassmorphism refinado para modales y sheets */
@@ -637,7 +728,7 @@ button.no-min-size { min-height: unset; min-width: unset; }
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
 .dark .glass {
-  background: rgba(13, 21, 38, 0.82);
+  background: rgb(var(--surface) / 0.82);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -682,8 +773,8 @@ button.no-min-size { min-height: unset; min-width: unset; }
 }
 .dark .mesh-brand {
   background:
-    radial-gradient(ellipse 60% 50% at 20% 0%,  rgba(34,211,238,0.10) 0%, transparent 60%),
-    radial-gradient(ellipse 40% 40% at 80% 100%, rgba(34,211,238,0.06) 0%, transparent 60%);
+    radial-gradient(ellipse 60% 50% at 20% 0%,  rgba(255,59,87,0.10) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 40% at 80% 100%, rgba(255,59,87,0.06) 0%, transparent 60%);
 }
 
 /* ── Scroll snap en carruseles ──────────────────────────────────────────────── */

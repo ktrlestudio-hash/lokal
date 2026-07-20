@@ -14,11 +14,3 @@ root.render(
     <Root />
   </StrictMode>,
 );
-
-// Fade out splash after React mounts
-requestAnimationFrame(() => {
-  const splash = document.getElementById('splash');
-  if (!splash) return;
-  splash.style.opacity = '0';
-  splash.addEventListener('transitionend', () => splash.remove(), { once: true });
-});

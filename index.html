@@ -26,29 +26,15 @@
         var dark=t!=='light';
         var bg=dark?'#060d1a':'#ffffff';
         document.body.style.background=bg;
-        document.getElementById&&(document.querySelector&&(function(){
-          var s=document.getElementById('splash');
-          if(s)s.style.background=bg;
-        })());
-        window.__initBg=bg;
       })();
     </script>
-    <div id="splash" style="
-      position:fixed;inset:0;z-index:9998;
-      display:flex;align-items:center;justify-content:center;
-      transition:opacity 0.3s ease;
-    ">
-      <script>document.currentScript.parentElement.style.background=window.__initBg||'#060d1a';</script>
-      <img src="/icon-light.jpg" alt="Lokal" style="
-        width:80px;height:80px;
-        border-radius:20px;
-        opacity:0;
-        animation:splashIn 0.4s ease 0.1s forwards;
-      " />
-      <style>
-        @keyframes splashIn{from{opacity:0;transform:scale(0.88)}to{opacity:1;transform:scale(1)}}
-      </style>
-    </div>
+    <!-- Splash HTML estático sacado: quedaba superpuesto con el splash de
+         React (AdminLoader/SplashScreenFull en Root.jsx, TiendaPublica.jsx)
+         — dos diseños distintos en secuencia (ícono cuadrado icon-light.jpg
+         primero, logo SVG animado después), se veía como carga duplicada.
+         El fondo de <body> ya cubre el instante entre parseo HTML y montaje
+         de React (unos ms, imperceptible), y React trae su propio splash
+         completo desde el primer render. -->
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

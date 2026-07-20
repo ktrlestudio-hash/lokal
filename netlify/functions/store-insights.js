@@ -102,12 +102,8 @@ export const handler = async (event) => {
     const tienda = tiendas.find(t => t.ownerUid === user.uid);
     if (!tienda) throw new HttpError(404, 'Tienda no encontrada');
 
-    const [respuestas, ofertas] = await Promise.all([
-      readJson('data/respuestas.json', join('/tmp', 'lokal-respuestas.json')),
-      readJson('data/ofertas.json', join('/tmp', 'lokal-ofertas.json')),
-    ]);
+    const ofertas = await readJson('data/ofertas.json', join('/tmp', 'lokal-ofertas.json'));
 
-    const misRespuestas = respuestas.filter(r => String(r.tiendaId) === String(tienda.id));
     const misOfertas = ofertas.filter(o => String(o.tiendaId) === String(tienda.id));
     const profile = calcProfileScore(tienda);
 
@@ -117,7 +113,6 @@ export const handler = async (event) => {
       ciudad: tienda.ciudad || null,
       rubros: tienda.rubros || [],
       descripcion: tienda.descripcion || null,
-      totalRespuestas: misRespuestas.length,
       totalOfertas: misOfertas.filter(o => o.activa !== false).length,
       totalOfertasInactivas: misOfertas.filter(o => o.activa === false).length,
       perfilCompleto: profile.pct,
@@ -126,7 +121,7 @@ export const handler = async (event) => {
     };
 
     const prompt = `Sos un asistente experto en marketplaces locales llamado "Lokal".
-Analizás el perfil de una tienda dentro de la plataforma Lokal (donde vecinos publican demandas y comercios locales responden con sus productos).
+Analizás el perfil de una tienda dentro de la plataforma Lokal (donde vecinos piden comida y comercios locales gestionan su catálogo y pedidos).
 
 Datos de la tienda:
 ${JSON.stringify(context, null, 2)}

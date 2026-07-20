@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { UserCog, Play, Square, AlertTriangle, Store, Package, User, Crown, ChevronRight } from 'lucide-react';
 
 const ROLES = [
   { id: 'usuario',        label: 'Usuario',        icon: User,       desc: 'Solo puede ver. No publica ni responde.' },
-  { id: 'emprendimiento', label: 'Emprendimiento', icon: Package,    desc: 'Gratis. Max 5 productos, ve demandas pero no responde.' },
-  { id: 'empresa',        label: 'Empresa Básico', icon: Store,      desc: 'Pago. Max 20 productos, responde demandas, stats básicas.' },
+  { id: 'emprendimiento', label: 'Emprendimiento', icon: Package,    desc: 'Gratis. Max 5 productos, sin estadísticas.' },
+  { id: 'empresa',        label: 'Empresa Básico', icon: Store,      desc: 'Pago. Max 20 productos, stats básicas.' },
 ];
 
 const PLANS = [
@@ -118,8 +118,8 @@ export default function RoleSimulator({ firebaseUser, setRoleSim, onBack }) {
           <UserCog className="w-5 h-5 text-violet-600" />
         </div>
         <div>
-          <h2 className="text-lg font-black text-slate-900 dark:text-white">Simular rol</h2>
-          <p className="text-xs text-slate-500">Probá la app como si fueras otro tipo de usuario</p>
+          <h2 className="text-lg font-black text-ink">Simular rol</h2>
+          <p className="text-xs text-ink-dim">Probá la app como si fueras otro tipo de usuario</p>
         </div>
       </div>
 
@@ -145,7 +145,7 @@ export default function RoleSimulator({ firebaseUser, setRoleSim, onBack }) {
 
       {/* Selector de rol */}
       <div className="space-y-2">
-        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Elegí un rol</p>
+        <p className="text-xs font-bold text-ink-dim uppercase tracking-wide">Elegí un rol</p>
         <div className="space-y-2">
           {ROLES.map(({ id, label, icon: Icon, desc }) => {
             const selected = selectedRole === id;
@@ -160,15 +160,15 @@ export default function RoleSimulator({ firebaseUser, setRoleSim, onBack }) {
                 }`}
               >
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                  selected ? 'bg-violet-100 dark:bg-violet-500/20 text-violet-600' : 'bg-slate-100 dark:bg-white/8 text-slate-400'
+                  selected ? 'bg-violet-100 dark:bg-violet-500/20 text-violet-600' : 'bg-surface-card-2 dark:bg-white/8 text-ink-dim'
                 }`}>
                   <Icon className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-bold ${selected ? 'text-violet-700 dark:text-violet-300' : 'text-slate-900 dark:text-white'}`}>
+                  <p className={`text-sm font-bold ${selected ? 'text-violet-700 dark:text-violet-300' : 'text-ink'}`}>
                     {label}
                   </p>
-                  <p className="text-xs text-slate-400 leading-relaxed">{desc}</p>
+                  <p className="text-xs text-ink-dim leading-relaxed">{desc}</p>
                 </div>
                 {selected && <ChevronRight className="w-4 h-4 text-violet-400 shrink-0" />}
               </button>
@@ -180,7 +180,7 @@ export default function RoleSimulator({ firebaseUser, setRoleSim, onBack }) {
       {/* Selector de plan (solo para empresa) */}
       {isEmpresa && (
         <div className="space-y-2">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Plan de empresa</p>
+          <p className="text-xs font-bold text-ink-dim uppercase tracking-wide">Plan de empresa</p>
           <div className="grid grid-cols-2 gap-2">
             {PLANS.map(({ id, label, icon: Icon }) => {
               const selected = selectedPlan === id;
@@ -195,11 +195,11 @@ export default function RoleSimulator({ firebaseUser, setRoleSim, onBack }) {
                   }`}
                 >
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                    selected ? 'bg-violet-100 dark:bg-violet-500/20 text-violet-600' : 'bg-slate-100 dark:bg-white/8 text-slate-400'
+                    selected ? 'bg-violet-100 dark:bg-violet-500/20 text-violet-600' : 'bg-surface-card-2 dark:bg-white/8 text-ink-dim'
                   }`}>
                     <Icon className="w-4 h-4" />
                   </div>
-                  <span className={`text-sm font-bold ${selected ? 'text-violet-700 dark:text-violet-300' : 'text-slate-700 dark:text-slate-300'}`}>
+                  <span className={`text-sm font-bold ${selected ? 'text-violet-700 dark:text-violet-300' : 'text-ink dark:text-ink-dim'}`}>
                     {label}
                   </span>
                 </button>
@@ -210,34 +210,34 @@ export default function RoleSimulator({ firebaseUser, setRoleSim, onBack }) {
       )}
 
       {/* Preview de cómo queda */}
-      <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 space-y-2">
-        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Configuración resultante</p>
+      <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-surface-card-2 dark:bg-white/5 p-4 space-y-2">
+        <p className="text-xs font-bold text-ink-dim uppercase tracking-wide">Configuración resultante</p>
         <div className="space-y-1 text-xs">
           <div className="flex justify-between">
-            <span className="text-slate-400">Rol:</span>
-            <span className="font-semibold text-slate-700 dark:text-slate-300">{ROLES.find(r => r.id === selectedRole)?.label}</span>
+            <span className="text-ink-dim">Rol:</span>
+            <span className="font-semibold text-ink dark:text-ink-dim">{ROLES.find(r => r.id === selectedRole)?.label}</span>
           </div>
           {isEmpresa && (
             <>
               <div className="flex justify-between">
-                <span className="text-slate-400">Plan:</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">{PLANS.find(p => p.id === selectedPlan)?.label}</span>
+                <span className="text-ink-dim">Plan:</span>
+                <span className="font-semibold text-ink dark:text-ink-dim">{PLANS.find(p => p.id === selectedPlan)?.label}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Límite productos:</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                <span className="text-ink-dim">Límite productos:</span>
+                <span className="font-semibold text-ink dark:text-ink-dim">
                   {selectedPlan === 'premium' ? 'Ilimitado' : selectedPlan === 'basico' ? '20' : '5'}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Estadísticas:</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">{selectedPlan === 'premium' ? 'Premium + IA' : 'Básicas'}</span>
+                <span className="text-ink-dim">Estadísticas:</span>
+                <span className="font-semibold text-ink dark:text-ink-dim">{selectedPlan === 'premium' ? 'Premium + IA' : 'Básicas'}</span>
               </div>
             </>
           )}
           <div className="flex justify-between">
-            <span className="text-slate-400">Responde demandas:</span>
-            <span className="font-semibold text-slate-700 dark:text-slate-300">{isEmpresa ? 'Sí' : 'No'}</span>
+            <span className="text-ink-dim">Acceso a estadísticas:</span>
+            <span className="font-semibold text-ink dark:text-ink-dim">{isEmpresa ? 'Sí' : 'No'}</span>
           </div>
         </div>
       </div>
@@ -253,13 +253,13 @@ export default function RoleSimulator({ firebaseUser, setRoleSim, onBack }) {
       ) : (
         <button
           onClick={handleApply}
-          className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 dark:bg-white/10 dark:hover:bg-white/20 text-white font-bold py-3 rounded-2xl transition-colors"
+          className="w-full flex items-center justify-center gap-2 bg-ink hover:bg-ink/90 dark:bg-white/10 dark:hover:bg-white/20 text-white font-bold py-3 rounded-2xl transition-colors"
         >
           <Play className="w-4 h-4" /> Aplicar cambios y recargar
         </button>
       )}
 
-      <p className="text-[10px] text-slate-400 text-center">
+      <p className="text-[10px] text-ink-dim text-center">
         La simulación se guarda en este navegador. Otros admins no la ven.
       </p>
     </div>

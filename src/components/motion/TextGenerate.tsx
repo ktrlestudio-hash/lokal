@@ -22,7 +22,7 @@ export function TextGenerate({
   className = '',
   wordClassName = '',
   highlightWords = [],
-  highlightClassName = 'text-brand dark:text-cyan-400',
+  highlightClassName = 'text-brand dark:text-brand',
   delay = 0,
   once = true,
 }: TextGenerateProps) {

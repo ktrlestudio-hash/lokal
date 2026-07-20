@@ -4,30 +4,46 @@
  */
 
 :root {
-  /* Colors - Grays */
-  --color-slate-50: #f8fafc;
-  --color-slate-100: #f1f5f9;
-  --color-slate-200: #e2e8f0;
-  --color-slate-300: #cbd5e1;
-  --color-slate-400: #94a3b8;
-  --color-slate-500: #64748b;
-  --color-slate-600: #475569;
-  --color-slate-700: #334155;
-  --color-slate-800: #1e293b;
-  --color-slate-900: #0f172a;
+  /* ─────────────────────────────────────────────────────────────────────────
+     COLOR — NO se define nada acá. Todo bebe de la ÚNICA raíz en index.css
+     (§1 marca --brand-*, §2 semánticos, §4/§4.bis superficies --surface-*/
+     --text-*). Estos son solo ALIAS con los nombres viejos (--color-*) que
+     usan las clases .ui-* de base.css/components.css, redirigidos a la raíz
+     real para que exista un solo punto de verdad. Cambiar un color = editar
+     index.css y nada más. */
 
-  /* Colors - Primary (Cyan) */
-  --color-primary: #06b6d4;
-  --color-primary-hover: #0891b2;
-  --color-primary-light: #ecf0ff;
-  --color-primary-dark: #164e63;
+  /* Escala de grises → superficies/texto reales de index.css.
+     (La app usa solo unos pocos niveles vía .ui-*; se mapean por rol.) */
+  --color-slate-50:  var(--surface-dim);
+  --color-slate-100: var(--surface-solid-2);
+  --color-slate-200: var(--border-solid);
+  --color-slate-300: var(--border-solid);
+  --color-slate-400: var(--text-secondary);
+  --color-slate-500: var(--text-secondary);
+  --color-slate-600: var(--text-secondary);
+  --color-slate-700: var(--text-primary);
+  --color-slate-800: var(--text-primary);
+  --color-slate-900: var(--text-primary);
 
-  /* Colors - Semantic */
-  --color-success: #22c55e;
-  --color-warning: #f59e0b;
-  --color-danger: #ef4444;
-  --color-info: #3b82f6;
-  --color-rose: #f43f5e;
+  /* Primario / semánticos → tokens de marca y semánticos de index.css */
+  --color-primary:       var(--brand-hex);
+  --color-primary-hover: var(--brand-hex);
+  --color-primary-light: rgb(var(--brand-muted));
+  --color-primary-dark:  var(--brand-hex);
+
+  --color-success: var(--ok-hex);
+  --color-warning: var(--warn-hex);
+  --color-danger:  var(--danger-hex);
+  --color-info:    var(--info-hex);
+  --color-rose:    var(--danger-hex);
+
+  /* Superficies/texto que consumen base.css y components.css → raíz de index.css */
+  --color-bg-primary:     var(--surface-solid);
+  --color-bg-secondary:   var(--surface-dim);
+  --color-bg-hover:       var(--surface-solid-2);
+  --color-text-primary:   var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-border:         var(--border-solid);
 
   /* Spacing */
   --space-0: 0;
@@ -100,22 +116,7 @@
   --ease-bounce: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Dark mode */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-bg-primary: var(--color-slate-900);
-    --color-bg-secondary: var(--color-slate-800);
-    --color-text-primary: #ffffff;
-    --color-text-secondary: var(--color-slate-400);
-  }
-}
-
-/* Light mode */
-@media (prefers-color-scheme: light) {
-  :root {
-    --color-bg-primary: #ffffff;
-    --color-bg-secondary: var(--color-slate-50);
-    --color-text-primary: var(--color-slate-900);
-    --color-text-secondary: var(--color-slate-600);
-  }
-}
+/* Dark/light: NO se resuelve acá. Los --color-bg-*/--color-text-* de arriba
+   apuntan a --surface-*/--text-* de index.css, que ya cambian solos entre
+   :root (claro) y .dark (oscuro) — un solo mecanismo de tema para toda la app,
+   sin un @media (prefers-color-scheme) paralelo que competía con la clase .dark. */

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Sidebar Component (DesktopSidebar) - MEJORADO con Motion
  * Navegación lateral con menú expandible
  * Ahora con indicador activo animado y tooltips mejorados
@@ -40,7 +40,7 @@ interface Tooltip {
  * <Sidebar
  *   navItems={[
  *     { label: 'Inicio', icon: Home, screen: 'home' },
- *     { label: 'Demandas', icon: Package, screen: 'mis-demandas' }
+ *     { label: 'Pedidos', icon: Package, screen: 'mis-pedidos' }
  *   ]}
  *   currentScreen={currentScreen}
  *   onNavigate={setCurrentScreen}
@@ -94,7 +94,7 @@ export function Sidebar({
         ref={sidebarRef}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        className="hidden lg:flex lg:flex-col bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-white/8 h-screen fixed top-0 left-0 z-[200] overflow-hidden"
+        className="hidden lg:flex lg:flex-col bg-surface-card border-r border-slate-100 dark:border-white/8 h-screen fixed top-0 left-0 z-[200] overflow-hidden"
         animate={{ width: expanded ? W_EXPANDED : W_COLLAPSED }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
       >
@@ -103,7 +103,7 @@ export function Sidebar({
           <div className="flex items-center h-14 px-3 overflow-hidden">
             <div className="w-10 h-10 shrink-0 flex items-center justify-center">
               <motion.div
-                className="ui-icon-btn bg-cyan-500 hover:bg-cyan-600"
+                className="ui-icon-btn bg-brand hover:bg-brand-dark"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
@@ -118,10 +118,10 @@ export function Sidebar({
               }}
               transition={{ duration: 0.2, delay: expanded ? 0.12 : 0 }}
             >
-              <p className="text-base font-black tracking-tight text-slate-900 dark:text-white leading-none">
+              <p className="text-base font-black tracking-tight text-ink leading-none">
                 Lokal
               </p>
-              <p className="text-[10px] text-slate-400 mt-0.5">Marketplace local</p>
+              <p className="text-[10px] text-ink-dim mt-0.5">Marketplace local</p>
             </motion.div>
           </div>
 
@@ -130,7 +130,7 @@ export function Sidebar({
             <div className="px-3 pb-3">
               <motion.button
                 onClick={onCreateNew}
-                className="w-full flex items-center bg-cyan-500 hover:bg-cyan-600 active:bg-cyan-600 text-white rounded-lg transition-colors overflow-hidden"
+                className="w-full flex items-center bg-brand hover:bg-brand-dark active:bg-brand-dark text-white rounded-lg transition-colors overflow-hidden"
                 style={{ height: 40 }}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.96 }}
@@ -145,7 +145,7 @@ export function Sidebar({
                   }}
                   transition={{ duration: 0.16, delay: expanded ? 0.09 : 0 }}
                 >
-                  Nueva Demanda
+                  Nuevo
                 </motion.span>
               </motion.button>
             </div>
@@ -178,8 +178,8 @@ export function Sidebar({
                 onMouseLeave={() => setTooltip(null)}
                 className={`w-full flex items-center rounded-lg transition-colors overflow-hidden relative ${
                   isActive
-                    ? 'bg-slate-100 dark:bg-white/8 text-slate-900 dark:text-white font-bold'
-                    : 'text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-700 dark:hover:text-slate-300'
+                    ? 'bg-surface-card-2 dark:bg-white/8 text-ink font-bold'
+                    : 'text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/5 hover:text-ink dark:hover:text-ink-dim'
                 }`}
                 style={{ height: 42 }}
                 whileTap={{ scale: 0.98 }}
@@ -216,7 +216,7 @@ export function Sidebar({
                       className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full mr-2 shrink-0 ${
                         isActive
                           ? 'bg-white/20 text-white'
-                          : 'bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-slate-400'
+                          : 'bg-surface-card-2 dark:bg-white/10 text-ink-dim'
                       }`}
                       initial={{ scale: 0, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
@@ -248,7 +248,7 @@ export function Sidebar({
               <a
                 key={path}
                 href={path}
-                className="text-[10px] text-slate-400 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-400 transition-colors whitespace-nowrap"
+                className="text-[10px] text-ink-dim dark:text-ink-dim hover:text-ink-dim dark:hover:text-ink-dim transition-colors whitespace-nowrap"
               >
                 {label}
               </a>
@@ -270,7 +270,7 @@ export function Sidebar({
             exit={{ opacity: 0, x: -8, y: '-50%' }}
             transition={{ type: 'spring', stiffness: 400, damping: 25 }}
           >
-            <div className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-semibold px-2 py-1 rounded-md whitespace-nowrap shadow-lg">
+            <div className="bg-ink text-white dark:text-black text-xs font-semibold px-2 py-1 rounded-md whitespace-nowrap shadow-lg">
               {tooltip.label}
               {tooltip.badge && tooltip.badge > 0 && (
                 <span className="ml-2 bg-rose-500 text-white text-[9px] px-1.5 rounded-full">

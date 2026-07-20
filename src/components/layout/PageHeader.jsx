@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+﻿import React, { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, Bell, Search, X } from 'lucide-react';
 
 export default function PageHeader({
   title, onBack, children, searchInput, filtersSlot, hideTitle, showBell = false,
-  searchValue = '',
+  searchValue = '', onSearchClear,
+  searchAlwaysVisible = false,
   openNotifications, unreadCount = 0,
   firebaseUser, toggleProfileMenu, showProfileDropdown, profileDropdownNode,
   profileDropdownRef,
@@ -32,21 +33,28 @@ export default function PageHeader({
   };
 
   const hasSearch = !!searchInput;
-  // En mobile: colapsable. En desktop: siempre expandido si hay searchInput.
-  const showSearchBar = !hasSearch ? false : searchExpanded;
-  const showLupa      = hasSearch && !searchExpanded;
+  // searchAlwaysVisible (ej. TodasOfertasScreen, donde buscar ES el propósito
+  // central de la pantalla): la barra nunca colapsa a lupa, ni en mobile —
+  // el resto de las pantallas que usan PageHeader mantienen el comportamiento
+  // colapsable de siempre (sin tocar su comportamiento).
+  const showSearchBar = !hasSearch ? false : (searchAlwaysVisible || searchExpanded);
+  const showLupa      = hasSearch && !searchAlwaysVisible && !searchExpanded;
+  const searchOpen    = searchAlwaysVisible || searchExpanded;
 
   return (
-    <div className="bg-white dark:bg-slate-900 sticky top-0 z-30">
+    <div className="bg-surface-card sticky top-0 z-30">
       <div className="px-3 lg:px-8 h-14 flex items-center gap-2 border-b border-slate-100 dark:border-white/8">
-        {onBack && !searchExpanded && (
-          <button onClick={onBack} className="ui-icon-btn hover:bg-slate-100 dark:hover:bg-white/8 shrink-0">
+        {/* Botón atrás — SIEMPRE visible si hay onBack, incluso con la
+            barra de búsqueda abierta (antes se ocultaba en mobile cuando
+            searchExpanded). */}
+        {onBack && (
+          <button onClick={onBack} className="ui-icon-btn hover:bg-surface-card-2 dark:hover:bg-white/8 shrink-0">
             <ArrowLeft className="w-5 h-5" />
           </button>
         )}
 
-        {/* Título — oculto en mobile cuando el search está expandido */}
-        {!searchExpanded && (
+        {/* Título — oculto en mobile cuando el search está abierto */}
+        {!searchOpen && (
           <h1 className={`font-bold text-base shrink-0 truncate max-w-[7rem] lg:max-w-fit ${hideTitle ? 'lg:block hidden' : ''}`}>
             {title}
           </h1>
@@ -61,38 +69,33 @@ export default function PageHeader({
         {/* Desktop: spacer si no hay search */}
         {!hasSearch && <div className="hidden lg:flex flex-1" />}
 
-        {/* Mobile: lupa cuando colapsado */}
+        {/* Mobile: lupa cuando colapsado (no aplica si searchAlwaysVisible) */}
         {showLupa && (
           <button
             onClick={() => setSearchExpanded(true)}
-            className="lg:hidden ui-icon-btn text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8 shrink-0 ml-auto"
+            className="lg:hidden ui-icon-btn text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8 shrink-0 ml-auto"
           >
             <Search className="w-5 h-5" />
           </button>
         )}
 
-        {/* Mobile: barra expandida */}
+        {/* Mobile: barra expandida — la X (limpiar/cerrar) vive DENTRO del
+            input (via searchInput, cada pantalla la agrega en su propio
+            <input>), no como botón aparte al costado — un solo elemento
+            angosto en vez de input + botón compitiendo por ancho. */}
         {showSearchBar && (
-          <div ref={searchWrapRef} onBlur={handleSearchBlur} className="lg:hidden flex-1 min-w-0 flex items-center gap-1">
+          <div ref={searchWrapRef} onBlur={searchAlwaysVisible ? undefined : handleSearchBlur} className="lg:hidden flex-1 min-w-0 flex items-center relative">
             {searchInput}
-            {!searchValue && (
-              <button
-                onMouseDown={e => { e.preventDefault(); setSearchExpanded(false); }}
-                className="ui-icon-btn shrink-0 text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
           </div>
         )}
 
-        {/* Spacer mobile cuando no hay search expandido */}
-        {!searchExpanded && !hasSearch && <div className="flex-1 lg:hidden" />}
+        {/* Spacer mobile cuando no hay search abierto */}
+        {!searchOpen && !hasSearch && <div className="flex-1 lg:hidden" />}
 
         {children}
 
         {showBell && openNotifications && (
-          <button onClick={openNotifications} className="ui-icon-btn text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/8 relative transition-colors shrink-0">
+          <button onClick={openNotifications} className="ui-icon-btn text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8 relative transition-colors shrink-0">
             <Bell className="w-4.5 h-4.5" />
             {unreadCount > 0 && <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-rose-500 rounded-full" />}
           </button>

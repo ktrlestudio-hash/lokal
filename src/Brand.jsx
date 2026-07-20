@@ -30,19 +30,19 @@ export const BRAND = {
   year:     2026,
 
   colors: {
-    primary:   '#00B8D9',  // turquesa — color principal
-    secondary: '#3A86FF',  // azul eléctrico
-    deep:      '#0B132B',  // azul profundo (fondos oscuros)
-    darkBg:    '#0F172A',  // fondo dark modo
-    lightBg:   '#F8FAFC',  // fondo light mode
-    accent:    '#FFD60A',  // amarillo — uso limitado, solo CTAs clave
+    primary:   '#00B8D9',  // turquesa — color principal (LOKAL global)
+    secondary: '#FFC530',  // amarillo dorado — segundo color de marca (badges, descuentos)
+    deep:      '#083344',  // cyan-950 profundo (fondos oscuros, degradados decorativos)
+    darkBg:    '#080808',  // fondo dark modo — gris neutro casi negro
+    lightBg:   '#f5f5f5',  // fondo light mode
+    accent:    '#FFC530',  // amarillo — uso limitado, solo CTAs clave / descuentos
   },
 
   semantic: {
     ok:      '#22C55E',
     warn:    '#F59E0B',
     danger:  '#EF4444',
-    info:    '#94A3B8',
+    info:    '#a3a3a3',
     new:     '#8B5CF6',
   },
 
@@ -91,7 +91,7 @@ export function LogoSymbol({ size = 32, color, className = '' }) {
  *
  * @param {number} size     — tamaño total del badge en px
  * @param {boolean} inverted — fondo blanco + símbolo brand (vs brand + símbolo blanco)
- * @param {boolean} dark    — fondo oscuro (#0B132B) + símbolo blanco
+ * @param {boolean} dark    — fondo oscuro (#2A0509) + símbolo blanco
  * @param {string} className
  */
 export function LogoBadge({ size = 40, inverted = false, dark: darkMode = false, className = '' }) {
@@ -100,7 +100,7 @@ export function LogoBadge({ size = 40, inverted = false, dark: darkMode = false,
 
   let bg, symbolColor;
   if (darkMode) {
-    bg = '#0B132B';
+    bg = '#2A0509';
     symbolColor = 'white';
   } else if (inverted) {
     bg = 'white';
@@ -226,7 +226,7 @@ export function KtrlMark({ className = '', style }) {
  * Datos para meta tags OG. Usar en index.html o al generar la imagen.
  *
  * Para generar la imagen OG:
- *   - Fondo: #0F172A (dark) o #F8FAFC (light)
+ *   - Fondo: #0F0305 (dark) o #f5f5f5 (light)
  *   - Logo centrado: LogoFull size=80, color blanco
  *   - Tagline debajo: "Descubrí, Comprá, Conectá." color brand
  *   - Dimensiones: 1200×630px

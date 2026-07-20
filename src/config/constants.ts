@@ -4,16 +4,32 @@
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CATEGORÍAS (basadas en categories.js existente)
+// TIENDA FIJA (mono-tienda) — LOKAL LINKS sirve un único negocio en la raíz.
+// Debe coincidir con el `slug` real guardado en el backend (tiendas-crud.js /
+// _lib/tiendas-store.js) para el negocio que se va a publicar.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const DEMANDA_CATEGORIES = [
-  'Electrónica',
-  'Ropa',
-  'Hogar',
-  'Deportes',
-  'Otro',
-];
+export const TIENDA_SLUG_FIJA = 'principal';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MODO DE REGISTRO — controla la fricción de entrada al crear tienda nueva.
+// Cambiar acá (o vía env var) sin tocar el resto del flujo de registro.
+//   'invitacion' → requiere link de uso único generado por un admin (más
+//                  control — recomendado al arrancar, pocos negocios reales).
+//   'abierto'    → cualquier usuario logueado con Google crea su tienda
+//                  directo, con trial gratis (más fricción baja, para cuando
+//                  se quiera escalar sin intervención manual por cada alta).
+// Backend YA soporta ambos caminos (tiendas-crud.js POST): trial:true o
+// token+sessionId contra invites.js — este flag solo decide qué camino usa
+// el frontend (RegistroTienda.jsx).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const REGISTRO_MODO: 'invitacion' | 'abierto' =
+  (import.meta.env.VITE_REGISTRO_MODO === 'abierto' ? 'abierto' : 'invitacion');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CATEGORÍAS (basadas en categories.js existente)
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const JOB_CATEGORIES = [
   'Ventas',
@@ -183,7 +199,6 @@ export const STORE_QUICK_REPLIES = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const ACTIVE_MODULES = {
-  demandas: true,
   oportunidades: true,
   servicios: true,
   viajes: true,
@@ -206,11 +221,6 @@ export const ROUTES = {
   EXPLORE: '/explore',
   PROFILE: '/profile',
   SETTINGS: '/settings',
-
-  // Demandas
-  DEMANDAS: '/demandas',
-  DEMANDA_DETAIL: '/demandas/:id',
-  CREATE_DEMANDA: '/demandas/new',
 
   // Jobs
   JOBS: '/jobs',

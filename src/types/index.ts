@@ -10,173 +10,9 @@
 
 export type UserRole = 'user' | 'entrepreneur' | 'verified_store' | 'admin';
 
-export type UserCapabilities = {
-  canCreateDemandas: boolean;
-  canExploreMap: boolean;
-  canApplyForJobs: boolean;
-  canPublishServices: boolean;
-  canPublishJobs: boolean;
-  canPublishProducts: boolean;
-  canAccessStats: boolean;
-  canCreateMiniWeb: boolean;
-  canManageStore: boolean;
-};
-
-export interface UserProfile {
-  id: string;
-  email: string;
-  displayName: string;
-  photoURL?: string;
-  createdAt: string;
-  updatedAt: string;
-  
-  // ─── Ubicación ───────────────────────────────────────────────────────
-  location?: {
-    lat: number;
-    lng: number;
-    city: string;
-    neighborhood?: string;
-  };
-  
-  // ─── Identidad: Sistema de roles dinámicos ────────────────────────────
-  // NO: cuenta usuario, cuenta empresa, cuenta CV
-  // SÍ: una identidad con capacidades habilitadas
-  roles: UserRole[];
-  capabilities: UserCapabilities;
-  
-  // ─── Perfil de Usuario ────────────────────────────────────────────────
-  bio?: string;
-  skills?: string[];
-  interests?: string[];
-  availability?: {
-    status: 'available' | 'unavailable' | 'searching';
-    from?: string; // ISO date
-    to?: string;   // ISO date
-  };
-  
-  // ─── Reputación ──────────────────────────────────────────────────────
-  reputation: {
-    rating: number; // 0-5
-    reviewCount: number;
-    completionRate: number; // porcentaje
-  };
-  
-  // ─── Estadísticas de Actividad ─────────────────────────────────────
-  stats: {
-    profileViews: number;
-    interactions: number;
-    savedItems: number;
-    applications: number; // si es candidato
-  };
-  
-  // ─── Preferencias ────────────────────────────────────────────────────
-  preferences?: {
-    theme: 'light' | 'dark' | 'auto';
-    language: string;
-    notifications: {
-      enabled: boolean;
-      email: boolean;
-      push: boolean;
-    };
-  };
-  
-  // ─── Métadata ───────────────────────────────────────────────────────
-  lastActiveAt: string;
-  isVerified: boolean;
-  isSuspended: boolean;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// IDENTIDAD DE TIENDA (Empresa/Comercio)
-// Puede ser la misma persona si tiene rol "entrepreneur" o "verified_store"
-// ─────────────────────────────────────────────────────────────────────────────
-
-export interface StoreProfile {
-  id: string;
-  userId: string; // FK a UserProfile.id
-  name: string;
-  description?: string;
-  logo?: string;
-  banner?: string;
-  
-  // ─── Ubicación ───────────────────────────────────────────────────────
-  location: {
-    lat: number;
-    lng: number;
-    city: string;
-    address: string;
-    phone?: string;
-    whatsapp?: string;
-  };
-  
-  // ─── Identidad de Tienda ──────────────────────────────────────────────
-  category: string; // Retail, Servicios, etc.
-  tags?: string[];
-  website?: string;
-  socialMedia?: {
-    instagram?: string;
-    facebook?: string;
-    tiktok?: string;
-  };
-  
-  // ─── Horarios ────────────────────────────────────────────────────────
-  schedules?: {
-    lunes?: string; // "09:00-18:00"
-    martes?: string;
-    miercoles?: string;
-    jueves?: string;
-    viernes?: string;
-    sabado?: string;
-    domingo?: string;
-  };
-  
-  // ─── Verificación y Reputación ───────────────────────────────────────
-  isVerified: boolean;
-  verifiedAt?: string;
-  reputation: {
-    rating: number; // 0-5
-    reviewCount: number;
-  };
-  
-  // ─── Estadísticas ────────────────────────────────────────────────────
-  stats: {
-    views: number;
-    interactions: number;
-    jobsPosted: number;
-    applicants: number;
-    productsPublished: number;
-  };
-  
-  // ─── Estado ──────────────────────────────────────────────────────────
-  isActive: boolean;
-  isSuspended: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // MÓDULOS: TIPOS DE CONTENIDO
 // ─────────────────────────────────────────────────────────────────────────────
-
-// ──── Demandas (productos buscados, necesidades) ──────────────────────────────
-export interface Demanda {
-  id: string;
-  userId: string; // Quien busca
-  title: string;
-  description: string;
-  category: string;
-  tags?: string[];
-  location: {
-    lat: number;
-    lng: number;
-    city: string;
-    radius?: number; // km
-  };
-  createdAt: string;
-  expiresAt?: string;
-  status: 'active' | 'resolved' | 'expired';
-  responses?: string[]; // IDs de respuestas
-}
 
 // ──── Oportunidades Laborales ────────────────────────────────────────────────
 export interface JobOpportunity {
@@ -286,7 +122,7 @@ export interface Review {
   toUserId: string;
   rating: number; // 1-5
   comment: string;
-  category: 'demanda' | 'oportunidad' | 'servicio' | 'producto' | 'viaje' | 'general';
+  category: 'oportunidad' | 'servicio' | 'producto' | 'viaje' | 'general';
   relatedItemId?: string; // ID de lo que se califica
   createdAt: string;
 }
@@ -303,9 +139,7 @@ export interface ReputationRecord {
 // ACTIVIDAD Y NOTIFICACIONES
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ActivityType = 
-  | 'demanda_created'
-  | 'demanda_responded'
+export type ActivityType =
   | 'job_applied'
   | 'job_rejected'
   | 'job_accepted'
@@ -363,7 +197,7 @@ export interface Conversation {
   lastMessageAt: string;
   unreadCount: number;
   relatedItemId?: string; // Si vino de un job, producto, etc.
-  relatedItemType?: 'job' | 'product' | 'service' | 'demanda';
+  relatedItemType?: 'job' | 'product' | 'service';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -384,7 +218,6 @@ export interface FeatureFlag {
 export interface AppConfig {
   featureFlags: FeatureFlag[];
   modules: {
-    demandas: boolean;
     oportunidades: boolean;
     servicios: boolean;
     viajes: boolean;

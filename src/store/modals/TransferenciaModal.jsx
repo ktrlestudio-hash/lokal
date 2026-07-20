@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { X, Copy, Check, Camera, CreditCard, Loader2, AlertCircle } from 'lucide-react';
 
 export default function TransferenciaModal({ open, onClose, plan, monto, tiendaId, onSuccess }) {
@@ -112,9 +112,9 @@ export default function TransferenciaModal({ open, onClose, plan, monto, tiendaI
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[5000] flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-surface-card rounded-3xl w-full max-w-md overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 text-white relative">
+        <div className="bg-gradient-to-br from-[#1a1a1a] to-[#2e2e2e] p-6 text-white relative">
           <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
             <X className="w-4 h-4" />
           </button>
@@ -122,7 +122,7 @@ export default function TransferenciaModal({ open, onClose, plan, monto, tiendaI
             <CreditCard className="w-6 h-6 text-emerald-400" />
           </div>
           <h2 className="font-black text-xl mb-1">Pagar por transferencia</h2>
-          <p className="text-slate-300 text-sm">Plan {plan === 'anual' ? 'Anual' : 'Mensual'}</p>
+          <p className="text-ink-dim text-sm">Plan {plan === 'anual' ? 'Anual' : 'Mensual'}</p>
         </div>
 
         {exito ? (
@@ -130,11 +130,11 @@ export default function TransferenciaModal({ open, onClose, plan, monto, tiendaI
             <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-500/15 rounded-full flex items-center justify-center mx-auto mb-4">
               <Check className="w-8 h-8 text-emerald-600" />
             </div>
-            <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-2">¡Comprobante enviado!</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+            <h3 className="font-bold text-lg text-ink mb-2">¡Comprobante enviado!</h3>
+            <p className="text-sm text-ink-dim mb-4">
               Verificaremos tu pago y activaremos tu plan en breve.
             </p>
-            <button onClick={onClose} className="w-full py-3 rounded-2xl font-bold text-sm bg-slate-900 dark:bg-white/10 text-white hover:bg-slate-800 transition-colors">
+            <button onClick={onClose} className="w-full py-3 rounded-2xl font-bold text-sm bg-ink dark:bg-white/10 text-white hover:bg-ink/90 transition-colors">
               Entendido
             </button>
           </div>
@@ -150,37 +150,37 @@ export default function TransferenciaModal({ open, onClose, plan, monto, tiendaI
             {config ? (
               <div className="space-y-3">
                 {config.alias && (
-                  <button onClick={copiarAlias} className="w-full flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:border-emerald-400 transition-colors">
+                  <button onClick={copiarAlias} className="w-full flex items-center justify-between p-4 rounded-2xl bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:border-emerald-400 transition-colors">
                     <div className="text-left">
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wide font-bold">Alias</p>
-                      <p className="text-lg font-bold text-slate-900 dark:text-white font-mono">{config.alias}</p>
+                      <p className="text-[10px] text-ink-dim uppercase tracking-wide font-bold">Alias</p>
+                      <p className="text-lg font-bold text-ink font-mono">{config.alias}</p>
                     </div>
-                    <div className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold ${copied ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 dark:bg-white/10 text-slate-600'}`}>
+                    <div className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold ${copied ? 'bg-emerald-100 text-emerald-600' : 'bg-surface-card-2 dark:bg-white/10 text-ink-dim'}`}>
                       {copied ? <><Check className="w-3.5 h-3.5" /> Copiado</> : <><Copy className="w-3.5 h-3.5" /> Copiar</>}
                     </div>
                   </button>
                 )}
                 {config.cbu && (
-                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wide font-bold">CBU/CVU</p>
-                    <p className="text-sm font-mono text-slate-700 dark:text-slate-300 break-all">{config.cbu}</p>
+                  <div className="p-3 rounded-xl bg-surface-card-2 dark:bg-white/5">
+                    <p className="text-[10px] text-ink-dim uppercase tracking-wide font-bold">CBU/CVU</p>
+                    <p className="text-sm font-mono text-ink dark:text-ink-dim break-all">{config.cbu}</p>
                   </div>
                 )}
                 {config.titular && (
-                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wide font-bold">Titular</p>
-                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{config.titular}</p>
+                  <div className="p-3 rounded-xl bg-surface-card-2 dark:bg-white/5">
+                    <p className="text-[10px] text-ink-dim uppercase tracking-wide font-bold">Titular</p>
+                    <p className="text-sm font-semibold text-ink dark:text-ink-dim">{config.titular}</p>
                   </div>
                 )}
                 {config.banco && (
-                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wide font-bold">Banco</p>
-                    <p className="text-sm text-slate-700 dark:text-slate-300">{config.banco}</p>
+                  <div className="p-3 rounded-xl bg-surface-card-2 dark:bg-white/5">
+                    <p className="text-[10px] text-ink-dim uppercase tracking-wide font-bold">Banco</p>
+                    <p className="text-sm text-ink dark:text-ink-dim">{config.banco}</p>
                   </div>
                 )}
               </div>
             ) : (
-              <div className="flex items-center justify-center gap-2 text-slate-500 text-sm py-4">
+              <div className="flex items-center justify-center gap-2 text-ink-dim text-sm py-4">
                 <Loader2 className="w-4 h-4 animate-spin" /> Cargando datos...
               </div>
             )}
@@ -195,7 +195,7 @@ export default function TransferenciaModal({ open, onClose, plan, monto, tiendaI
 
             {/* Upload comprobante */}
             <div>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Comprobante de pago</p>
+              <p className="text-xs font-bold text-ink-dim uppercase tracking-wide mb-2">Comprobante de pago</p>
               <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
               {imagenPreview ? (
                 <div className="relative rounded-2xl overflow-hidden border-2 border-emerald-400">
@@ -206,8 +206,8 @@ export default function TransferenciaModal({ open, onClose, plan, monto, tiendaI
                 </div>
               ) : (
                 <button onClick={() => fileInputRef.current?.click()} className="w-full p-6 rounded-2xl border-2 border-dashed border-slate-300 dark:border-white/15 hover:border-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/5 transition-all flex flex-col items-center gap-2">
-                  <Camera className="w-6 h-6 text-slate-400" />
-                  <span className="text-sm text-slate-500 dark:text-slate-400">Adjuntar captura de transferencia</span>
+                  <Camera className="w-6 h-6 text-ink-dim" />
+                  <span className="text-sm text-ink-dim">Adjuntar captura de transferencia</span>
                 </button>
               )}
             </div>
@@ -217,7 +217,7 @@ export default function TransferenciaModal({ open, onClose, plan, monto, tiendaI
               value={notas}
               onChange={e => setNotas(e.target.value)}
               placeholder="Notas opcionales (ej: número de transferencia, hora, etc.)"
-              className="w-full p-3 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 text-sm resize-none h-20"
+              className="w-full p-3 rounded-xl border border-slate-200 dark:border-white/10 bg-surface-card text-sm resize-none h-20"
             />
 
             {/* Error */}
