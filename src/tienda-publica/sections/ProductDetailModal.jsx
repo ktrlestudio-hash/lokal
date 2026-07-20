@@ -21,7 +21,7 @@ export function ProductDetailModal({ producto, onClose, onCompartir }) {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 4700, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.6)' }} />
-      <div style={{
+      <div className="tp-sheet-scroll" style={{
         position: 'relative', width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto',
         background: 'var(--tp-surface)', borderRadius: `${RADIUS.xl} ${RADIUS.xl} 0 0`, boxShadow: SHADOW.xl, ...F,
       }}>
@@ -36,6 +36,8 @@ export function ProductDetailModal({ producto, onClose, onCompartir }) {
           .tp-pdm-share { transition: transform .12s cubic-bezier(0.34,1.56,0.64,1), filter .15s ease; }
           .tp-pdm-close:active { transform: scale(0.9); transition: transform .06s ease; }
           .tp-pdm-share:active { transform: scale(0.95); transition: transform .06s ease; }
+          .tp-sheet-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+          .tp-sheet-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }
         `}</style>
         <button onClick={onClose} aria-label="Cerrar" className="tp-pdm-close" style={{
           position: 'absolute', top: 12, right: 12, zIndex: 2,

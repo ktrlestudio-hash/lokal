@@ -7,7 +7,7 @@
  * /ofertas), reimplementadas acá en un sheet chico para no forzar al dueño
  * a salir de la vista pública para una acción de un toque.
  */
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X, Eye, EyeOff, CalendarClock, Trash2, Loader2 } from 'lucide-react';
 import { apiFetch } from '../../api.js';
 import { useSheetOpen } from '../hooks/useSheetOpen.js';
@@ -28,6 +28,20 @@ export function OfertaAdminSheet({ open, onClose, oferta, onUpdated, onDeleted }
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [error, setError] = useState(null);
+  const calendarRef = useRef(null);
+
+  // Al abrir el calendario, hacemos scroll dentro del panel (no de la
+  // página) para que quede completo a la vista — el mismo bottom-sheet no
+  // crece de alto, pero si el calendario asoma tapado por el borde inferior,
+  // este scroll lo trae a la vista con una animación suave en vez de
+  // aparecer cortado sin más.
+  useEffect(() => {
+    if (!calendarOpen) return;
+    const raf = requestAnimationFrame(() => {
+      calendarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [calendarOpen]);
 
   // Reseteo de sub-estados de UI (no del sheet en sí) cada vez que se abre
   // para una oferta distinta o se vuelve a abrir — evita arrastrar
@@ -92,7 +106,7 @@ export function OfertaAdminSheet({ open, onClose, oferta, onUpdated, onDeleted }
         .oas-row:active { transform: scale(0.97); transition: transform .06s ease; }
       `}</style>
       <div onClick={busy ? undefined : onClose} className={`tp-sheet-ov ${visible ? 'in' : ''}`} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.45)' }} />
-      <div className={`tp-sheet-panel ${visible ? 'in' : ''}`} style={{
+      <div className={`tp-sheet-panel tp-sheet-scroll ${visible ? 'in' : ''}`} style={{
         position: 'relative', background: 'var(--tp-surface)', borderRadius: `${RADIUS.xl} ${RADIUS.xl} 0 0`,
         boxShadow: SHADOW.xl, maxHeight: '80vh', overflowY: 'auto', ...F,
       }}>
@@ -139,9 +153,12 @@ export function OfertaAdminSheet({ open, onClose, oferta, onUpdated, onDeleted }
 
           {/* Calendario custom in-sheet — reemplaza al <input type="date">
               nativo del sistema, mismos tokens --tp-* que el resto de la
-              tienda pública. "Sin vencimiento" limpia expireAt en un toque. */}
+              tienda pública. "Sin vencimiento" limpia expireAt en un toque.
+              ref + scrollIntoView (ver useEffect arriba): si al desplegarse
+              queda parcialmente tapado por el borde inferior del sheet, se
+              trae a la vista con scroll suave dentro del panel. */}
           {calendarOpen && (
-            <div style={{ marginTop: 10, padding: 10, borderRadius: RADIUS.lg, background: 'var(--tp-surface2)' }}>
+            <div ref={calendarRef} style={{ marginTop: 10, padding: 10, borderRadius: RADIUS.lg, background: 'var(--tp-surface2)' }}>
               <TpMiniCalendario
                 valueISO={fechaInputValue(oferta.expireAt)}
                 onPick={(iso) => patch({ expireAt: new Date(iso).toISOString() }, { closeCalendar: true })}

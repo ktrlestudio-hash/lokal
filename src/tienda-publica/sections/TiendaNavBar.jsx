@@ -64,10 +64,17 @@ export function TiendaNavBar({ onAbrirMapa, onAbrirHorarios, onCompartir }) {
       {/* Hover con fondo + color de marca en el ícono — mismo lenguaje que
           BottomNav de StoreApp.jsx (admin): ahí cada ítem reacciona con
           bg-surface-card-2/8 al pasar el mouse, acá no había ningún
-          feedback de hover, solo el active:scale al presionar. */}
+          feedback de hover, solo el active:scale al presionar.
+          @media(hover:hover): sin esto, en dispositivos táctiles el estilo
+          de "hover" queda pegado después de un tap (no hay mouse que se
+          aleje para quitarlo) — mismo criterio que ya usa el resto de
+          tienda-publica (TiendaFooter, cm-hero-arrow, cm-hero-share-btn),
+          que este nav no tenía. */}
       <style>{`
-        .tp-nav-item:hover .tp-nav-icon { background: color-mix(in srgb, var(--tp-text) 6%, transparent); }
-        .tp-nav-share:hover .tp-nav-share-icon { filter: brightness(1.08); }
+        @media (hover: hover) {
+          .tp-nav-item:hover .tp-nav-icon { background: color-mix(in srgb, var(--tp-text) 6%, transparent); }
+          .tp-nav-share:hover .tp-nav-share-icon { filter: brightness(1.08); }
+        }
       `}</style>
       {/* Mismo padding que BottomNav global: 4px lateral, 8px arriba, 12px
           abajo (antes era 8/6/10 uniforme, ligeramente distinto). */}

@@ -99,7 +99,7 @@ export function TiendaStatsSheet({ open, onClose, tienda }) {
         }
       `}</style>
       <div onClick={onClose} className={`tp-sheet-ov ${visible ? 'in' : ''}`} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.45)' }} />
-      <div className={`tp-sheet-panel ${visible ? 'in' : ''}`} style={{
+      <div className={`tp-sheet-panel tp-sheet-scroll ${visible ? 'in' : ''}`} style={{
         position: 'relative', background: 'var(--tp-surface)', borderRadius: `${RADIUS.xl} ${RADIUS.xl} 0 0`,
         boxShadow: SHADOW.xl, maxHeight: '80vh', overflowY: 'auto', ...F,
       }}>

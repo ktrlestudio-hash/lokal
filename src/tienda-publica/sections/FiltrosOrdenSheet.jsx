@@ -20,7 +20,7 @@ function SheetShell({ open, onClose, title, children }) {
     <div style={{ position: 'fixed', inset: 0, zIndex: 4720, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
       <style>{SHEET_TRANSITION_CSS}</style>
       <div onClick={onClose} className={`tp-sheet-ov ${visible ? 'in' : ''}`} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.45)' }} />
-      <div className={`tp-sheet-panel ${visible ? 'in' : ''}`} style={{
+      <div className={`tp-sheet-panel tp-sheet-scroll ${visible ? 'in' : ''}`} style={{
         position: 'relative', background: 'var(--tp-surface)', borderRadius: `${RADIUS.xl} ${RADIUS.xl} 0 0`,
         maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: SHADOW.xl, ...F,
       }}>
