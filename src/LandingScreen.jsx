@@ -148,17 +148,25 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
             boxShadow: '0 6px 22px -10px rgb(var(--brand, 0 184 217) / 0.55)',
           }}
         >
-          {/* color-scheme sigue al tema real: forzarlo a light hacía que en
-              modo oscuro el iframe se dibujara blanco contra el fondo casi
-              negro de la landing.
+          {/* Medido con Playwright sobre el botón real: el iframe que inyecta
+              GIS se dibuja 340x44 con un margin:-2px -10px propio (esquinas
+              cuadradas, fondo blanco propio), aunque se le pida width:320.
+              Compensar ese margen con padding no alcanza: las esquinas
+              cuadradas del iframe igual asoman contra el radio de la
+              cápsula, sobre todo en dark, donde el fondo blanco del botón
+              contrasta fuerte.
 
-              minHeight reserva el alto del botón: GIS dibuja primero el
-              genérico "Continuar con Google" y, tras consultar la sesión,
-              lo reemplaza por el personalizado "Continuar como X", que es
-              más alto. Sin el hueco reservado ese cambio empujaba todo lo
-              de abajo. El alto es el del botón size:'large' personalizado. */}
-          <div ref={slotRef} className="rounded-2xl flex items-center justify-center"
-            style={{ colorScheme: isDark ? 'dark' : 'light', minHeight: 44 }} />
+              La solución es un visor de 320px exactos con overflow-hidden:
+              deja pasar el botón centrado y recorta limpio cualquier borde
+              que el iframe saque por fuera, sin ese halo blanco en dark.
+
+              color-scheme sigue al tema real: forzarlo a light hacía que en
+              modo oscuro el iframe se dibujara blanco contra el fondo casi
+              negro de la landing. */}
+          <div className="rounded-2xl overflow-hidden" style={{ width: 320, height: 44 }}>
+            <div ref={slotRef} className="flex items-center justify-center"
+              style={{ colorScheme: isDark ? 'dark' : 'light', width: 340, height: 44, marginLeft: -10 }} />
+          </div>
         </div>
         <span className="text-[11px] font-semibold text-center" style={{ color: 'var(--text-secondary, #999)' }}>
           Gratis para empezar · sin tarjeta
