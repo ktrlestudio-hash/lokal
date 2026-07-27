@@ -173,15 +173,26 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
             borde del visor (subpíxel de redondeo), no había una segunda
             capa que lo recorte de nuevo.
 
-            Ahora la cápsula ES el único recorte, mide el ancho final exacto
-            (320) y el iframe se centra adentro con su tamaño real (340,
-            offset -10). Sin padding intermedio, sin hueco donde el blanco
-            se filtre. */}
+            Ahora la cápsula ES el único recorte. Medido con Playwright el
+            div REAL que Google pinta adentro del iframe (no el iframe
+            entero, que trae 10px de margen invisible en cada lado): 320x40,
+            centrado en un iframe de 340x44. La cápsula mide ese 320x40
+            exacto, con radio = height/2 (20px) para un pill perfecto en las
+            puntas, igual que dibuja Google — antes usaba un radio fijo
+            (18.4px) que no coincidía con el radio real del botón, y una
+            altura de 44 (la del iframe, no la del botón visible) que dejaba
+            4px de sobra arriba/abajo y descentraba el conjunto.
+
+            El flex justify-center centra solo el iframe de 340 dentro de
+            los 320 de la cápsula — SIN marginLeft manual: ese -10 competía
+            con el centrado automático del flex y corría el botón hacia un
+            lado, que es el espacio de sobra que se veía a la derecha. */}
         <div
-          className="rounded-[1.15rem] overflow-hidden flex items-center justify-center"
+          className="overflow-hidden flex items-center justify-center"
           style={{
             width: 320,
-            height: 44,
+            height: 40,
+            borderRadius: 20,
             background: isDark
               ? 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.16), rgb(var(--brand, 0 184 217) / 0.04))'
               : 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.12), rgb(var(--brand, 0 184 217) / 0.03))',
@@ -196,7 +207,7 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
               arriba, esto solo evita que el CONTENIDO del botón salga claro
               en dark). */}
           <div ref={slotRef} className="flex items-center justify-center shrink-0"
-            style={{ colorScheme: isDark ? 'dark' : 'light', width: 340, height: 44, marginLeft: -10 }} />
+            style={{ colorScheme: isDark ? 'dark' : 'light', width: 340, height: 44 }} />
         </div>
         <span className="text-[11px] font-semibold text-center" style={{ color: 'var(--text-secondary, #999)' }}>
           Gratis para empezar · sin tarjeta
