@@ -104,12 +104,23 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
     let limpiar;
     let vivo = true;
     renderBotonGoogle(slotRef.current, {
-      // outline_dark, no filled_black: el fondo de la landing en dark ya es
-      // casi negro (#040a14), así que un botón negro relleno se funde con él
-      // y se ve el marco del iframe recortado. outline_dark trae borde propio.
-      theme: isDark ? 'outline_dark' : 'outline',
-      // color_scheme del IdConfiguration: hace que el diálogo nativo salga
-      // en oscuro cuando la landing lo está, en vez de blanco a pleno.
+      // Google solo da 4 combinaciones fijas de color para este botón (no
+      // hay forma de pedirle un color propio): outline (#FFFFFF),
+      // outline_dark (#131314 casi negro), filled_blue, filled_black. Antes
+      // se elegía el theme que "combina" con el fondo real de la landing —
+      // outline_dark (casi negro) sobre el fondo oscuro (#040a14, AÚN MÁS
+      // oscuro que el botón) y outline (blanco) sobre el fondo claro
+      // (blanco también) — así que el botón se fundía con la página en
+      // los dos temas, quedando apagado.
+      //
+      // Se invierte a propósito: el theme CLARO sobre el fondo oscuro, y el
+      // OSCURO sobre el fondo claro, para que el botón contraste contra la
+      // página en vez de camuflarse con ella.
+      theme: isDark ? 'outline' : 'outline_dark',
+      // color_scheme sigue en isDark real (no en el theme invertido de
+      // arriba): esto es lo que Google usa para decidir el color del
+      // DIÁLOGO nativo que se abre al tocar el botón (la lista de cuentas),
+      // que sí debe acompañar el tema de la página, no el color del botón.
       colorScheme: isDark ? 'dark' : 'light',
       // 320px: el máximo que admite GIS es 400, pero por encima de ~330 el
       // botón se estira y el logo queda flotando lejos del texto.
