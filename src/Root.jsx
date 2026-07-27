@@ -348,7 +348,16 @@ export default function Root() {
   //    es lo que espera alguien que llega a la raíz del producto.
   //    Las tiendas siguen sirviéndose por su slug propio (/:tienda). ──────
   if (!pathToTiendaSlug(window.location.pathname)) {
-    return <LandingScreen isDark={isDark} toggleTheme={toggleTheme} />;
+    return (
+      <LandingScreen
+        isDark={isDark}
+        toggleTheme={toggleTheme}
+        // pushState + recheck en vez de window.location.href: pasar de la
+        // landing al login no debe recargar la página entera (pantalla en
+        // blanco + splash de nuevo). Mismo mecanismo que el resto de la app.
+        onIrAlPanel={() => { window.history.pushState({}, '', '/admin'); forceUrlRecheck(); }}
+      />
+    );
   }
 
   // ── Tienda pública por slug — multi-tienda: /:tienda resuelve la tienda

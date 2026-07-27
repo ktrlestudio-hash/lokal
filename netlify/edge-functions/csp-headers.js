@@ -21,7 +21,10 @@ const CSP_PROD = [
   "object-src 'none'",
   "frame-ancestors 'none'",
   "script-src 'self' 'unsafe-inline' https://apis.google.com https://accounts.google.com",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  // accounts.google.com: Google Identity Services (botón de login nativo)
+  // carga su propia hoja de estilos desde /gsi/style — sin esto el botón se
+  // renderiza sin estilos.
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' https: data: blob:",
   "media-src 'self' https: data: blob:",

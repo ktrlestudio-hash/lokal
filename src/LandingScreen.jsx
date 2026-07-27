@@ -11,9 +11,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Loader2, AlertCircle, Sun, Moon, Check, ChevronDown, Store, Tag,
-  MessageSquare, Share2, Instagram, BarChart3, Sparkles,
+  MessageSquare, Share2, Instagram, BarChart3, Sparkles, ArrowUp,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
-import { signInWithGoogle } from './firebase';
+import { signInWithGoogle, renderBotonGoogle, gisDisponible } from './firebase';
 import { LogoFull, KtrlMark } from './Brand';
 
 const GoogleIcon = ({ size = 20 }) => (
@@ -24,6 +25,16 @@ const GoogleIcon = ({ size = 20 }) => (
     <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
   </svg>
 );
+
+// Superficie de card enriquecida con el azul de marca. Los tokens globales
+// (--surface-solid/#f5f5f5) son gris neutro a propósito ("cero azul", ver
+// index.css §4) — correcto para el panel, pero en la landing dejaban las
+// cards planas y pálidas. Acá se les mezcla una pizca de marca, el mismo
+// recurso que hace que la card de "Empezá sin pagar" se lea viva.
+const CARD_TINTED = {
+  background: 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.055), rgb(var(--brand, 0 184 217) / 0.015))',
+  borderColor: 'rgb(var(--brand, 0 184 217) / 0.14)',
+};
 
 // Aparición al entrar en viewport — IntersectionObserver nativo en vez de
 // motion/react: la landing es lo primero que carga un visitante nuevo, no
@@ -53,9 +64,9 @@ function FadeUp({ children, delay = 0, className = '' }) {
 }
 
 const PASOS = [
-  { icon: Store,   titulo: 'Creá tu tienda',      desc: 'Entrás con Google y cargás nombre, foto y datos de contacto. Sin instalar nada.' },
-  { icon: Tag,     titulo: 'Publicá tus ofertas', desc: 'Subís una foto, le ponés precio y fecha de vencimiento. Aparece al instante.' },
-  { icon: Share2,  titulo: 'Compartí tu link',    desc: 'Tenés una dirección propia para mandar por WhatsApp o poner en tu Instagram.' },
+  { icon: Store,   titulo: 'Creá tu tienda',      desc: 'Entrás con Google y cargás nombre, foto y contacto. Sin instalar nada.' },
+  { icon: Tag,     titulo: 'Publicá tus ofertas', desc: 'Subís una foto, ponés precio y vencimiento. Aparece al instante.' },
+  { icon: Share2,  titulo: 'Compartí tu link',    desc: 'Una dirección propia para WhatsApp o tu perfil de Instagram.' },
 ];
 
 const FEATURES = [
@@ -76,8 +87,7 @@ const FAQ = [
 // Mockup del panel real (no una foto): réplica en miniatura del admin de
 // ofertas — grilla de cards con su badge de vencimiento y la fila de
 // acciones. Sirve para que el dueño reconozca la herramienta antes de
-// registrarse. Inspirado en los mockups de la landing de LOKAL global,
-// pero mostrando LA pantalla que realmente va a usar en LINKS.
+// registrarse.
 function PanelMockup() {
   const OFERTAS = [
     { emoji: '🍕', nombre: 'Muzzarella grande', fecha: '31/07' },
@@ -130,21 +140,137 @@ function PanelMockup() {
   );
 }
 
-export default function LandingScreen({ isDark, toggleTheme }) {
+// Los 3 pasos como carrusel horizontal con snap en mobile (evita la torre
+// vertical de cards) y como fila de 3 en desktop, donde el ancho sobra.
+function PasosCarrusel() {
+  const scrollRef = useRef(null);
+  const [idx, setIdx] = useState(0);
+
+  // El índice se deriva del scroll real, no de un estado que "cree" dónde
+  // está: así el swipe manual y las flechas nunca se desincronizan.
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setIdx(Math.round(el.scrollLeft / el.clientWidth));
+  };
+
+  const irA = (i) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' });
+  };
+
+  return (
+    <>
+      {/* Mobile: carrusel */}
+      <div className="sm:hidden">
+        <div
+          ref={scrollRef}
+          onScroll={onScroll}
+          className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar -mx-5 px-5"
+          style={{ scrollbarWidth: 'none' }}
+        >
+          {PASOS.map(({ icon: Icon, titulo, desc }, i) => (
+            <div key={titulo} className="snap-center shrink-0 w-full pr-3">
+              <div className="h-full rounded-3xl border p-5 flex gap-4" style={CARD_TINTED}>
+                <span className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0"
+                  style={{ background: 'rgb(var(--brand, 0 184 217) / 0.14)' }}>
+                  <Icon className="w-5 h-5" style={{ color: 'var(--brand-hex, #00B8D9)' }} strokeWidth={2.2} />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-black mb-0.5 tabular-nums" style={{ color: 'var(--brand-hex, #00B8D9)' }}>
+                    Paso {i + 1}
+                  </p>
+                  <h3 className="font-black text-base mb-1">{titulo}</h3>
+                  <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary, #999)' }}>{desc}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Puntos + flechas */}
+        <div className="flex items-center justify-center gap-3 mt-5">
+          <button onClick={() => irA(Math.max(0, idx - 1))} disabled={idx === 0}
+            aria-label="Paso anterior"
+            className="w-8 h-8 rounded-full flex items-center justify-center transition-opacity disabled:opacity-30"
+            style={{ background: 'rgb(var(--brand, 0 184 217) / 0.12)', color: 'var(--brand-hex, #00B8D9)' }}>
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-1.5">
+            {PASOS.map((p, i) => (
+              <button key={p.titulo} onClick={() => irA(i)} aria-label={`Ir al paso ${i + 1}`}
+                className="h-1.5 rounded-full transition-all"
+                style={{
+                  width: i === idx ? 20 : 6,
+                  background: i === idx ? 'var(--brand-hex, #00B8D9)' : 'rgb(var(--brand, 0 184 217) / 0.25)',
+                }} />
+            ))}
+          </div>
+          <button onClick={() => irA(Math.min(PASOS.length - 1, idx + 1))} disabled={idx === PASOS.length - 1}
+            aria-label="Paso siguiente"
+            className="w-8 h-8 rounded-full flex items-center justify-center transition-opacity disabled:opacity-30"
+            style={{ background: 'rgb(var(--brand, 0 184 217) / 0.12)', color: 'var(--brand-hex, #00B8D9)' }}>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Desktop: fila de 3, compactas. Numerados a propósito: acá el orden
+          SÍ es información (uno habilita al siguiente), a diferencia de la
+          grilla de ventajas, que es un conjunto sin secuencia. */}
+      <ol className="hidden sm:grid sm:grid-cols-3 gap-4">
+        {PASOS.map(({ icon: Icon, titulo, desc }, i) => (
+          <FadeUp key={titulo} delay={i * 90}>
+            <li className="h-full rounded-3xl border p-5" style={CARD_TINTED}>
+              <div className="flex items-center gap-2.5 mb-3">
+                <span className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0"
+                  style={{ background: 'rgb(var(--brand, 0 184 217) / 0.14)' }}>
+                  <Icon className="w-5 h-5" style={{ color: 'var(--brand-hex, #00B8D9)' }} strokeWidth={2.2} />
+                </span>
+                <span className="text-[11px] font-black tabular-nums" style={{ color: 'var(--brand-hex, #00B8D9)' }}>
+                  Paso {i + 1}
+                </span>
+              </div>
+              <h3 className="font-black text-base mb-1">{titulo}</h3>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary, #999)' }}>{desc}</p>
+            </li>
+          </FadeUp>
+        ))}
+      </ol>
+    </>
+  );
+}
+
+export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [faqOpen, setFaqOpen] = useState(null);
+  const [scrolled, setScrolled] = useState(false);
+
+  // Un solo listener para dos cosas que dependen del scroll: el fondo del
+  // header sticky y la aparición del botón "volver arriba".
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 320);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Navegación al panel SIN recargar la página: onIrAlPanel usa pushState +
+  // forceUrlRecheck (el mismo mecanismo que el resto de la app). El
+  // window.location.href que había antes forzaba una recarga completa —
+  // pantalla en blanco y splash de nuevo entre landing y login.
+  const irAlPanel = onIrAlPanel || (() => { window.location.href = '/admin'; });
 
   const handleGoogle = async () => {
     setLoading(true);
     setError(null);
     try {
       await signInWithGoogle();
-      // signInWithGoogle puede resolver por popup (desktop) o navegar por
-      // redirect (mobile). En ambos casos Root.jsx toma el control vía
-      // onAuthStateChanged; acá solo hay que llevarlo al flujo de /admin,
-      // que ya decide entre registro y panel según tenga tienda o no.
-      window.location.href = '/admin';
+      // Resuelve por popup (desktop) o navega por redirect (mobile). En
+      // ambos casos Root.jsx toma el control vía onAuthStateChanged; acá
+      // solo hay que pasar a /admin, que decide entre registro y panel.
+      irAlPanel();
     } catch (err) {
       const ignorados = ['auth/popup-closed-by-user', 'auth/cancelled-popup-request'];
       if (!ignorados.includes(err.code)) {
@@ -158,16 +284,55 @@ export default function LandingScreen({ isDark, toggleTheme }) {
     }
   };
 
-  const CtaGoogle = ({ full = true }) => (
-    <button
-      onClick={handleGoogle}
-      disabled={loading}
-      className={`${full ? 'w-full sm:w-auto' : ''} inline-flex items-center justify-center gap-3 bg-ink dark:bg-white hover:bg-ink/90 dark:hover:bg-white/90 text-white dark:text-[#18181b] font-bold py-3.5 px-7 rounded-2xl transition-all shadow-lg hover:shadow-xl disabled:opacity-60 active:scale-[0.98]`}
-    >
-      {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <GoogleIcon size={20} />}
-      {loading ? 'Entrando...' : 'Creá tu tienda gratis'}
-    </button>
-  );
+  // Botón oficial de Google (GIS): resuelve el login en la misma página, sin
+  // la ventana intermedia del popup de Firebase. Google lo dibuja dentro de
+  // un iframe propio, así que no se puede estilar con nuestro CSS — de ahí
+  // que la apariencia se configure por parámetros en renderBotonGoogle.
+  //
+  // Si GIS no está disponible (falta el Client ID, el script no cargó, el
+  // dominio no está autorizado), cae al botón propio con signInWithPopup:
+  // el login nunca queda sin camino.
+  const CtaGoogle = ({ full = true }) => {
+    const slotRef = useRef(null);
+    const [gisListo, setGisListo] = useState(false);
+
+    useEffect(() => {
+      if (!gisDisponible() || !slotRef.current) return;
+      let limpiar;
+      let vivo = true;
+      renderBotonGoogle(slotRef.current, {
+        theme: isDark ? 'filled_black' : 'outline',
+        width: 320,
+        onLogin: () => irAlPanel(),
+        onError: (err) => setError(err?.message || 'No se pudo iniciar sesión'),
+      })
+        .then((fn) => {
+          if (!vivo) { fn?.(); return; }
+          limpiar = fn;
+          setGisListo(true);
+        })
+        .catch(() => { /* queda el fallback visible */ });
+      return () => { vivo = false; limpiar?.(); };
+      // isDark: Google no reestila el botón ya montado, hay que re-renderizarlo
+      // para que acompañe el cambio de tema.
+    }, [isDark]);
+
+    return (
+      <div className={full ? 'w-full sm:w-auto' : ''}>
+        <div ref={slotRef} className={`${gisListo ? 'flex' : 'hidden'} justify-center lg:justify-start`} />
+        {!gisListo && (
+          <button
+            onClick={handleGoogle}
+            disabled={loading}
+            className={`${full ? 'w-full sm:w-auto' : ''} inline-flex items-center justify-center gap-3 bg-ink dark:bg-white hover:bg-ink/90 dark:hover:bg-white/90 text-white dark:text-[#18181b] font-bold py-3.5 px-7 rounded-2xl transition-all shadow-lg hover:shadow-xl disabled:opacity-60 active:scale-[0.98]`}
+          >
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <GoogleIcon size={20} />}
+            Creá tu tienda gratis
+          </button>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="relative min-h-screen overflow-x-hidden"
@@ -179,26 +344,44 @@ export default function LandingScreen({ isDark, toggleTheme }) {
         background: 'radial-gradient(ellipse 70% 50% at 50% 0%, rgb(var(--brand, 0 184 217) / 0.14), transparent)',
       }} />
 
-      {/* ── Barra superior ── */}
-      <header className="relative z-10 max-w-5xl mx-auto px-5 lg:px-8 h-16 flex items-center justify-between">
-        <LogoFull size={26} />
-        <div className="flex items-center gap-2">
-          <button
-            onClick={toggleTheme}
-            aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-            className="w-10 h-10 rounded-full flex items-center justify-center text-ink-dim transition-colors hover:bg-brand/10 hover:text-brand"
-          >
-            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
-          <a href="/admin"
-            className="text-sm font-bold px-4 py-2 rounded-xl transition-colors hover:bg-brand/10 hover:text-brand text-ink-dim">
-            Entrar
-          </a>
+      {/* ── Barra superior — sticky, pero fundida con el fondo mientras
+          estás arriba: sin fondo ni borde propios (así el glow del hero se
+          ve entero detrás). Recién al scrollear aparece el vidrio, que es
+          cuando hace falta separarlo del contenido que pasa por debajo. ── */}
+      <header
+        className="sticky top-0 z-30 transition-all duration-300"
+        style={scrolled ? {
+          background: isDark ? 'rgba(4,10,20,.72)' : 'rgba(255,255,255,.72)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          borderBottom: '1px solid rgb(var(--brand, 0 184 217) / 0.10)',
+        } : { background: 'transparent', borderBottom: '1px solid transparent' }}
+      >
+        <div className="max-w-5xl mx-auto px-5 lg:px-8 h-16 flex items-center justify-between">
+          <LogoFull size={26} />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleTheme}
+              aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+              className="w-10 h-10 rounded-full flex items-center justify-center text-ink-dim transition-colors hover:bg-brand/10 hover:text-brand"
+            >
+              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+            {/* <button>, no <a>: un ancla arrastra el subrayado del navegador
+                al activarse y además navegaba con recarga completa. Acá es
+                una acción de la SPA, así que el elemento correcto es button. */}
+            <button
+              onClick={irAlPanel}
+              className="text-sm font-bold px-4 py-2 rounded-xl transition-colors no-underline hover:bg-brand/10 hover:text-brand text-ink-dim"
+            >
+              Entrar
+            </button>
+          </div>
         </div>
       </header>
 
       {/* ── Hero ── */}
-      <section className="relative z-10 max-w-5xl mx-auto px-5 lg:px-8 pt-10 pb-16 lg:pt-16 lg:pb-24">
+      <section className="relative z-10 max-w-5xl mx-auto px-5 lg:px-8 pt-6 pb-16 lg:pt-12 lg:pb-24">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-8 items-center">
           <div className="text-center lg:text-left">
             <FadeUp>
@@ -247,32 +430,11 @@ export default function LandingScreen({ isDark, toggleTheme }) {
       <section className="relative z-10 max-w-5xl mx-auto px-5 lg:px-8 py-14">
         <FadeUp>
           <h2 className="text-2xl lg:text-3xl font-black text-center mb-3">Tres pasos y estás online</h2>
-          <p className="text-center text-sm mb-10" style={{ color: 'var(--text-secondary, #999)' }}>
+          <p className="text-center text-sm mb-8" style={{ color: 'var(--text-secondary, #999)' }}>
             No hace falta contratar a nadie ni saber de páginas web.
           </p>
         </FadeUp>
-        {/* Numerados a propósito: acá el orden SÍ es información (uno
-            habilita al siguiente), a diferencia de la grilla de ventajas
-            de abajo, que es un conjunto sin secuencia. */}
-        <ol className="grid sm:grid-cols-3 gap-4">
-          {PASOS.map(({ icon: Icon, titulo, desc }, i) => (
-            <FadeUp key={titulo} delay={i * 90}>
-              <li className="h-full bg-surface-card border border-slate-100 dark:border-white/8 rounded-3xl p-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <span className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0"
-                    style={{ background: 'rgb(var(--brand, 0 184 217) / 0.12)' }}>
-                    <Icon className="w-5 h-5" style={{ color: 'var(--brand-hex, #00B8D9)' }} strokeWidth={2.2} />
-                  </span>
-                  <span className="text-xs font-black tabular-nums" style={{ color: 'var(--text-secondary, #999)' }}>
-                    Paso {i + 1}
-                  </span>
-                </div>
-                <h3 className="font-black text-base mb-1.5">{titulo}</h3>
-                <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary, #999)' }}>{desc}</p>
-              </li>
-            </FadeUp>
-          ))}
-        </ol>
+        <PasosCarrusel />
       </section>
 
       {/* ── Ventajas ── */}
@@ -283,9 +445,9 @@ export default function LandingScreen({ isDark, toggleTheme }) {
         <div className="grid sm:grid-cols-2 gap-4">
           {FEATURES.map(({ icon: Icon, titulo, desc }, i) => (
             <FadeUp key={titulo} delay={i * 70}>
-              <div className="h-full flex gap-4 bg-surface-card border border-slate-100 dark:border-white/8 rounded-3xl p-5">
+              <div className="h-full flex gap-4 rounded-3xl border p-5" style={CARD_TINTED}>
                 <span className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0"
-                  style={{ background: 'rgb(var(--brand, 0 184 217) / 0.12)' }}>
+                  style={{ background: 'rgb(var(--brand, 0 184 217) / 0.14)' }}>
                   <Icon className="w-5 h-5" style={{ color: 'var(--brand-hex, #00B8D9)' }} strokeWidth={2.2} />
                 </span>
                 <div className="min-w-0">
@@ -306,9 +468,13 @@ export default function LandingScreen({ isDark, toggleTheme }) {
           gratis y que no hay permanencia. */}
       <section className="relative z-10 max-w-5xl mx-auto px-5 lg:px-8 py-14">
         <FadeUp>
-          <div className="relative overflow-hidden rounded-[2rem] border border-slate-100 dark:border-white/8 bg-surface-card p-8 lg:p-12 text-center">
+          <div className="relative overflow-hidden rounded-[2rem] border p-8 lg:p-12 text-center"
+            style={{
+              background: 'linear-gradient(165deg, rgb(var(--brand, 0 184 217) / 0.09), rgb(var(--brand, 0 184 217) / 0.02))',
+              borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)',
+            }}>
             <div className="absolute inset-x-0 top-0 h-40 pointer-events-none"
-              style={{ background: 'radial-gradient(ellipse 60% 100% at 50% 0%, rgb(var(--brand, 0 184 217) / 0.10), transparent)' }} />
+              style={{ background: 'radial-gradient(ellipse 60% 100% at 50% 0%, rgb(var(--brand, 0 184 217) / 0.16), transparent)' }} />
             <div className="relative">
               <h2 className="text-2xl lg:text-3xl font-black mb-3">Empezá sin pagar nada</h2>
               <p className="text-sm leading-relaxed max-w-md mx-auto mb-7" style={{ color: 'var(--text-secondary, #999)' }}>
@@ -320,7 +486,7 @@ export default function LandingScreen({ isDark, toggleTheme }) {
                 {['Prueba gratis al crear tu tienda', 'Cancelás cuando quieras', 'Sin comisión por venta'].map(t => (
                   <li key={t} className="inline-flex items-center gap-2">
                     <span className="w-4 h-4 rounded-full flex items-center justify-center shrink-0"
-                      style={{ background: 'rgb(var(--brand, 0 184 217) / 0.15)' }}>
+                      style={{ background: 'rgb(var(--brand, 0 184 217) / 0.18)' }}>
                       <Check className="w-2.5 h-2.5" style={{ color: 'var(--brand-hex, #00B8D9)' }} strokeWidth={3} />
                     </span>
                     {t}
@@ -343,11 +509,11 @@ export default function LandingScreen({ isDark, toggleTheme }) {
             const abierto = faqOpen === i;
             return (
               <FadeUp key={item.q} delay={i * 50}>
-                <div className="bg-surface-card border border-slate-100 dark:border-white/8 rounded-2xl overflow-hidden">
+                <div className="rounded-2xl border overflow-hidden" style={CARD_TINTED}>
                   <button
                     onClick={() => setFaqOpen(abierto ? null : i)}
                     aria-expanded={abierto}
-                    className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left hover:bg-surface-card-2 dark:hover:bg-white/5 transition-colors"
+                    className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-brand/5"
                   >
                     <span className="font-bold text-sm">{item.q}</span>
                     <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${abierto ? 'rotate-180 text-brand' : 'text-ink-dim'}`} />
@@ -357,8 +523,8 @@ export default function LandingScreen({ isDark, toggleTheme }) {
                   <div className="grid transition-all duration-300 ease-out motion-reduce:transition-none"
                     style={{ gridTemplateRows: abierto ? '1fr' : '0fr' }}>
                     <div className="overflow-hidden">
-                      <p className="px-5 pb-4 text-sm leading-relaxed border-t border-slate-100 dark:border-white/8 pt-4"
-                        style={{ color: 'var(--text-secondary, #999)' }}>
+                      <p className="px-5 pb-4 text-sm leading-relaxed pt-4"
+                        style={{ color: 'var(--text-secondary, #999)', borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.12)' }}>
                         {item.a}
                       </p>
                     </div>
@@ -371,7 +537,7 @@ export default function LandingScreen({ isDark, toggleTheme }) {
       </section>
 
       {/* ── Footer ── */}
-      <footer className="relative z-10 border-t border-slate-100 dark:border-white/8 mt-6">
+      <footer className="relative z-10 mt-6" style={{ borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.12)' }}>
         <div className="max-w-5xl mx-auto px-5 lg:px-8 py-8 flex flex-col sm:flex-row items-center justify-between gap-5">
           <LogoFull size={22} />
           <nav className="flex items-center gap-5 text-xs font-semibold" style={{ color: 'var(--text-secondary, #999)' }}>
@@ -386,6 +552,17 @@ export default function LandingScreen({ isDark, toggleTheme }) {
           </a>
         </div>
       </footer>
+
+      {/* ── Volver arriba — aparece recién cuando ya scrolleaste lo
+          suficiente como para que el header quede lejos. ── */}
+      <button
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        aria-label="Volver arriba"
+        className={`fixed bottom-5 right-5 z-40 w-11 h-11 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${scrolled ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-3 pointer-events-none'}`}
+        style={{ background: 'var(--brand-hex, #00B8D9)', color: '#fff' }}
+      >
+        <ArrowUp className="w-5 h-5" strokeWidth={2.5} />
+      </button>
     </div>
   );
 }
