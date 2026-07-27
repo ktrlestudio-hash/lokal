@@ -105,23 +105,38 @@ export function cargarGIS() {
   if (gisPromise) return gisPromise;
 
   gisPromise = new Promise((resolve, reject) => {
-    const existente = document.querySelector(`script[src="${GIS_SRC}"]`);
-    const script = existente || document.createElement('script');
-    const onLoad = () => {
-      if (window.google?.accounts?.id) resolve(window.google.accounts.id);
-      else reject(new Error('GIS cargó pero no expuso google.accounts.id'));
+    let listo = false;
+    const terminar = (api) => { if (!listo) { listo = true; resolve(api); } };
+    const fallar = (msg) => {
+      if (listo) return;
+      listo = true;
+      gisPromise = null; // permite reintentar si fue un fallo puntual
+      reject(new Error(msg));
     };
-    script.addEventListener('load', onLoad, { once: true });
-    script.addEventListener('error', () => {
-      gisPromise = null; // permite reintentar si fue un fallo de red puntual
-      reject(new Error('No se pudo cargar Google Identity Services'));
-    }, { once: true });
+
+    // Sondeo en vez de depender sólo del evento 'load': si el script ya
+    // estaba en el DOM y YA había terminado de cargar, engancharle un
+    // listener no sirve —ese evento no vuelve a dispararse— y la promesa
+    // quedaba colgada sin resolver ni rechazar. Con la promesa colgada el
+    // botón nunca se marcaba listo y siempre se veía el de respaldo (popup).
+    const desde = Date.now();
+    const revisar = () => {
+      if (listo) return;
+      if (window.google?.accounts?.id) return terminar(window.google.accounts.id);
+      if (Date.now() - desde > 8000) return fallar('Google Identity Services no respondió a tiempo');
+      setTimeout(revisar, 60);
+    };
+
+    const existente = document.querySelector(`script[src="${GIS_SRC}"]`);
     if (!existente) {
+      const script = document.createElement('script');
       script.src = GIS_SRC;
       script.async = true;
       script.defer = true;
+      script.addEventListener('error', () => fallar('No se pudo cargar Google Identity Services'), { once: true });
       document.head.appendChild(script);
     }
+    revisar();
   });
   return gisPromise;
 }
