@@ -7,8 +7,8 @@ import AdminLogin from './AdminLogin';
 import RegistroTienda from './RegistroTienda';
 import AdminPanel from './AdminPanel';
 import LegalPageView from './LegalPages';
+import LandingScreen from './LandingScreen';
 import { apiFetch } from './api.js';
-import { TIENDA_SLUG_FIJA } from './config/constants';
 import { ADMIN_EMAILS } from './config/flags';
 import { SplashScreenFull, InlineLoader } from './LokalLoader.jsx';
 
@@ -343,10 +343,17 @@ export default function Root() {
     );
   }
 
+  // ── Raíz → landing pública. Antes caía en TIENDA_SLUG_FIJA: cualquiera
+  //    que entrara sin slug veía la tienda de UN negocio concreto, que no
+  //    es lo que espera alguien que llega a la raíz del producto.
+  //    Las tiendas siguen sirviéndose por su slug propio (/:tienda). ──────
+  if (!pathToTiendaSlug(window.location.pathname)) {
+    return <LandingScreen isDark={isDark} toggleTheme={toggleTheme} />;
+  }
+
   // ── Tienda pública por slug — multi-tienda: /:tienda resuelve la tienda
-  //    de la URL. La raíz (sin slug) cae en TIENDA_SLUG_FIJA como fallback
-  //    hasta que exista una landing real (Fase 3). ─────────────────────────
-  const tiendaSlug = pathToTiendaSlug(window.location.pathname) || TIENDA_SLUG_FIJA;
+  //    de la URL. ────────────────────────────────────────────────────────
+  const tiendaSlug = pathToTiendaSlug(window.location.pathname);
   // firebaseUser: para que TiendaPublica detecte si el visitante logueado es
   // el dueño de ESTA tienda (uid === tienda.googleUid) y le ofrezca un
   // acceso directo a su panel, en vez de la vista pública a secas.
