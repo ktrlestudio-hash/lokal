@@ -1,7 +1,8 @@
 {
-  "name": "Lokal",
-  "short_name": "Lokal",
-  "description": "Publica lo que necesitas y que las tiendas locales te respondan.",
+  "name": "LOKAL LINKS",
+  "short_name": "LOKAL",
+  "description": "Arma la pagina de tu negocio con tus ofertas y compartila por WhatsApp o Instagram.",
+  "lang": "es-AR",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

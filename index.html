@@ -11,8 +11,47 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Lokal — Encontrá lo que buscás</title>
-    <meta name="description" content="Publicá lo que necesitás y que las tiendas locales te respondan." />
+    <!-- Título y descripción del producto REAL: antes describían el modelo
+         de LOKAL global ("publicá lo que necesitás y que las tiendas
+         respondan"), que son las demandas — un módulo que LOKAL LINKS no
+         tiene. Las páginas de tienda y de oferta sobreescriben estos meta
+         en el edge (netlify/edge-functions/oferta-og.js); esto es lo que se
+         sirve en la raíz, o sea la landing. -->
+    <title>LOKAL LINKS — Tu negocio en un solo link</title>
+    <meta name="description" content="Armá la página de tu negocio con tus ofertas y compartila por WhatsApp o Instagram. Gratis para empezar, sin instalar nada." />
+    <link rel="canonical" href="https://lokallinks.netlify.app/" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+
+    <!-- Open Graph — sin esto, compartir el link en WhatsApp/Facebook no
+         muestra previsualización (solo la URL pelada). -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="LOKAL LINKS" />
+    <meta property="og:locale" content="es_AR" />
+    <meta property="og:url" content="https://lokallinks.netlify.app/" />
+    <meta property="og:title" content="LOKAL LINKS — Tu negocio en un solo link" />
+    <meta property="og:description" content="Armá la página de tu negocio con tus ofertas y compartila por WhatsApp o Instagram. Gratis para empezar, sin instalar nada." />
+    <meta property="og:image" content="https://lokallinks.netlify.app/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="LOKAL LINKS — la página de tu negocio en un link" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="LOKAL LINKS — Tu negocio en un solo link" />
+    <meta name="twitter:description" content="Armá la página de tu negocio con tus ofertas y compartila por WhatsApp o Instagram." />
+    <meta name="twitter:image" content="https://lokallinks.netlify.app/og.png" />
+
+    <!-- Datos estructurados: los validadores de enlace y buscadores los usan
+         para entender qué es el sitio y mostrar resultados enriquecidos. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "LOKAL LINKS",
+        "url": "https://lokallinks.netlify.app/",
+        "description": "Armá la página de tu negocio con tus ofertas y compartila por WhatsApp o Instagram.",
+        "inLanguage": "es-AR"
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!-- Poppins variable + Inter variable: font-weight cinético sin layout shifts -->

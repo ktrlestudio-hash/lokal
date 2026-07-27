@@ -305,6 +305,10 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
         width: 320,
         onLogin: () => irAlPanel(),
         onError: (err) => setError(err?.message || 'No se pudo iniciar sesión'),
+        // El dominio no está autorizado en el cliente OAuth: el botón de GIS
+        // fallaría con "Acceso bloqueado" al tocarlo. Se esconde y queda el
+        // botón propio (popup), que no depende de esa lista de orígenes.
+        onOrigenRechazado: () => { if (vivo) setGisListo(false); },
       })
         .then((fn) => {
           if (!vivo) { fn?.(); return; }
@@ -337,6 +341,15 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
   return (
     <div className="relative min-h-screen overflow-x-hidden"
       style={{ background: isDark ? '#040a14' : 'var(--surface-solid, #fff)', color: 'var(--text-primary)' }}>
+
+      {/* Salto al contenido — invisible hasta que se navega con teclado.
+          Sin esto, quien usa teclado o lector de pantalla tiene que pasar
+          por el header entero en cada carga. */}
+      <a href="#contenido"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:rounded-xl focus:font-bold focus:text-sm"
+        style={{ background: 'var(--brand-hex, #00B8D9)', color: '#fff' }}>
+        Saltar al contenido
+      </a>
 
       {/* Glow de marca — mismo lenguaje que AdminLogin/splash. */}
       <div className="absolute inset-x-0 top-0 pointer-events-none" style={{
@@ -380,6 +393,7 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
         </div>
       </header>
 
+      <main id="contenido">
       {/* ── Hero ── */}
       <section className="relative z-10 max-w-5xl mx-auto px-5 lg:px-8 pt-6 pb-16 lg:pt-12 lg:pb-24">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-8 items-center">
@@ -408,7 +422,8 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
             <FadeUp delay={240}>
               <CtaGoogle />
               {error && (
-                <div className="mt-4 flex items-center gap-2 text-sm text-rose-500 bg-rose-500/10 border border-rose-500/20 rounded-2xl px-4 py-3 text-left">
+                <div role="alert" aria-live="polite"
+                  className="mt-4 flex items-center gap-2 text-sm text-rose-500 bg-rose-500/10 border border-rose-500/20 rounded-2xl px-4 py-3 text-left">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{error}</span>
                 </div>
@@ -535,6 +550,8 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
           })}
         </div>
       </section>
+
+      </main>
 
       {/* ── Footer ── */}
       <footer className="relative z-10 mt-6" style={{ borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.12)' }}>

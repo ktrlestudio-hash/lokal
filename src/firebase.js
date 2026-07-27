@@ -144,7 +144,7 @@ export async function loginConIdToken(idToken) {
 // El botón lo dibuja Google dentro de un iframe propio: no se puede estilar
 // desde nuestro CSS (por eso los parámetros de apariencia van acá, no en
 // clases). `width` en píxeles porque GIS ignora anchos porcentuales.
-export async function renderBotonGoogle(contenedor, { onLogin, onError, theme = 'outline', width = 320 } = {}) {
+export async function renderBotonGoogle(contenedor, { onLogin, onError, onOrigenRechazado, theme = 'outline', width = 320 } = {}) {
   const gis = await cargarGIS();
   gis.initialize({
     client_id: GIS_CLIENT_ID,
@@ -163,6 +163,21 @@ export async function renderBotonGoogle(contenedor, { onLogin, onError, theme = 
     auto_select: false,
     cancel_on_tap_outside: true,
   });
+  // Sonda de origen: renderButton NO avisa si el dominio no está en
+  // "Authorized JavaScript origins" del cliente OAuth — dibuja el botón
+  // igual y el error recién salta al hacer click ("Acceso bloqueado").
+  // prompt() sí reporta el motivo, así que se usa para detectarlo ANTES y
+  // poder caer al popup, en vez de dejar al usuario contra una pared.
+  // (unregistered_origin / invalid_client son justamente esos casos.)
+  try {
+    gis.prompt((notification) => {
+      const motivo = notification?.getNotDisplayedReason?.();
+      if (motivo === 'unregistered_origin' || motivo === 'invalid_client') {
+        onOrigenRechazado?.(motivo);
+      }
+    });
+  } catch { /* prompt no disponible: el botón sigue siendo el camino */ }
+
   gis.renderButton(contenedor, {
     type: 'standard',
     theme,
