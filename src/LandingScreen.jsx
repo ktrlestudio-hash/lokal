@@ -118,33 +118,39 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
 
   return (
     <div className={full ? 'w-full sm:w-auto' : ''}>
-      {gisListo ? (
-        <div className="inline-flex flex-col gap-2">
-          {/* Cápsula de marca: el p-1 deja ver un hilo de borde y fondo
-              alrededor del botón, que es lo que lo ata al resto de la
-              landing sin tocar el control en sí (inestilable: lo dibuja
-              Google en su propio iframe). */}
-          <div
-            className="inline-flex p-1 rounded-[1.15rem]"
-            style={{
-              background: isDark
-                ? 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.16), rgb(var(--brand, 0 184 217) / 0.04))'
-                : 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.12), rgb(var(--brand, 0 184 217) / 0.03))',
-              border: '1px solid rgb(var(--brand, 0 184 217) / 0.22)',
-              boxShadow: '0 6px 22px -10px rgb(var(--brand, 0 184 217) / 0.55)',
-            }}
-          >
-            {/* color-scheme sigue al tema real: forzarlo a light hacía que en
-                modo oscuro el iframe se dibujara blanco contra el fondo casi
-                negro de la landing. */}
-            <div ref={slotRef} className="overflow-hidden rounded-2xl"
-              style={{ colorScheme: isDark ? 'dark' : 'light' }} />
-          </div>
-          <span className="text-[11px] font-semibold text-center" style={{ color: 'var(--text-secondary, #999)' }}>
-            Gratis para empezar · sin tarjeta
-          </span>
+      {/* El slot de Google se renderiza SIEMPRE (oculto con CSS hasta que
+          gisListo), nunca condicionado al mismo estado que marca "listo": si
+          el <div ref={slotRef}> solo existía cuando gisListo era true, el
+          efecto de abajo encontraba slotRef.current === null en el primer
+          render, salía por esa guarda sin loguear nada, y nunca reintentaba
+          — gisListo jamás llegaba a ponerse en true. Bug circular: el ref
+          necesitaba el estado que el propio efecto debía setear. */}
+      <div className="inline-flex flex-col gap-2" style={{ display: gisListo ? 'inline-flex' : 'none' }}>
+        {/* Cápsula de marca: el p-1 deja ver un hilo de borde y fondo
+            alrededor del botón, que es lo que lo ata al resto de la
+            landing sin tocar el control en sí (inestilable: lo dibuja
+            Google en su propio iframe). */}
+        <div
+          className="inline-flex p-1 rounded-[1.15rem]"
+          style={{
+            background: isDark
+              ? 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.16), rgb(var(--brand, 0 184 217) / 0.04))'
+              : 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.12), rgb(var(--brand, 0 184 217) / 0.03))',
+            border: '1px solid rgb(var(--brand, 0 184 217) / 0.22)',
+            boxShadow: '0 6px 22px -10px rgb(var(--brand, 0 184 217) / 0.55)',
+          }}
+        >
+          {/* color-scheme sigue al tema real: forzarlo a light hacía que en
+              modo oscuro el iframe se dibujara blanco contra el fondo casi
+              negro de la landing. */}
+          <div ref={slotRef} className="overflow-hidden rounded-2xl"
+            style={{ colorScheme: isDark ? 'dark' : 'light' }} />
         </div>
-      ) : (
+        <span className="text-[11px] font-semibold text-center" style={{ color: 'var(--text-secondary, #999)' }}>
+          Gratis para empezar · sin tarjeta
+        </span>
+      </div>
+      {!gisListo && (
         <button
           onClick={onPopup}
           disabled={loading}
