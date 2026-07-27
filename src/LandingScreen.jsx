@@ -42,6 +42,15 @@ const CARD_TINTED = {
 function FadeUp({ children, delay = 0, className = '' }) {
   const ref = useRef(null);
   const [inView, setInView] = useState(false);
+  // Se apaga solo cuando la transición termina: mientras tanto, will-change
+  // le da a este elemento su propia capa de compositing. Sin esto, con
+  // varias instancias de FadeUp animando a la vez (FAQ tiene 5, cada una
+  // con un acordeón overflow-hidden adentro) durante un scroll rápido,
+  // Chrome Android competía por recompositar la misma capa que el
+  // overflow-hidden del acordeón y dejaba texto fantasma en varias
+  // posiciones — el layout ya había cambiado pero la capa compuesta previa
+  // no se descartó a tiempo.
+  const [animando, setAnimando] = useState(true);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -55,8 +64,17 @@ function FadeUp({ children, delay = 0, className = '' }) {
   return (
     <div
       ref={ref}
-      className={`transition-all duration-700 ease-out motion-reduce:transition-none ${inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'} ${className}`}
-      style={{ transitionDelay: `${delay}ms` }}
+      onTransitionEnd={() => setAnimando(false)}
+      className={`transition-all duration-700 ease-out motion-reduce:transition-none ${className}`}
+      style={{
+        transitionDelay: `${delay}ms`,
+        willChange: animando ? 'transform, opacity' : 'auto',
+        opacity: inView ? 1 : 0,
+        // translateZ(0) agregado al mismo translateY (no un transform
+        // aparte): Tailwind y este style escriben la misma propiedad, y el
+        // inline siempre gana — ponerlo suelto anulaba la traslación real.
+        transform: inView ? 'translateY(0) translateZ(0)' : 'translateY(24px) translateZ(0)',
+      }}
     >
       {children}
     </div>
