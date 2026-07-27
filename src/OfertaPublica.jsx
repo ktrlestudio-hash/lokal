@@ -10,37 +10,33 @@ import React, { useState, useEffect } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { OfertaIndividual } from './tienda-publica/OfertaIndividual.jsx';
 import { cacheGet, cacheSet } from './lokCache';
+import { InlineLoader } from './LokalLoader.jsx';
 
 const API_BASE = '/.netlify/functions';
 
-// Logo animado del loader — mismo que TiendaPublica, en turquesa var(--brand-hex).
-function LogoLoader() {
-  const cx = 40.72, cy = 40.65, r = 11.23;
-  return (
-    <svg viewBox="0 0 81.18 81.44" width={72} height={72} xmlns="http://www.w3.org/2000/svg">
-      <style>{`
-        @keyframes op-draw { from{stroke-dashoffset:275}to{stroke-dashoffset:0} }
-        @keyframes op-dot-in { 0%{transform:scale(0);opacity:0}55%{transform:scale(1.3);opacity:1}75%{transform:scale(.88)}90%{transform:scale(1.05)}100%{transform:scale(1);opacity:1} }
-        @keyframes op-pulse { 0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.10);opacity:.7} }
-        .op-ring{fill:none;stroke:var(--brand-hex,#00B8D9);stroke-width:7.66;stroke-linecap:round;stroke-dasharray:275;stroke-dashoffset:275;animation:op-draw .85s cubic-bezier(.4,0,.2,1) .1s forwards}
-        .op-dot{fill:var(--brand-hex,#00B8D9);transform-origin:${cx}px ${cy}px;animation:op-dot-in .5s cubic-bezier(.34,1.56,.64,1) .7s both,op-pulse 2.2s ease-in-out 1.35s infinite}
-      `}</style>
-      <rect className="op-ring" x="3.83" y="3.83" width="73.52" height="73.78" rx="14.83" />
-      <circle className="op-dot" cx={cx} cy={cy} r={r} />
-    </svg>
-  );
-}
-
-export default function OfertaPublica({ tiendaSlug, ofertaSlug, tiendaInicial, ofertaInicial, isDark, toggleTheme, onVolver }) {
+export default function OfertaPublica({ tiendaSlug, ofertaSlug, tiendaInicial, ofertaInicial, isDark, toggleTheme, onVolver, onNavegarAOferta, isFirstLoad = false }) {
   // Si venimos de un clic interno en la tienda, tienda+oferta ya están en
   // memoria: arrancamos con ellas y SIN loader (render instantáneo). Solo
   // el link externo (WhatsApp/FB) entra en frío y necesita fetch.
   const desdeMemoria = !!(tiendaInicial && ofertaInicial);
   const [tienda, setTienda] = useState(tiendaInicial || null);
   const [oferta, setOferta] = useState(ofertaInicial || null);
-  const [loading, setLoading] = useState(!desdeMemoria);
+  // Splash full-screen SOLO en carga fría real (link externo WhatsApp/FB,
+  // isFirstLoad) y sin datos en memoria. En navegación interna (isFirstLoad
+  // false) nunca se muestra el loader de logo — evita el "doble loader"
+  // encadenado con el splash de la pantalla que se dejaba.
+  const [loading, setLoading] = useState(isFirstLoad && !desdeMemoria);
   const [loaderHiding, setLoaderHiding] = useState(false);
   const [error, setError] = useState(null);
+
+  // Cuando cambia ofertaInicial (swipe entre ofertas de la MISMA tienda vía
+  // onNavegarAOferta — Root.jsx actualiza ofertaEnMemoria/ofertaRoute pero
+  // NO desmonta este componente), sincronizamos el state local sin re-fetch:
+  // la oferta nueva ya viene completa desde tienda.ofertas, la misma tienda
+  // en memoria no cambió.
+  useEffect(() => {
+    if (ofertaInicial) setOferta(ofertaInicial);
+  }, [ofertaInicial]);
 
   useEffect(() => {
     // Datos ya en memoria (navegación interna) — nada que buscar.
@@ -48,11 +44,15 @@ export default function OfertaPublica({ tiendaSlug, ofertaSlug, tiendaInicial, o
 
     const cachedTienda = cacheGet(`tp-tienda-${tiendaSlug}`);
     const startMs = Date.now();
-    const MIN_LOADER_MS = 300;
+    // Solo aplica el mínimo de animación en carga fría (único caso con loader).
+    const MIN_LOADER_MS = isFirstLoad ? 300 : 0;
 
     const reveal = (t, o) => {
       setTienda(t);
       setOferta(o);
+      // Sin loader activo (navegación interna sin memoria): datos directo,
+      // sin secuencia de fade-out — no hay splash que desvanecer.
+      if (!loading) return;
       const wait = Math.max(0, MIN_LOADER_MS - (Date.now() - startMs));
       setTimeout(() => {
         setLoaderHiding(true);
@@ -99,19 +99,13 @@ export default function OfertaPublica({ tiendaSlug, ofertaSlug, tiendaInicial, o
   return (
     <>
       {showLoader && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgb(var(--surface-dim))',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
-          opacity: loaderHiding ? 0 : 1, transition: 'opacity .35s ease',
-          pointerEvents: loaderHiding ? 'none' : 'auto',
-        }}>
-          <div style={{ position: 'absolute', inset: '0 0 35% 0', background: 'radial-gradient(ellipse 75% 55% at 50% 0%, rgba(0,184,217,0.22), transparent)', pointerEvents: 'none' }} />
-          <LogoLoader />
+        <div style={{ opacity: loaderHiding ? 0 : 1, transition: 'opacity .35s ease', pointerEvents: loaderHiding ? 'none' : 'auto' }}>
+          <InlineLoader />
         </div>
       )}
 
       {tienda && oferta && (
-        <OfertaIndividual tienda={tienda} oferta={oferta} isDark={isDark} toggleTheme={toggleTheme} onVolver={onVolver} />
+        <OfertaIndividual tienda={tienda} oferta={oferta} isDark={isDark} toggleTheme={toggleTheme} onVolver={onVolver} onNavegarAOferta={onNavegarAOferta} />
       )}
     </>
   );

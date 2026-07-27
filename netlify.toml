@@ -20,6 +20,15 @@
     Referrer-Policy = "strict-origin-when-cross-origin"
     X-Content-Type-Options = "nosniff"
     X-Frame-Options = "DENY"
+    # same-origin-allow-popups (no el "same-origin" default de Netlify):
+    # Firebase signInWithPopup() necesita poder leer window.closed del popup
+    # de Google para saber cuándo terminó el login — con el COOP estricto
+    # por defecto, el navegador bloquea esa lectura entre orígenes y el
+    # login queda colgado indefinidamente (nunca se resuelve la promesa,
+    # sin error visible). Esta variante mantiene el resto del aislamiento
+    # COOP pero permite explícitamente esa interacción con ventanas que la
+    # propia página abrió.
+    Cross-Origin-Opener-Policy = "same-origin-allow-popups"
 
 # Content-Security-Policy: aplicado por netlify/edge-functions/csp-headers.js
 # en vez de un header estático acá. Motivo: script-src con hashes fijos es

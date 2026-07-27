@@ -36,9 +36,15 @@ export function TiendaPublicaRenderer({
   // Clic interno en una oferta (SPA, sin re-fetch) — Root pasa navegarAOferta.
   onVerOferta,
   // Dueño logueado viendo su propia tienda — habilita el FAB "+" de carga
-  // rápida de oferta directo en la vista pública (ver OfertaQuickForm) y el
-  // menú de 3 puntos por card (ver OfertaAdminSheet).
-  esDueño, onOfertaCreada, onOfertaActualizada, onOfertaEliminada,
+  // rápida de oferta directo en la vista pública (ver OfertaQuickForm), el
+  // menú de 3 puntos por card (ver OfertaAdminSheet), y el FAB "Editar mi
+  // tienda" (atajo al panel completo, antes un botón fijo bottom:16 propio
+  // que quedaba tapado por el nav — ahora otro FAB apilado con los demás).
+  // onOfertaReintentar/onOfertaCancelarPendiente: solo aplican a la card
+  // "pendiente" que aparece al instante tras publicar (ver OfertaQuickForm +
+  // TiendaPublica.jsx → subirOfertaEnCola) mientras sube en segundo plano.
+  esDueño, onOfertaCreada, onOfertaActualizada, onOfertaEliminada, onIrAlPanel,
+  onOfertaReintentar, onOfertaCancelarPendiente,
 }) {
   const pagina = useMemo(() => resolvePagina(paginaOverride ?? tienda.pagina), [tienda, paginaOverride]);
   const secciones = useMemo(() => getSeccionesActivas(pagina.secciones), [pagina]);
@@ -112,6 +118,9 @@ export function TiendaPublicaRenderer({
       onOfertaCreada={onOfertaCreada}
       onOfertaActualizada={onOfertaActualizada}
       onOfertaEliminada={onOfertaEliminada}
+      onIrAlPanel={onIrAlPanel}
+      onOfertaReintentar={onOfertaReintentar}
+      onOfertaCancelarPendiente={onOfertaCancelarPendiente}
       heroLayout={'editorial' /* TEMP: forzado para preview — revertir a: pagina.heroLayout || 'card' */}
       // Footer de marca "lokal" se muestra en ambos modos por consistencia
       // visual — en plataforma el toggle de tema comparte el mismo estado

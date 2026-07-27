@@ -1,3 +1,17 @@
+/* Los @import DEBEN ser el primer statement real del archivo (spec CSS: solo
+   @charset puede precederlos) — antes vivían más abajo, después de @tailwind
+   y de cientos de líneas de reglas normales, así que el navegador (y
+   PostCSS) los descartaba SILENCIOSAMENTE sin ningún error visible aparte
+   del warning "@import must precede all other statements" en cada build.
+   Resultado real: TODO el contenido de styles/animations.css (incluido
+   .skeleton-shimmer/-card) nunca llegaba al CSS final — los skeletons se
+   veían estáticos sin ninguna pista de por qué. */
+@import './styles/tokens.css';
+@import './styles/base.css';
+@import './styles/components.css';
+@import './styles/animations.css';
+@import './styles/themes.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -668,15 +682,8 @@ html.theme-transitioning *::after {
 .lokal-radar-ring:nth-child(2) { animation-delay: 0.22s; }
 .lokal-radar-ring:nth-child(3) { animation-delay: 0.44s; }
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   MODULAR STYLES (Fase 2B)
-   ══════════════════════════════════════════════════════════════════════════════ */
-
-@import './styles/tokens.css';
-@import './styles/base.css';
-@import './styles/components.css';
-@import './styles/animations.css';
-@import './styles/themes.css';
+/* MODULAR STYLES (Fase 2B) — los @import reales viven arriba de todo,
+   al inicio del archivo (ver comentario ahí). */
 
 @media (min-width: 1024px) { [data-has-bottom-nav] { padding-bottom: 0 !important; } }
 

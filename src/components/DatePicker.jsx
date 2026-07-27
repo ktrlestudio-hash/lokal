@@ -147,6 +147,14 @@ export default function DatePicker({ value, onChange, placeholder = 'Elegí una 
 
   return (
     <div style={{ position: 'relative' }}>
+      {/* La X de "quitar fecha" NO puede vivir dentro del <button> que abre
+          el calendario — un botón interactivo anidado dentro de otro es
+          HTML inválido, y el navegador puede no llegar a disparar el click
+          del hijo en absoluto (o procesar igual el click nativo del padre)
+          aunque tenga stopPropagation. Por eso "apretar la X" no hacía nada:
+          a veces ni el evento de React corría. Ahora es un <button> HERMANO,
+          posicionado encima con position:absolute, fuera del botón
+          principal — sin anidamiento, sin ambigüedad de qué click gana. */}
       <button
         ref={btnRef}
         type="button"
@@ -161,17 +169,22 @@ export default function DatePicker({ value, onChange, placeholder = 'Elegí una 
         }}
       >
         <CalIcon size={16} style={{ color: value ? 'var(--brand-hex, #00B8D9)' : 'var(--text-secondary, #999)', flexShrink: 0 }} />
-        <span style={{ flex: 1 }}>{value ? isoToDisplay(value) : placeholder}</span>
-        {value && clearable && (
-          <span
-            role="button"
-            onClick={(e) => { e.stopPropagation(); onChange(''); }}
-            style={{ flexShrink: 0, display: 'flex', cursor: 'pointer' }}
-          >
-            <X size={14} style={{ color: 'var(--text-secondary, #999)' }} />
-          </span>
-        )}
+        <span style={{ flex: 1, paddingRight: value && clearable ? 22 : 0 }}>{value ? isoToDisplay(value) : placeholder}</span>
       </button>
+      {value && clearable && (
+        <button
+          type="button"
+          aria-label="Quitar fecha"
+          onClick={(e) => { e.stopPropagation(); onChange(''); }}
+          style={{
+            position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+            border: 'none', background: 'transparent', padding: 4, cursor: 'pointer',
+            display: 'flex', color: 'var(--text-secondary, #999)',
+          }}
+        >
+          <X size={14} />
+        </button>
+      )}
       {open && pos && createPortal(
         <div ref={popRef} style={{ position: 'fixed', left: pos.left, top: pos.top, bottom: pos.bottom, zIndex: 6000, maxHeight: pos.maxH, overflowY: 'auto', background: 'var(--surface-solid, #0a0a0a)', border: '1px solid var(--border-solid, rgba(255,255,255,.1))', borderRadius: 16, boxShadow: '0 18px 44px -14px rgba(0,0,0,.4)' }}>
           <MonthView

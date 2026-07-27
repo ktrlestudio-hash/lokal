@@ -1,5 +1,5 @@
 ﻿import React, { useRef, useState, useMemo, useEffect } from 'react';
-import { SkeletonOfertas } from '../Skeletons';
+import { SkeletonOfertas, SkeletonTiendas } from '../Skeletons';
 import {
   Search, MessageSquare, Flame, Store, ChevronLeft, ChevronRight,
   Package, Tag, MapPin, Star, Bell, X, LayoutGrid, User
@@ -93,12 +93,54 @@ export default function HomeScreen(props) {
   const scrollCat = (ref, dir) => ref.current?.scrollBy({ left: dir * 180, behavior: 'smooth' });
 
   // ─── Banner ───────────────────────────────────────────────────────────────
+  // Auto-avance en PING-PONG (1→2→3→2→1→2→...), no un loop circular simple —
+  // mismo patrón que el promoCarousel de mvsupermercado (ver
+  // D:\VERGARA\PAGINA\SUPERMERCADO 1.0\public\index.html, _promoDelay/
+  // startPromoAuto/pausePromoAuto): al llegar a un extremo invierte la
+  // dirección en vez de saltar del último al primero de golpe. Cualquier
+  // gesto del usuario (flecha, dot, swipe) pausa el auto-avance por un
+  // rato y luego lo retoma — nunca "pelea" contra lo que el usuario
+  // acababa de tocar.
   const [bannerIdx, setBannerIdx] = useState(0);
+  const bannerDirRef = useRef(1);
+  const bannerTimerRef = useRef(null);
+  const bannerPauseRef = useRef(null);
   const BANNERS = [
     { bg: 'from-brand via-brand to-brand-dark', Icon: Flame, title: 'Ofertas exclusivas', sub: 'Los mejores precios de tu ciudad', cta: 'Ver todo', action: () => navigate('todas-ofertas') },
     { bg: 'from-[#2A0509] via-[#333333] to-[#4d4d4d]', Icon: Store, title: 'Tiendas cerca tuyo', sub: 'Comercios locales a tu alcance', cta: 'Explorar', action: () => navigate('tiendas') },
   ];
-  useEffect(() => { const t = setInterval(() => setBannerIdx(i => (i + 1) % BANNERS.length), 4500); return () => clearInterval(t); }, []);
+  const bannerMaxIdx = BANNERS.length - 1;
+  // Extremos (primer/último banner) quedan MÁS tiempo en pantalla que los
+  // del medio — en un ping-pong los del medio se ven 2 veces por ciclo
+  // completo (ida y vuelta), así que la mitad de tiempo les da el mismo
+  // tiempo total de pantalla por ciclo que a los extremos.
+  const bannerDelay = () => (bannerMaxIdx <= 1 ? 4500 : (bannerIdx === 0 || bannerIdx === bannerMaxIdx) ? 4500 : 2250);
+
+  const startBannerAuto = () => {
+    clearTimeout(bannerTimerRef.current);
+    if (bannerMaxIdx <= 0) return;
+    bannerTimerRef.current = setTimeout(function tick() {
+      setBannerIdx((i) => {
+        if (i >= bannerMaxIdx) bannerDirRef.current = -1;
+        else if (i <= 0) bannerDirRef.current = 1;
+        return i + bannerDirRef.current;
+      });
+      bannerTimerRef.current = setTimeout(tick, bannerDelay());
+    }, bannerDelay());
+  };
+  // Pausa el auto-avance N ms tras un gesto del usuario (flecha/dot/swipe),
+  // después retoma solo — nunca "pelea" contra lo que el usuario acaba de
+  // tocar, pero tampoco se queda pausado para siempre.
+  const pauseBannerAuto = (ms = 5000) => {
+    clearTimeout(bannerTimerRef.current);
+    clearTimeout(bannerPauseRef.current);
+    bannerPauseRef.current = setTimeout(startBannerAuto, ms);
+  };
+  useEffect(() => {
+    startBannerAuto();
+    return () => { clearTimeout(bannerTimerRef.current); clearTimeout(bannerPauseRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ─── Data ─────────────────────────────────────────────────────────────────
   const ofertasActivas = visibleOfertas.filter(o => o.activa !== false);
@@ -388,18 +430,18 @@ export default function HomeScreen(props) {
                 <span className="inline-block bg-white/25 backdrop-blur-sm text-white text-xs font-bold px-3.5 py-1.5 rounded-xl">{BANNERS[bannerIdx].cta} →</span>
               </div>
             </div>
-            <button onClick={(e) => { e.stopPropagation(); setBannerIdx(i => (i - 1 + BANNERS.length) % BANNERS.length); }}
+            <button onClick={(e) => { e.stopPropagation(); setBannerIdx(i => Math.max(0, i - 1)); pauseBannerAuto(); }}
               className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/20 hover:bg-black/35 backdrop-blur-sm rounded-full flex items-center justify-center text-white lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <button onClick={(e) => { e.stopPropagation(); setBannerIdx(i => (i + 1) % BANNERS.length); }}
+            <button onClick={(e) => { e.stopPropagation(); setBannerIdx(i => Math.min(bannerMaxIdx, i + 1)); pauseBannerAuto(); }}
               className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/20 hover:bg-black/35 backdrop-blur-sm rounded-full flex items-center justify-center text-white lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
           <div className="flex items-center justify-center gap-1.5 mt-3">
             {BANNERS.map((_, i) => (
-              <button key={i} onClick={() => setBannerIdx(i)} className={`h-1.5 rounded-full transition-all ${i === bannerIdx ? 'w-5 bg-primary' : 'w-1.5 bg-ink-dim dark:bg-white/20'}`} />
+              <button key={i} onClick={() => { setBannerIdx(i); pauseBannerAuto(); }} className={`h-1.5 rounded-full transition-all ${i === bannerIdx ? 'w-5 bg-primary' : 'w-1.5 bg-ink-dim dark:bg-white/20'}`} />
             ))}
           </div>
         </div>
@@ -466,6 +508,9 @@ export default function HomeScreen(props) {
               <button onClick={() => navigate('tiendas')} className="text-xs text-primary font-bold">Ver todas →</button>
             </div>
           </div>
+          {loadingOfertas && filteredTiendas.length === 0 ? (
+            <div className="px-4"><SkeletonTiendas count={4} /></div>
+          ) : (
           <div className="relative group/tiendas">
             <div ref={tiendasScrollRef} className="overflow-x-auto pl-4 py-2 no-scrollbar" {...tiendasDrag}>
               <div className="flex gap-3 pr-12" style={{ width: 'max-content' }}>
@@ -505,6 +550,7 @@ export default function HomeScreen(props) {
             <NavArrowBtn dir="right" onClick={() => scrollBy(tiendasScrollRef, 1)}
               className={`absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-surface-card shadow-md border border-slate-200 dark:border-white/10 text-ink-dim hover:text-ink hover:shadow-lg z-10 lg:opacity-0 lg:group-hover/tiendas:opacity-100 transition-all ${!tiendasEdges.right ? 'pointer-events-none !opacity-0' : ''}`} />
           </div>
+          )}
         </div>
 
       </div>{/* fin max-w-5xl */}

@@ -23,6 +23,7 @@
         "npm:photoswipe@^5.4.4",
         "npm:postcss@^8.4.39",
         "npm:react-dom@^18.3.1",
+        "npm:react-easy-crop@^6.2.2",
         "npm:react-leaflet@^4.2.1",
         "npm:react@^18.3.1",
         "npm:tailwind-merge@^3.6.0",

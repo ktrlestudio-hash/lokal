@@ -6,7 +6,7 @@
 :root {
   /* ─────────────────────────────────────────────────────────────────────────
      COLOR — NO se define nada acá. Todo bebe de la ÚNICA raíz en index.css
-     (§1 marca --brand-*, §2 semánticos, §4/§4.bis superficies --surface-*/
+     (§1 marca --brand-*, §2 semánticos, §4 / §4.bis superficies --surface-* /
      --text-*). Estos son solo ALIAS con los nombres viejos (--color-*) que
      usan las clases .ui-* de base.css/components.css, redirigidos a la raíz
      real para que exista un solo punto de verdad. Cambiar un color = editar
@@ -116,7 +116,7 @@
   --ease-bounce: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Dark/light: NO se resuelve acá. Los --color-bg-*/--color-text-* de arriba
-   apuntan a --surface-*/--text-* de index.css, que ya cambian solos entre
+/* Dark/light: NO se resuelve acá. Los --color-bg-* / --color-text-* de arriba
+   apuntan a --surface-* / --text-* de index.css, que ya cambian solos entre
    :root (claro) y .dark (oscuro) — un solo mecanismo de tema para toda la app,
    sin un @media (prefers-color-scheme) paralelo que competía con la clase .dark. */

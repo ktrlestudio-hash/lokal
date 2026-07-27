@@ -1,54 +1,12 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TiendaPublicaRenderer } from './tienda-publica/TiendaPublicaRenderer.jsx';
 import { AlertCircle, Pencil } from 'lucide-react';
-import { LogoFull, KtrlMark } from './Brand';
+import { LogoFull } from './Brand';
 import { apiFetch } from './api.js';
+import { SplashScreenFull, InlineLoader } from './LokalLoader.jsx';
+import { uploadOfertaImages } from './storeFormUtils.jsx';
 
 const API_BASE = '/.netlify/functions';
-
-function LogoLoader() {
-  const cx = 40.72, cy = 40.65, r = 11.23;
-  return (
-    <svg viewBox="0 0 81.18 81.44" width={72} height={72} xmlns="http://www.w3.org/2000/svg">
-      <style>{`
-        @keyframes tp-draw { from{stroke-dashoffset:275}to{stroke-dashoffset:0} }
-        @keyframes tp-dot-in { 0%{transform:scale(0);opacity:0}55%{transform:scale(1.3);opacity:1}75%{transform:scale(.88)}90%{transform:scale(1.05)}100%{transform:scale(1);opacity:1} }
-        @keyframes tp-pulse { 0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.10);opacity:.7} }
-        .tp-ring{fill:none;stroke:var(--brand-hex,#00B8D9);stroke-width:7.66;stroke-linecap:round;stroke-dasharray:275;stroke-dashoffset:275;animation:tp-draw .85s cubic-bezier(.4,0,.2,1) .1s forwards}
-        .tp-dot{fill:var(--brand-hex,#00B8D9);transform-origin:${cx}px ${cy}px;animation:tp-dot-in .5s cubic-bezier(.34,1.56,.64,1) .7s both,tp-pulse 2.2s ease-in-out 1.35s infinite}
-      `}</style>
-      <rect className="tp-ring" x="3.83" y="3.83" width="73.52" height="73.78" rx="14.83" />
-      <circle className="tp-dot" cx={cx} cy={cy} r={r} />
-    </svg>
-  );
-}
-
-// Splash completo (logo + wordmark "lokal" + "creado por KTRL") — mismo
-// diseño que AdminLoader/SplashScreenFull de Root.jsx, portado acá para la
-// primera carga real de una tienda pública (F5 / visita directa al link).
-// En navegación interna (ej. volver de una oferta individual) se usa el
-// LogoLoader suelto de arriba, sin este envoltorio — ver isFirstLoad prop.
-function SplashScreenFull() {
-  return (
-    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center overflow-hidden" style={{ background: '#060d1a' }}>
-      <style>{`
-        @keyframes lk-brand-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes lk-mark-in { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes lk-glow-pulse { 0%,100% { opacity: 0.55; transform: scale(1); } 50% { opacity: 0.85; transform: scale(1.08); } }
-      `}</style>
-      <div className="absolute inset-x-0 top-0 pointer-events-none" style={{ height: '65%', background: 'radial-gradient(ellipse 75% 55% at 50% 0%, rgba(0,184,217,0.22), transparent)', animation: 'lk-glow-pulse 3s ease-in-out 1.2s infinite' }} />
-      <div className="absolute inset-x-0 bottom-0 pointer-events-none" style={{ height: '40%', background: 'radial-gradient(ellipse 60% 50% at 50% 100%, rgba(0,184,217,0.07), transparent)' }} />
-      <LogoLoader />
-      <div style={{ animation: 'lk-brand-in 0.45s ease 1.0s both', marginTop: 18 }}>
-        <span style={{ color: 'white', fontSize: 34, fontWeight: 800, letterSpacing: '0.01em', fontFamily: "'Inter', system-ui, sans-serif" }}>lokal</span>
-      </div>
-      <div className="absolute bottom-10 flex items-center gap-1.5" style={{ animation: 'lk-mark-in 0.5s ease 1.2s both', opacity: 0 }}>
-        <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, fontFamily: "'Inter', system-ui, sans-serif", letterSpacing: '0.04em', textTransform: 'uppercase' }}>creado por</span>
-        <KtrlMark className="text-white" style={{ height: 12, width: 'auto', opacity: 0.35 }} />
-      </div>
-    </div>
-  );
-}
 
 // ─── Cache helpers ────────────────────────────────────────────────────────────
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
@@ -75,7 +33,13 @@ export default function TiendaPublica({ slug, isDark, toggleTheme, firebaseUser,
   const cachedTiendaInicial = cacheGet(`tp-tienda-${slug}`);
   const [tienda, setTienda] = useState(cachedTiendaInicial || null);
   const [ofertas, setOfertas] = useState(() => cacheGet(`tp-ofertas-${slug}`) || []);
-  const [loading, setLoading] = useState(!cachedTiendaInicial);
+  // Splash full-screen SOLO en carga fría real (F5/link externo, isFirstLoad)
+  // Y sin cache. En navegación interna SPA (isFirstLoad=false) nunca se
+  // muestra el loader de logo: la pantalla anterior ya estaba montada y el
+  // Root persiste — un splash acá se encadenaba con el de la pantalla que se
+  // dejaba, dando el "doble loader" que se veía a mitad de transición. Sin
+  // cache en navegación interna, se resuelve rápido en background sin tapar.
+  const [loading, setLoading] = useState(isFirstLoad && !cachedTiendaInicial);
   const [loaderHiding, setLoaderHiding] = useState(false);
   const [error, setError] = useState(null);
   const [tab, setTab] = useState('productos');
@@ -85,12 +49,19 @@ export default function TiendaPublica({ slug, isDark, toggleTheme, firebaseUser,
     const cachedTienda = cacheGet(cacheKey);
     const cachedOfertas = cacheGet(`tp-ofertas-${slug}`);
     const startMs = Date.now();
-    const MIN_LOADER_MS = 700; // mínimo para ver la animación del logo (solo carga en frío)
+    // Mínimo para ver la animación del logo — solo aplica en carga fría (el
+    // único caso donde el loader se muestra). En navegación interna no hay
+    // loader, así que no hay espera artificial: los datos aparecen apenas
+    // llegan, sin retención.
+    const MIN_LOADER_MS = isFirstLoad ? 700 : 0;
 
     const reveal = (t, os) => {
       // Carga datos inmediatamente — espera solo si el fetch fue muy rápido
       if (os) setOfertas(os);
       setTienda(t); // pre-cargar todo mientras loader aún está visible
+      // Sin loader activo (navegación interna): setear datos directo, sin la
+      // secuencia de fade-out — no hay nada que desvanecer.
+      if (!loading) return;
       const wait = Math.max(0, MIN_LOADER_MS - (Date.now() - startMs));
       setTimeout(() => {
         setLoaderHiding(true);
@@ -167,6 +138,91 @@ export default function TiendaPublica({ slug, isDark, toggleTheme, firebaseUser,
     return () => { cancelled = true; };
   }, [tienda?.id, tienda?.googleUid, firebaseUser]);
 
+  // ─── Cola de subida de ofertas en segundo plano ────────────────────────────
+  // Publicar una oferta ya NO bloquea el sheet (ver OfertaQuickForm.jsx): al
+  // tocar "Publicar" el sheet cierra al instante y la oferta aparece acá
+  // mismo, en la grilla, con estado "pendiente" (foto real vía blob URL +
+  // spinner) mientras sube de verdad en background — mismo patrón que
+  // "enviar una foto por WhatsApp": la ves aparecer ya, con su progreso
+  // propio, podés cancelarla, y si falla queda en rojo con "Reintentar" sin
+  // perder los datos. Varias cargas en paralelo (el dueño publica 2-3
+  // ofertas seguidas sin esperar) conviven sin pisarse: cada una tiene su
+  // propio _localId, y solo se actualiza/quita ESE ítem puntual del array.
+  const abortRefs = useRef({}); // _localId -> AbortController, para poder cancelar
+
+  const subirOfertaEnCola = useCallback((localId) => {
+    setOfertas((prev) => prev.map((o) => (o._localId === localId ? { ...o, _status: 'uploading', _error: null } : o)));
+    const controller = new AbortController();
+    abortRefs.current[localId] = controller;
+
+    (async () => {
+      try {
+        const item = (ofertasRef.current || []).find((o) => o._localId === localId);
+        if (!item) return; // se canceló/descartó antes de arrancar
+        const { imageUrl, thumbUrl, ogImageUrl } = await uploadOfertaImages(item.fotoFile);
+        if (controller.signal.aborted) return;
+        const payload = {
+          tiendaId: tienda.id,
+          nombre: item.nombre,
+          imageUrl, thumbUrl, ogImageUrl,
+          expireAt: item.expireAt,
+          visible: true,
+        };
+        const res = await apiFetch(`${API_BASE}/ofertas`, {
+          method: 'POST', authRequired: true,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        if (!res.ok) throw new Error('No se pudo publicar la oferta');
+        const nueva = await res.json();
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+        setOfertas((prev) => prev.map((o) => (o._localId === localId ? nueva : o)));
+      } catch (e) {
+        if (controller.signal.aborted) return; // cancelado a mano: no es un error real
+        setOfertas((prev) => prev.map((o) => (o._localId === localId ? { ...o, _status: 'error', _error: e.message } : o)));
+      } finally {
+        delete abortRefs.current[localId];
+      }
+    })();
+  }, [tienda?.id]);
+
+  // ofertasRef: subirOfertaEnCola necesita leer el array MÁS RECIENTE dentro
+  // de un closure creado antes de que esa oferta exista (se llama justo
+  // después de insertarla) — sin esto, el closure vería el `ofertas` de
+  // cuando se creó la función, sin la entrada nueva.
+  const ofertasRef = useRef(ofertas);
+  useEffect(() => { ofertasRef.current = ofertas; }, [ofertas]);
+
+  const handleOfertaCreadaOptimista = useCallback((datos) => {
+    const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const pendiente = {
+      _localId: localId, _status: 'uploading', _error: null,
+      id: localId, // las cards del template usan o.id como key — reusamos el localId hasta tener el real
+      nombre: datos.nombre,
+      thumbUrl: datos.previewUrl, imageUrl: datos.previewUrl,
+      previewUrl: datos.previewUrl, fotoFile: datos.fotoFile, expireAt: datos.expireAt,
+      visible: true,
+    };
+    setOfertas((prev) => [pendiente, ...prev]);
+    subirOfertaEnCola(localId);
+  }, [subirOfertaEnCola]);
+
+  const handleReintentarOferta = useCallback((localId) => {
+    subirOfertaEnCola(localId);
+  }, [subirOfertaEnCola]);
+
+  const handleCancelarOfertaPendiente = useCallback((localId) => {
+    abortRefs.current[localId]?.abort();
+    delete abortRefs.current[localId];
+    setOfertas((prev) => {
+      const item = prev.find((o) => o._localId === localId);
+      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter((o) => o._localId !== localId);
+    });
+  }, []);
+
   const showLoader = loading || loaderHiding;
 
   if (error && !tienda) return (
@@ -200,23 +256,9 @@ export default function TiendaPublica({ slug, isDark, toggleTheme, firebaseUser,
           completo (wordmark + KTRL) solo en carga real de página; en
           navegación interna dentro de la misma sesión, el ícono suelto. */}
       {showLoader && (
-        isFirstLoad ? (
-          <div style={{ opacity: loaderHiding ? 0 : 1, transition: 'opacity .35s ease', pointerEvents: loaderHiding ? 'none' : 'auto' }}>
-            <SplashScreenFull />
-          </div>
-        ) : (
-          <div style={{
-            position: 'fixed', inset: 0, background: 'rgb(var(--surface-dim))',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 9999,
-            opacity: loaderHiding ? 0 : 1,
-            transition: 'opacity .35s ease',
-            pointerEvents: loaderHiding ? 'none' : 'auto',
-          }}>
-            <div style={{ position: 'absolute', inset: '0 0 35% 0', background: 'radial-gradient(ellipse 75% 55% at 50% 0%, rgba(0,184,217,0.22), transparent)', pointerEvents: 'none' }} />
-            <LogoLoader />
-          </div>
-        )
+        <div style={{ opacity: loaderHiding ? 0 : 1, transition: 'opacity .35s ease', pointerEvents: loaderHiding ? 'none' : 'auto' }}>
+          {isFirstLoad ? <SplashScreenFull /> : <InlineLoader />}
+        </div>
       )}
 
       {/* Página — monta cuando el loader ya terminó, sin transición propia */}
@@ -224,7 +266,9 @@ export default function TiendaPublica({ slug, isDark, toggleTheme, firebaseUser,
         <TiendaPublicaRenderer
           tienda={tiendaConOfertas} isDark={isDark} onToggleTheme={toggleTheme} onVerOferta={onVerOferta}
           esDueño={esDueño}
-          onOfertaCreada={(nueva) => setOfertas((prev) => [nueva, ...prev])}
+          onOfertaCreada={handleOfertaCreadaOptimista}
+          onOfertaReintentar={handleReintentarOferta}
+          onOfertaCancelarPendiente={handleCancelarOfertaPendiente}
           // La oferta gestionada desde el sheet de 3 puntos puede venir tanto
           // del módulo catálogo (tienda.productos, con carrito) como del
           // módulo ofertas (state `ofertas` aparte, imagen+link sin precio)
@@ -244,26 +288,8 @@ export default function TiendaPublica({ slug, isDark, toggleTheme, firebaseUser,
             } : prev));
             setOfertas((prev) => prev.filter((o) => o.id !== id));
           }}
+          onIrAlPanel={onIrAlPanel}
         />
-      )}
-
-      {/* Botón flotante SOLO para el dueño logueado viendo su propia tienda
-          (uid de sesión === googleUid de la tienda). Un visitante común, o
-          un dueño mirando la tienda de otro, no lo ven. Atajo a su panel. */}
-      {esDueño && !showLoader && (
-        <button
-          onClick={onIrAlPanel}
-          style={{
-            position: 'fixed', right: 16, bottom: 'max(16px, env(safe-area-inset-bottom))',
-            zIndex: 9000, display: 'flex', alignItems: 'center', gap: 8,
-            padding: '12px 18px', borderRadius: 9999, border: 'none', cursor: 'pointer',
-            background: 'var(--brand-hex, #00B8D9)', color: '#fff',
-            fontSize: 14, fontWeight: 700, boxShadow: '0 6px 20px rgba(0,0,0,.25)',
-          }}
-        >
-          <Pencil style={{ width: 16, height: 16 }} />
-          Editar mi tienda
-        </button>
       )}
     </>
   );

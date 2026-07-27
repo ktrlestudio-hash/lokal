@@ -15,7 +15,7 @@
  * responde a los crawlers con OG meta tags y redirige a los humanos a esta
  * vista React.
  */
-import React, { useState, useLayoutEffect, useMemo, useEffect } from 'react';
+import React, { useState, useLayoutEffect, useMemo, useEffect, useRef } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { deriveColorPalette, resolvePagina, getEstadoApertura } from './utils.js';
 import { TiendaFooter } from './sections/TiendaFooter.jsx';
@@ -45,10 +45,28 @@ const WA_ICON = (
   </svg>
 );
 
-export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver }) {
+export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver, onNavegarAOferta }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [horariosOpen, setHorariosOpen] = useState(false);
   const [mapaOpen, setMapaOpen] = useState(false);
+
+  // Swipe horizontal entre ofertas de la MISMA tienda, en loop infinito
+  // (última → primera y viceversa) — SOLO disponible cuando llegamos por un
+  // clic interno en la tienda (onNavegarAOferta viene de Root.jsx únicamente
+  // en ese caso, ver comentario ahí). Un link directo de WhatsApp/FB no
+  // tiene la lista completa de ofertas de la tienda en memoria — ahí el
+  // gesto simplemente no se habilita (swipeNav queda null).
+  const ofertasHermanas = tienda.ofertas || [];
+  const swipeNav = useMemo(() => {
+    if (!onNavegarAOferta || ofertasHermanas.length < 2) return null;
+    const idx = ofertasHermanas.findIndex((o) => o.id === oferta.id);
+    if (idx === -1) return null;
+    const total = ofertasHermanas.length;
+    return {
+      anterior: () => onNavegarAOferta(ofertasHermanas[(idx - 1 + total) % total]),
+      siguiente: () => onNavegarAOferta(ofertasHermanas[(idx + 1) % total]),
+    };
+  }, [onNavegarAOferta, ofertasHermanas, oferta.id]);
 
   // Estado abierto/cerrado para el sheet de horarios (mismo cálculo que el
   // hero de la tienda, vía getEstadoApertura).
@@ -75,6 +93,46 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
   const zoomOferta = usePhotoSwipe(img ? [img] : []);
   const wa = (tienda.whatsapp || '').replace(/\D/g, '');
   const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+
+  // Gesto de swipe horizontal — solo en el <main> (la foto), no en toda la
+  // página: así el scroll vertical normal hacia el footer/nav (WhatsApp,
+  // horarios, CTA de "creá tu tienda") sigue intacto en cualquier otro
+  // punto de la pantalla. touchStartRef guarda el punto de origen;
+  // swipeAxisRef fija el eje DOMINANTE recién en el primer movimiento con
+  // desplazamiento apreciable (>8px) — si el primer gesto real es más
+  // vertical que horizontal, se cede el control al scroll nativo del
+  // navegador para el resto del gesto (mismo criterio que el touchmove de
+  // mvsupermercado: threshold de 8px antes de decidir "esto es un swipe").
+  const touchStartRef = useRef(null);
+  const swipeAxisRef = useRef(null);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const SWIPE_THRESHOLD = 60; // px para disparar cambio de oferta al soltar
+
+  const onTouchStart = (e) => {
+    if (!swipeNav) return;
+    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    swipeAxisRef.current = null;
+  };
+  const onTouchMove = (e) => {
+    if (!swipeNav || !touchStartRef.current) return;
+    const dx = e.touches[0].clientX - touchStartRef.current.x;
+    const dy = e.touches[0].clientY - touchStartRef.current.y;
+    if (swipeAxisRef.current === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+      swipeAxisRef.current = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    }
+    if (swipeAxisRef.current === 'x') {
+      e.preventDefault(); // eje horizontal confirmado: no dejar que el navegador scrollee la página en diagonal
+      setSwipeOffset(dx);
+    }
+  };
+  const onTouchEnd = () => {
+    if (swipeAxisRef.current === 'x' && Math.abs(swipeOffset) > SWIPE_THRESHOLD) {
+      if (swipeOffset < 0) swipeNav.siguiente(); else swipeNav.anterior();
+    }
+    setSwipeOffset(0);
+    touchStartRef.current = null;
+    swipeAxisRef.current = null;
+  };
 
   // Pageview de la oferta — llegó por un link directo (WhatsApp/FB/etc), es
   // la señal más fuerte de interés: alguien vio ESTA oferta puntual, no solo
@@ -164,8 +222,12 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
             </div>
           </header>
 
-          {/* ── CUERPO — foto grande de la oferta con zoom ── */}
-          <main style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px 24px', maxWidth: 900, margin: '0 auto', width: '100%' }}>
+          {/* ── CUERPO — foto grande de la oferta con zoom + swipe horizontal
+              entre ofertas de la tienda (solo si swipeNav existe, ver más
+              arriba) ── */}
+          <main
+            onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px 24px', maxWidth: 900, margin: '0 auto', width: '100%', touchAction: swipeNav ? 'pan-y' : 'auto' }}>
             <div style={{ textAlign: 'center', width: '100%' }}>
               <div style={{ display: 'inline-block', maxWidth: 640, width: '100%' }}>
                 <style>{`
@@ -173,9 +235,27 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
                   @media (hover: hover) { .oi-oferta-img:hover { transform: scale(1.01); } }
                   .oi-oferta-img:active { transform: scale(0.98); box-shadow: 0 10px 30px rgba(0,0,0,.28) !important; }
                 `}</style>
-                <img src={img} alt={oferta.nombre} onClick={(e) => { trackClick(tienda.id, 'zoom', { origen: 'oferta', productoId: oferta.id }); zoomOferta.abrir(0, e); }} className="oi-oferta-img"
-                  style={{ width: '100%', borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,.35)', cursor: 'zoom-in', display: 'block' }} />
+                <img src={img} alt={oferta.nombre} onClick={(e) => { if (Math.abs(swipeOffset) > 4) return; trackClick(tienda.id, 'zoom', { origen: 'oferta', productoId: oferta.id }); zoomOferta.abrir(0, e); }} className="oi-oferta-img"
+                  style={{
+                    width: '100%', borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,.35)', cursor: 'zoom-in', display: 'block',
+                    transform: swipeOffset ? `translateX(${swipeOffset}px)` : undefined,
+                    transition: swipeOffset ? 'none' : undefined,
+                  }} />
                 <div style={{ textAlign: 'center', fontSize: '1.1rem', fontWeight: 800, margin: '14px 0 2px', color: txt }}>{oferta.nombre}</div>
+                {/* Puntitos indicadores — mismo lenguaje visual que el
+                    carrusel de fotos del hero de tienda (usePhotoSwipe),
+                    solo visibles cuando el swipe está habilitado. */}
+                {swipeNav && ofertasHermanas.length > 1 && (
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 5, marginTop: 10 }}>
+                    {ofertasHermanas.map((o) => (
+                      <span key={o.id} style={{
+                        width: o.id === oferta.id ? 16 : 5, height: 5, borderRadius: 3,
+                        background: o.id === oferta.id ? primary : 'var(--tp-border)',
+                        transition: 'width .25s ease, background .25s ease',
+                      }} />
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </main>

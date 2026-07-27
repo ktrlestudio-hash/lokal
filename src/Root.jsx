@@ -8,9 +8,9 @@ import RegistroTienda from './RegistroTienda';
 import AdminPanel from './AdminPanel';
 import LegalPageView from './LegalPages';
 import { apiFetch } from './api.js';
-import { KtrlMark } from './Brand';
 import { TIENDA_SLUG_FIJA } from './config/constants';
 import { ADMIN_EMAILS } from './config/flags';
+import { SplashScreenFull, InlineLoader } from './LokalLoader.jsx';
 
 const API_BASE = '/.netlify/functions';
 
@@ -46,85 +46,6 @@ function pathToTiendaSlug(pathname) {
   return null;
 }
 
-// Logo SVG animado (draw del anillo + dot con pop + pulse) — portado literal
-// del SplashScreen de LOKAL global (Root.jsx), en turquesa var(--brand-hex).
-function LogoLoader() {
-  const cx = 40.72, cy = 40.65, r = 11.23;
-  return (
-    <svg viewBox="0 0 81.18 81.44" width={72} height={72} xmlns="http://www.w3.org/2000/svg" aria-label="Cargando">
-      <style>{`
-        @keyframes lk-draw { from { stroke-dashoffset: 275; } to { stroke-dashoffset: 0; } }
-        @keyframes lk-dot-in {
-          0% { transform: scale(0); opacity: 0; }
-          55% { transform: scale(1.3); opacity: 1; }
-          75% { transform: scale(0.88); }
-          90% { transform: scale(1.05); }
-          100% { transform: scale(1); opacity: 1; }
-        }
-        @keyframes lk-pulse {
-          0%,100% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.10); opacity: 0.7; }
-        }
-        .lk-ring {
-          fill: none; stroke: var(--brand-hex, #00B8D9); stroke-width: 7.66;
-          stroke-linecap: round; stroke-dasharray: 275; stroke-dashoffset: 275;
-          animation: lk-draw 0.85s cubic-bezier(0.4,0,0.2,1) 0.1s forwards;
-        }
-        .lk-dot {
-          fill: var(--brand-hex, #00B8D9); transform-origin: ${cx}px ${cy}px;
-          animation: lk-dot-in 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.7s both,
-                     lk-pulse 2.2s ease-in-out 1.35s infinite;
-        }
-      `}</style>
-      <rect className="lk-ring" x="3.83" y="3.83" width="73.52" height="73.78" rx="14.83" />
-      <circle className="lk-dot" cx={cx} cy={cy} r={r} />
-    </svg>
-  );
-}
-
-// Splash de carga — portado literal del SplashScreenFull de LOKAL global:
-// glow radial que pulsa, logo animado, wordmark "lokal", "creado por KTRL".
-function AdminLoader() {
-  return (
-    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center overflow-hidden"
-      style={{ background: '#060d1a' }}>
-      <style>{`
-        @keyframes lk-brand-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes lk-mark-in { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes lk-glow-pulse { 0%,100% { opacity: 0.55; transform: scale(1); } 50% { opacity: 0.85; transform: scale(1.08); } }
-      `}</style>
-
-      {/* Glow radial superior — pulsa suave (turquesa) */}
-      <div className="absolute inset-x-0 top-0 pointer-events-none" style={{
-        height: '65%',
-        background: 'radial-gradient(ellipse 75% 55% at 50% 0%, rgba(0,184,217,0.22), transparent)',
-        animation: 'lk-glow-pulse 3s ease-in-out 1.2s infinite',
-      }} />
-      {/* Reflejo inferior tenue */}
-      <div className="absolute inset-x-0 bottom-0 pointer-events-none" style={{
-        height: '40%',
-        background: 'radial-gradient(ellipse 60% 50% at 50% 100%, rgba(0,184,217,0.07), transparent)',
-      }} />
-
-      <LogoLoader />
-
-      <div style={{ animation: 'lk-brand-in 0.45s ease 1.0s both', marginTop: 18 }}>
-        <span style={{ color: 'white', fontSize: 34, fontWeight: 800, letterSpacing: '0.01em', fontFamily: "'Inter', system-ui, sans-serif" }}>
-          lokal
-        </span>
-      </div>
-
-      <div className="absolute bottom-10 flex items-center gap-1.5"
-        style={{ animation: 'lk-mark-in 0.5s ease 1.2s both', opacity: 0 }}>
-        <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, fontFamily: "'Inter', system-ui, sans-serif", letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-          creado por
-        </span>
-        <KtrlMark className="text-white" style={{ height: 12, width: 'auto', opacity: 0.35 }} />
-      </div>
-    </div>
-  );
-}
-
 // Decidido UNA vez al cargar el módulo (no durante el render) — mismo
 // criterio que LOKAL global: el splash completo con logo+wordmark solo debe
 // verse en una carga real de página (F5 / primera visita), no en cada
@@ -140,22 +61,21 @@ const _lastSplash = Number(localStorage.getItem(SPLASH_TS_KEY) || 0);
 const IS_FIRST_LOAD = Date.now() - _lastSplash > 20 * 60 * 1000;
 if (IS_FIRST_LOAD) localStorage.setItem(SPLASH_TS_KEY, String(Date.now()));
 
-// Loader liviano para esperas dentro de una sesión ya iniciada (navegación
-// interna, refetch de tienda) — sin el splash a pantalla completa, que solo
-// corresponde a una carga real de página.
-function InlineLoader() {
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center" style={{ background: 'var(--surface-solid, #0a0a0a)' }}>
-      <LogoLoader />
-    </div>
-  );
-}
-
 // AppLoader: elige entre el splash completo (primera carga) y el liviano
-// (navegación dentro de la misma sesión) — reemplaza los usos directos de
-// AdminLoader en las esperas de auth/tienda.
+// (navegación dentro de la misma sesión) — ambos importados de LokalLoader.jsx
+// (única fuente compartida con TiendaPublica/OfertaPublica, ver ese archivo).
+// key fija ('app-loader') en todos los usos: garantiza que React reconcilie
+// el loader como EL MISMO nodo del DOM entre fases de carga (auth → fetch
+// tienda), en vez de desmontar uno y montar otro. Si se remonta, el SVG se
+// re-crea y su animación CSS (lk-draw/lk-dot-in, que corre una sola vez con
+// `forwards`) reinicia desde cero — ese era el bug del logo "que se anima,
+// se reinicia y vuelve a animarse". Con la key estable el nodo persiste y la
+// animación sigue su curso sin cortes aunque la condición que lo muestra
+// cambie de rama (undefined→loading→loadingTienda).
 function AppLoader() {
-  return IS_FIRST_LOAD ? <AdminLoader /> : <InlineLoader />;
+  return IS_FIRST_LOAD
+    ? <SplashScreenFull key="app-loader" />
+    : <InlineLoader key="app-loader" />;
 }
 
 export default function Root() {
@@ -245,7 +165,13 @@ export default function Root() {
   const [firebaseUser, setFirebaseUser]       = useState(undefined); // undefined = sin resolver aún
   const [redirectChecked, setRedirectChecked] = useState(false);
   const [tiendaData, setTiendaData]           = useState(null);
-  const [loadingTienda, setLoadingTienda]     = useState(false);
+  // Arranca en true si entramos directo a /admin: así NO hay un render
+  // intermedio con loadingTienda=false entre "auth resuelto" y "el useEffect
+  // de carga de tienda arrancó" (el effect corre DESPUÉS del primer render).
+  // Sin esto, el AppLoader se desmontaba un frame en ese hueco y volvía a
+  // montarse, reiniciando la animación del logo (bug del "loading que se
+  // reinicia solo"). El propio effect lo vuelve a poner en true igual.
+  const [loadingTienda, setLoadingTienda]     = useState(isAdminRoute);
   const [tiendaFetchError, setTiendaFetchError] = useState(null);
 
   useEffect(() => {
@@ -312,6 +238,15 @@ export default function Root() {
         isDark={isDark}
         toggleTheme={toggleTheme}
         onVolver={volverATienda}
+        // Swipe horizontal entre ofertas de la MISMA tienda (ver
+        // OfertaIndividual.jsx) — solo tiene sentido si llegamos desde un
+        // clic interno en la tienda (desdeMemoria trae tienda.ofertas
+        // completo). Un link directo de WhatsApp/FB nunca tiene esa lista,
+        // así que el gesto simplemente no se habilita ahí (no hay prop que
+        // pasarle). Reusa navegarAOferta: mismo mecanismo de cambiar
+        // URL+memoria que ya usa el clic normal desde la tienda.
+        onNavegarAOferta={desdeMemoria ? (nuevaOferta) => navegarAOferta(desdeMemoria.tienda, nuevaOferta) : null}
+        isFirstLoad={IS_FIRST_LOAD}
       />
     );
   }

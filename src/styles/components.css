@@ -115,6 +115,20 @@
   transform: scale(0.95);
 }
 
+/* Toggle de tema del header admin — calca .tp-footer-theme (tienda pública):
+   solo cambia fondo/color al primario en hover, sin transform (a
+   diferencia de .ui-icon-btn, cuyo scale(1.05) se veía como un salto de
+   ~1px del ícono sobre este botón). */
+/* !important necesario: el botón trae background/color en un style={{}}
+   inline (mayor especificidad que cualquier clase), que una pseudo-clase
+   :hover de hoja externa no puede vencer sin esto. */
+@media (hover: hover) {
+  .sa-theme-toggle:hover {
+    background: color-mix(in srgb, var(--brand-hex, #00B8D9) 10%, transparent) !important;
+    color: var(--brand-hex, #00B8D9) !important;
+  }
+}
+
 /* ─────────────────────────────────────────────────────────────────────────── */
 /* AVATAR */
 /* ─────────────────────────────────────────────────────────────────────────── */

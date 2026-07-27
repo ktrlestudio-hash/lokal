@@ -1,11 +1,12 @@
-﻿import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+﻿import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import { cacheGet, cacheSet } from './lokCache';
 import { PaywallModal as PaywallModalUI, PremiumModal as PremiumModalUI, SuscripcionContent } from './store/PricingUI';
 import { haptic } from './haptic';
 import LazyImg from './LazyImg';
-import { SkeletonProductosGrid, SkeletonProductosList, SkeletonInbox, SkeletonFeed, SkeletonPerfil, SkeletonStats } from './Skeletons';
+import { SkeletonProductosGrid, SkeletonInbox } from './Skeletons';
 import { MOCK_PRODUCTOS, MOCK_INBOX, MOCK_HISTORIAL_PAGOS, MOCK_STATS } from './mockStoreData';
 import { TiendaPublicaRenderer, TEMPLATES_META } from './tienda-publica/TiendaPublicaRenderer.jsx';
+import ImageCropModal from './ImageCropModal.jsx';
 import { SECCIONES_DEFAULT } from './tienda-publica/tokens.js';
 import { isModuleActive, deriveColorPalette, getEstadoApertura } from './tienda-publica/utils.js';
 import { useGeolocation } from './hooks';
@@ -21,7 +22,7 @@ import {
   Tag, Gift, Wrench, Copy, Menu, Info, Infinity, FlaskConical, Clock, Palette,
   PanelLeft, Archive, Paperclip, ShoppingBag, Building2,
   User, Hash, CalendarClock, MessageCircle, ChevronLeft,
-  LayoutGrid, LayoutList, ArrowUpDown, SlidersHorizontal, ListFilter, Navigation
+  LayoutGrid, LayoutList, ArrowUpDown, SlidersHorizontal, ListFilter, Navigation, EyeOff
 } from 'lucide-react';
 
 // ─── Precios suscripción (deben coincidir con mp-checkout.js) ─────────────────
@@ -53,7 +54,7 @@ import TiendaDetailScreen from './screens/TiendaDetailScreen';
 import { CATEGORIES as BASE_CATEGORIES, getCategoryPath, getAllDescendants } from './categories';
 import CategoryIcon from './CategoryIcon';
 import { apiFetch } from './api';
-import { PlaceAutocomplete, MapPicker, uploadFile, reverseGeocode } from './storeFormUtils';
+import { PlaceAutocomplete, MapPicker, uploadFile, uploadOfertaImages, reverseGeocode } from './storeFormUtils';
 
 const API_BASE = '/.netlify/functions';
 
@@ -156,7 +157,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [sidebarPinned, setSidebarPinned] = React.useState(() => localStorage.getItem('lokal-store-sidebar-pinned') !== 'false');
 
   // Datos
-  const [loading, setLoading] = useState(true);
   const [tienda, setTienda] = useState(null);
 
   // ── Inbox (mensajes directos de clientes) ─────────────────────────────────
@@ -245,20 +245,39 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [paginaForm, setPaginaForm] = useState({ template: 'commerce-modern', color: '#e4002b', colorSecundario: null, modoOscuro: false, secciones: {} });
   const [savingPagina, setSavingPagina] = useState(false);
 
-  // Edición info básica
-  const [editInfoModal, setEditInfoModal] = useState(false);
-  const [editInfoTab, setEditInfoTab] = useState('info');
-  const [editInfoScope, setEditInfoScope] = useState('general');
+  // Editor enfocado de campos (descripción, contacto) — reemplaza el viejo
+  // EditInfoModal (formulario largo "editar todo de una", retirado). Cada
+  // apertura define qué campos muestra vía `fieldEditor.fields`. Guardado
+  // optimista: cierra al instante, persiste en segundo plano.
+  const [fieldEditor, setFieldEditor] = useState(null); // { title, fields:[{key,label,type,placeholder,prefix,maxLength,rows}], values }
   const [editingNombre, setEditingNombre] = useState(false);
   const [nombreDraft, setNombreDraft] = useState('');
-  const [editInfoForm, setEditInfoForm] = useState({ nombre: '', descripcion: '', telefono: '', ciudad: '', direccion: '' });
-  const [savingInfo, setSavingInfo] = useState(false);
-  const [saveInfoErr, setSaveInfoErr] = useState(null);
-  const [mediaModal, setMediaModal] = useState(null); // 'foto' | 'portada' | 'galeria'
+  // Índice del carrusel del hero de "Mi tienda" (PerfilScreen) — vive acá,
+  // NO dentro de PerfilScreen: esa función se invoca condicionalmente como
+  // PerfilScreen() (no <PerfilScreen/>) según screen==='perfil', así que un
+  // hook declarado ahí adentro entra/sale del conteo de hooks de StoreApp
+  // según la pantalla activa y rompe las reglas de hooks (mismo criterio ya
+  // documentado para editingNombre/nombreDraft arriba).
+  const [heroPhotoIdx, setHeroPhotoIdx] = useState(0);
+  // Estado de la sección "Completá tu tienda" — vive acá por el mismo
+  // motivo que heroPhotoIdx: PerfilScreen se invoca como función plana, no
+  // como componente. Desplegada por defecto: al abrir "Mi tienda" ya se ven
+  // los hasta 5 pendientes, sin necesidad de tocar el header para
+  // descubrirlos. "Ver más" (si hay más de 5) expande el resto; "Ver menos"
+  // vuelve al recorte de 5 sin volver a colapsar la sección entera.
+  const [profileChecklistCollapsed, setProfileChecklistCollapsed] = useState(false);
+  const [profileChecklistExpanded, setProfileChecklistExpanded] = useState(false);
+  const [mediaModal, setMediaModal] = useState(null); // 'foto' | 'galeria'
   const [mediaDraft, setMediaDraft] = useState([]);
   const [mediaSaving, setMediaSaving] = useState(false);
   const [mediaError, setMediaError] = useState(null);
   const mediaInputRef = useRef(null);
+  // Cola de archivos elegidos pendientes de encuadrar (react-easy-crop) antes
+  // de sumarse al draft — uno por vez: al confirmar/cancelar el crop de uno
+  // pasa al siguiente. dragOver: resalta el dropzone mientras se arrastra un
+  // archivo encima (drag&drop real, antes el cuadro dashed era solo visual).
+  const [cropQueue, setCropQueue] = useState([]);
+  const [dragOver, setDragOver] = useState(false);
   const [locationModal, setLocationModal] = useState(false);
   const [horarioModal, setHorarioModal] = useState(false);
   const [horarioForm, setHorarioForm] = useState({});
@@ -306,9 +325,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [rubrosSaving, setRubrosSaving] = useState(false);
   const [rubrosSaved, setRubrosSaved] = useState(false);
 
-  // EditInfoModal
-  const [editModalRubros, setEditModalRubros] = useState([]);
-
   // ProductosScreen
   const [prodSearch,    setProdSearch]    = useState('');
   const [prodFilter,    setProdFilter]    = useState('todos');
@@ -347,9 +363,127 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [ofertaForm, setOfertaForm] = useState({ nombre: '', expireAt: '', visible: true });
   const [ofertaFotoFile, setOfertaFotoFile] = useState(null);
   const [ofertaFotoPreview, setOfertaFotoPreview] = useState(null);
-  const [ofertaSaving, setOfertaSaving] = useState(false);
-  const [ofertaSaveErr, setOfertaSaveErr] = useState(null);
+  // Al EDITAR: marca que el dueño quitó explícitamente la foto ya guardada
+  // (ofertaEditing.imageUrl) con la X — sin esto no había forma de "vaciar"
+  // el picker en modo edición, solo de reemplazarla subiendo otra encima.
+  const [ofertaFotoRemoved, setOfertaFotoRemoved] = useState(false);
+  // true entre "elegí un archivo" y "el navegador ya decodificó/pintó esa
+  // imagen" — createObjectURL es instantáneo, pero el <img> tarda un poco en
+  // decodificar+pintar fotos pesadas de cámara sin comprimir todavía (recién
+  // se comprimen al subir de verdad). Sin este spinner, esos segundos se
+  // sentían como "elegí la foto pero no pasó nada", incertidumbre real.
+  const [ofertaFotoLoading, setOfertaFotoLoading] = useState(false);
+  // true recién DESPUÉS del primer intento de guardar con algo faltante —
+  // así el formulario no "grita" en rojo apenas se abre, solo cuando el
+  // dueño de verdad intentó guardar sin completar todo.
+  const [ofertaIntentoGuardar, setOfertaIntentoGuardar] = useState(false);
   const [ofertaConfirmDelete, setOfertaConfirmDelete] = useState(null);
+
+  // ─── Cola de publicación/edición de oferta EN SEGUNDO PLANO ───────────────
+  // Mismo patrón que ya usa la carga rápida desde la tienda pública
+  // (TiendaPublica.jsx → subirOfertaEnCola): "Publicar"/"Guardar" ya NO
+  // bloquea el formulario con spinner hasta que la red responde — cierra al
+  // instante, la card aparece/actualiza en la grilla con estado "pendiente"
+  // (foto real vía blob URL) mientras sube de verdad atrás, y si falla queda
+  // en rojo con "Reintentar" sin perder los datos cargados.
+  // Map en vez de leer el array reactivo (misProductos) dentro de la
+  // corrutina: subirOfertaEnColaAdmin se dispara en el MISMO tick síncrono
+  // que el setMisProductos que agrega el ítem pendiente — el estado de React
+  // todavía no se re-renderizó, así que cualquier ref sincronizado por
+  // useEffect(() => ref.current = misProductos, [misProductos]) llega tarde
+  // (corre recién después de ese primer render). El resultado real de ese
+  // bug: item siempre undefined en el primer intento → "if (!item) return"
+  // cortaba la función en silencio ANTES de tocar _status, dejando la card
+  // en 'uploading' para siempre (el spinner que nunca se iba). El Map se
+  // escribe de forma síncrona antes de disparar la subida, sin ese desfasaje.
+  const ofertaPendientesRef = useRef(new Map()); // _localId -> datos del ítem
+  const ofertaAbortRefs = useRef({}); // _localId -> AbortController
+
+  const subirOfertaEnColaAdmin = useCallback((localId) => {
+    const item = ofertaPendientesRef.current.get(localId);
+    if (!item) return; // se descartó/canceló antes de arrancar
+    setMisProductos(prev => prev.map(o => (o._localId === localId ? { ...o, _status: 'uploading', _error: null } : o)));
+    const controller = new AbortController();
+    ofertaAbortRefs.current[localId] = controller;
+
+    (async () => {
+      try {
+        let imageUrl = item._existingImageUrl || null;
+        let thumbUrl = item._existingThumbUrl || null;
+        let ogImageUrl = item._existingOgImageUrl || null;
+        if (item._fotoFile) {
+          const uploaded = await uploadOfertaImages(item._fotoFile);
+          if (controller.signal.aborted) return;
+          imageUrl = uploaded.imageUrl; thumbUrl = uploaded.thumbUrl; ogImageUrl = uploaded.ogImageUrl;
+        }
+        if (!imageUrl) throw new Error('Subí una foto para la oferta');
+        const payload = {
+          nombre: item.nombre,
+          imageUrl, thumbUrl: thumbUrl || imageUrl, ogImageUrl: ogImageUrl || thumbUrl || imageUrl,
+          expireAt: item.expireAt,
+          visible: item.visible !== false,
+        };
+        if (controller.signal.aborted) return;
+        const res = item._editingId
+          ? await apiFetch(`${API_BASE}/ofertas`, { method: 'PATCH', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item._editingId, ...payload }), signal: controller.signal })
+          : await apiFetch(`${API_BASE}/ofertas`, { method: 'POST', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tiendaId: tiendaData.id, ...payload }), signal: controller.signal });
+        if (controller.signal.aborted) return;
+        if (!res.ok) throw new Error(item._editingId ? 'No se pudo actualizar la oferta' : 'No se pudo publicar la oferta');
+        const guardada = await res.json();
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+        setMisProductos(prev => prev.map(o => (o._localId === localId ? guardada : o)));
+        ofertaPendientesRef.current.delete(localId);
+      } catch (e) {
+        if (controller.signal.aborted) return; // cancelado a mano: no es un error real
+        setMisProductos(prev => prev.map(o => (o._localId === localId ? { ...o, _status: 'error', _error: e.message } : o)));
+      } finally {
+        delete ofertaAbortRefs.current[localId];
+      }
+    })();
+  }, [tiendaData?.id]);
+
+  const handleOfertaGuardadaOptimista = useCallback((datos) => {
+    const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const item = {
+      _localId: localId, _fotoFile: datos.fotoFile, _editingId: datos.editingId || null,
+      _existingImageUrl: datos.existingImageUrl || null,
+      _existingThumbUrl: datos.existingThumbUrl || null,
+      _existingOgImageUrl: datos.existingOgImageUrl || null,
+      nombre: datos.nombre,
+      previewUrl: datos.previewUrl,
+      expireAt: datos.expireAt,
+      visible: datos.visible !== false,
+    };
+    ofertaPendientesRef.current.set(localId, item);
+    const pendiente = {
+      ...item, _status: 'uploading', _error: null,
+      id: datos.editingId || localId, // key estable: si es edición, conserva el id real
+      thumbUrl: datos.previewUrl || datos.existingThumbUrl,
+      imageUrl: datos.previewUrl || datos.existingImageUrl,
+    };
+    setMisProductos(prev => datos.editingId
+      ? prev.map(o => (o.id === datos.editingId ? pendiente : o))
+      : [pendiente, ...prev]);
+    subirOfertaEnColaAdmin(localId);
+  }, [subirOfertaEnColaAdmin]);
+
+  const handleReintentarOfertaAdmin = useCallback((localId) => {
+    subirOfertaEnColaAdmin(localId);
+  }, [subirOfertaEnColaAdmin]);
+
+  // Cancela una subida en curso — mismo criterio que WhatsApp: tocar la X
+  // sobre el spinner aborta el request real (AbortController) y descarta la
+  // card pendiente de la grilla. Si era una EDICIÓN, no se pierde nada real
+  // (el servidor nunca llegó a recibir el cambio); si era una oferta nueva,
+  // simplemente no se crea.
+  const handleCancelarOfertaAdmin = useCallback((localId) => {
+    ofertaAbortRefs.current[localId]?.abort();
+    delete ofertaAbortRefs.current[localId];
+    const item = ofertaPendientesRef.current.get(localId);
+    ofertaPendientesRef.current.delete(localId);
+    if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+    setMisProductos(prev => prev.filter(o => o._localId !== localId));
+  }, []);
 
   // Persiste screen en localStorage + sincroniza hash en desktop
   const navigateTo = (s) => {
@@ -453,40 +587,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     return cat;
   };
 
-  const saveInfoBasica = async () => {
-    if (editInfoScope === 'general' && !editInfoForm.nombre.trim()) return;
-    setSavingInfo(true);
-    setSaveInfoErr(null);
-    try {
-      const body = {
-        id: tiendaData.id,
-        nombre: editInfoForm.nombre.trim(),
-        descripcion: editInfoForm.descripcion,
-        telefono: editInfoForm.telefono,
-        whatsapp: editInfoForm.whatsapp,
-        instagram: editInfoForm.instagram,
-        tagline: editInfoForm.tagline,
-        ciudad: editInfoForm.ciudad,
-        direccion: editInfoForm.direccion,
-      };
-      const res = await apiFetch(`${API_BASE}/tiendas-crud`, {
-        method: 'PATCH',
-        authRequired: true,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Error'); }
-      const updated = await res.json();
-      setTienda(updated);
-      onTiendaUpdate(updated);
-      setEditInfoModal(false);
-    } catch (e) {
-      setSaveInfoErr(e.message);
-    } finally {
-      setSavingInfo(false);
-    }
-  };
-
   const persistTiendaPatch = async (patch) => {
     const res = await apiFetch(`${API_BASE}/tiendas-crud`, {
       method: 'PATCH',
@@ -505,9 +605,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     if (section === 'foto') {
       return tiendaInfo.foto ? [{ url: tiendaInfo.foto, existing: true }] : [];
     }
-    if (section === 'portada') {
-      return tiendaData?.galeria?.[0] ? [{ url: tiendaData.galeria[0], existing: true }] : [];
-    }
     return (tiendaData?.galeria || []).map(url => ({ url, existing: true }));
   };
 
@@ -521,6 +618,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     setMediaModal(null);
     setMediaDraft([]);
     setMediaError(null);
+    setCropQueue([]);
+    setDragOver(false);
     if (mediaInputRef.current) mediaInputRef.current.value = '';
   };
 
@@ -541,41 +640,76 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     setLocationModal(true);
   };
 
-  const openGeneralProfileEditor = (tab = 'info') => {
-    setEditInfoForm({
-      nombre: tiendaInfo.nombre || '',
-      descripcion: tiendaInfo.descripcion || '',
-      telefono: tiendaInfo.telefono || '',
-      whatsapp: tiendaInfo.whatsapp || '',
-      instagram: tiendaInfo.instagram || '',
-      tagline: tiendaInfo.tagline || '',
-      ciudad: tiendaInfo.ciudad || '',
-      direccion: tiendaInfo.direccion || '',
+  // Guardado optimista de fieldEditor: cierra el sheet AL INSTANTE (no
+  // espera la red), refleja el cambio en la UI de inmediato, y persiste en
+  // segundo plano — mismo patrón que ya usa la carga rápida de oferta desde
+  // la tienda pública. Antes (EditInfoModal) el sheet quedaba trabado con
+  // spinner hasta que el PATCH volvía.
+  const saveFieldEditor = async (values) => {
+    const patch = fieldEditor.fields.reduce((acc, f) => ({ ...acc, [f.key]: values[f.key] }), {});
+    setFieldEditor(null);
+    try {
+      await persistTiendaPatch(patch);
+    } catch {
+      // Si falla, el dato queda en el estado previo (tiendaData no se tocó
+      // hasta que persistTiendaPatch resuelve) — el dueño puede reabrir el
+      // sheet y reintentar; no hace falta un rollback visual complejo acá
+      // porque no hubo optimismo sobre la propia tienda, solo sobre el sheet.
+    }
+  };
+
+  // Abre el sheet enfocado de "Descripción" (1 campo) — reemplaza el scope
+  // 'descripcion' del viejo EditInfoModal (formulario largo retirado: ver
+  // auditoría UX, hallazgo A1/B5).
+  const openDescripcionEditor = () => {
+    setFieldEditor({
+      title: 'Descripción',
+      fields: [{ key: 'descripcion', label: 'Descripción', type: 'textarea', rows: 4, maxLength: 1500, placeholder: 'Contá de qué se trata tu tienda, qué productos o servicios ofrecés...' }],
+      values: { descripcion: tiendaInfo.descripcion || '' },
     });
-    setSaveInfoErr(null);
-    setEditInfoScope('general');
-    setEditInfoTab(tab);
-    setEditModalRubros(tiendaInfo.rubros || []);
-    setEditInfoModal(true);
+  };
+
+  // Abre el sheet enfocado de "Contacto" (teléfono/whatsapp/IG/tagline) —
+  // reemplaza el scope 'contacto' del viejo EditInfoModal. Puede abrirse
+  // completo (desde "Contacto e info") o con un solo campo resaltado si el
+  // acceso vino de un campo puntual (ej. tocar la fila de "Instagram").
+  const openContactoEditor = (focusField = null) => {
+    setFieldEditor({
+      title: 'Contacto',
+      focusField,
+      fields: [
+        { key: 'telefono',  label: 'Teléfono / WhatsApp', type: 'text', placeholder: '+5493XX XXXXXXX' },
+        { key: 'whatsapp',  label: 'WhatsApp (si es distinto al teléfono)', type: 'text', placeholder: '+5493XX XXXXXXX' },
+        { key: 'instagram', label: 'Instagram', type: 'text', prefix: '@', placeholder: 'mitienda', maxLength: 60 },
+        { key: 'tagline',   label: 'Tagline', type: 'text', placeholder: 'Tu frase o eslogan', maxLength: 160 },
+      ],
+      values: {
+        telefono: tiendaInfo.telefono || '',
+        whatsapp: tiendaInfo.whatsapp || '',
+        instagram: tiendaInfo.instagram || '',
+        tagline: tiendaInfo.tagline || '',
+      },
+    });
   };
 
   const openProfileEdit = (section) => {
+    // 'portada' fue siempre un alias de 'galeria' (galeria[0] es la foto de
+    // portada del hero público, que rota TODA la galería como carrusel de
+    // fondo) — antes tenía su propio modal limitado a 1 sola foto, sin
+    // relación con cuántas admite el hero real. Unificado: un solo editor.
     if (['foto', 'portada', 'galeria'].includes(section)) {
-      openMediaEditor(section === 'portada' ? 'portada' : section);
+      openMediaEditor(section === 'portada' ? 'galeria' : section);
       return;
     }
     // Teléfono/WhatsApp/Instagram/Tagline: son todos "cómo te encuentran y
-    // te presentás" — un solo scope 'contacto' en el mismo sheet, en vez de
-    // repartidos entre el modal general y la sección de diseño de página.
+    // te presentás" — un solo sheet enfocado, resaltando el campo puntual
+    // que se tocó (si vino de un ítem específico, no del acceso general).
     if (['telefono', 'whatsapp', 'instagram', 'tagline'].includes(section)) {
-      openGeneralProfileEditor('info');
-      setEditInfoScope('contacto');
+      openContactoEditor(section);
       return;
     }
     if (section === 'descripcion') {
-      openGeneralProfileEditor('info');
-      setEditInfoScope('descripcion');
-      setEditInfoTab('info');
+      openDescripcionEditor();
       return;
     }
     if (section === 'direccion' || section === 'ciudad') {
@@ -605,10 +739,13 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       });
       setPublicPageError(null);
       setEditingPublicPage(true);
-      setTimeout(() => document.getElementById('perfil-pagina-publica')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
       return;
     }
-    openGeneralProfileEditor(section === 'rubros' ? 'rubros' : 'info');
+    // 'rubros' no tiene editor visible hoy: se ocultó del perfil (solo se
+    // usa al CREAR la tienda para el preset de módulos, no aplica después —
+    // ver auditoría UX hallazgo A3). El dato se sigue guardando en backend;
+    // si se reactiva la edición post-creación, acá es donde enganchar su
+    // propio sheet enfocado.
   };
 
   // Sincronizar paginaForm cuando llega la tienda (carga inicial o después de guardar)
@@ -751,25 +888,45 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     }
   };
 
-  const handleMediaFiles = async (event) => {
-    const files = Array.from(event.target.files || []);
+  // Archivos elegidos (por input o drag&drop) NO se suman directo al draft:
+  // primero pasan uno por uno por el cropper (ver cropQueue/CropModal más
+  // abajo) para que el dueño pueda encuadrar/hacer zoom antes de subir —
+  // antes se usaba la foto tal cual salía de la cámara, sin recorte posible.
+  const queueMediaFiles = (fileList) => {
+    const files = Array.from(fileList || []).filter(f => f.type?.startsWith('image/'));
     if (!files.length) return;
-    const maxItems = mediaModal === 'foto' || mediaModal === 'portada' ? 1 : 6;
-    const remaining = Math.max(0, maxItems - mediaDraft.length);
-    const nextItems = files.slice(0, remaining).map(file => ({
-      file,
-      url: URL.createObjectURL(file),
-      existing: false,
-    }));
-    setMediaDraft(prev => {
-      if (mediaModal === 'foto' || mediaModal === 'portada') {
-        prev.forEach(item => { if (!item.existing) URL.revokeObjectURL(item.url); });
-        return nextItems.slice(0, 1);
-      }
-      return [...prev, ...nextItems];
-    });
+    const isSingle = mediaModal === 'foto';
+    const remaining = isSingle ? 1 : Math.max(0, 6 - mediaDraft.length - cropQueue.length);
+    setCropQueue(prev => [...prev, ...files.slice(0, remaining)]);
+  };
+
+  const handleMediaFiles = (event) => {
+    queueMediaFiles(event.target.files);
     event.target.value = '';
   };
+
+  const handleMediaDrop = (event) => {
+    event.preventDefault();
+    setDragOver(false);
+    queueMediaFiles(event.dataTransfer.files);
+  };
+
+  // Confirmado el encuadre de un archivo: se suma al draft como "nuevo" y se
+  // avanza al siguiente de la cola (si el dueño arrastró varias fotos juntas).
+  const handleCropConfirm = (croppedFile) => {
+    const url = URL.createObjectURL(croppedFile);
+    setMediaDraft(prev => {
+      const nextItem = { file: croppedFile, url, existing: false };
+      if (mediaModal === 'foto') {
+        prev.forEach(item => { if (!item.existing) URL.revokeObjectURL(item.url); });
+        return [nextItem];
+      }
+      return [...prev, nextItem];
+    });
+    setCropQueue(prev => prev.slice(1));
+  };
+
+  const handleCropSkip = () => setCropQueue(prev => prev.slice(1));
 
   const removeMediaDraftItem = (index) => {
     setMediaDraft(prev => {
@@ -790,12 +947,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
       if (mediaModal === 'foto') {
         await persistTiendaPatch({ foto: urls[0] || null });
-      } else if (mediaModal === 'portada') {
-        const currentGallery = tiendaData?.galeria || [];
-        const nextGallery = urls[0]
-          ? [urls[0], ...currentGallery.filter((url, idx) => idx !== 0 && url !== urls[0])]
-          : currentGallery.slice(1);
-        await persistTiendaPatch({ galeria: nextGallery });
       } else {
         await persistTiendaPatch({ galeria: urls });
       }
@@ -953,39 +1104,79 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     actionSlot = null,
     secondarySlot = null,
     hideActionsOnMobile = false,
+    // leftSlot reemplaza el título/subtítulo (que ocupan el flex-1
+    // izquierdo) por contenido custom — usado en "Mi tienda" para poner
+    // "Ver página" ahí en vez de a la derecha: es la acción principal de
+    // esa pantalla, y a la izquierda queda más protagónica/fácil de
+    // encontrar (el pulgar en mobile ya arranca esa zona al abrir la app).
+    leftSlot = null,
+    // icon: mismo ícono que la sección tiene en la nav lateral/inferior
+    // (ver STORE_NAV_ITEMS más arriba) — repetirlo acá da contexto visual
+    // inmediato de "dónde estoy", igual que ya pasa con el avatar de tienda
+    // o el botón de nav activo.
+    icon: Icon = null,
   }) => (
     <div className="bg-surface-card sticky top-0 z-20 shrink-0">
       <div className="px-4 lg:px-8 h-14 lg:h-16 flex items-center gap-3 border-b border-slate-100 dark:border-white/8">
 
-        {/* Back o logo en mobile */}
-        {onBack ? (
+        {/* Back — el avatar de tienda que vivía acá en mobile se sacó: era
+            redundante con el avatar de CUENTA de la derecha (misma forma,
+            mismo tamaño, en el mismo header) aunque son datos distintos
+            (negocio vs. persona dueña) — se leían como "la misma foto
+            repetida". La foto de perfil de la tienda ya se ve grande y
+            clara en el hero de "Mi tienda", no hace falta chiquita acá
+            también. */}
+        {onBack && (
           <button onClick={onBack} className="ui-icon-btn hover:bg-surface-card-2 dark:hover:bg-white/8 text-ink-dim shrink-0 -ml-1">
             <ArrowLeft className="w-5 h-5" />
           </button>
-        ) : (
-          /* Avatar de tienda — solo mobile, desktop lo tiene el sidebar */
-          <div className="lg:hidden w-8 h-8 rounded-xl overflow-hidden shrink-0 bg-brand/10 flex items-center justify-center">
-            {tiendaInfo?.foto
-              ? <img src={tiendaInfo.foto} alt="" className="w-full h-full object-cover" />
-              : <Store className="w-4 h-4 text-brand" />}
-          </div>
         )}
 
-        {/* Título + subtítulo */}
-        <div className="flex-1 min-w-0">
-          <h1 className="font-black text-[15px] lg:text-lg leading-tight truncate">{title}</h1>
-          {subtitle && <p className="text-[11px] text-ink-dim font-medium leading-none mt-0.5 truncate hidden lg:block">{subtitle}</p>}
+        {/* Título + subtítulo (+ ícono de sección) — o leftSlot si se pasó uno */}
+        <div className="flex-1 min-w-0 flex items-center gap-2.5">
+          {Icon && !leftSlot && (
+            <span className="w-8 h-8 rounded-xl bg-brand/10 dark:bg-brand/15 text-brand flex items-center justify-center shrink-0">
+              <Icon className="w-4 h-4" strokeWidth={2.5} />
+            </span>
+          )}
+          <div className="min-w-0 flex flex-col justify-center">
+            {leftSlot || (
+              <>
+                {/* leading-none (line-height:1), no leading-tight (1.25) —
+                    ese 0.25 extra de caja de línea vive mayormente debajo
+                    del texto visible por cómo el navegador reparte el
+                    "leading" según las métricas de la fuente, así que el
+                    bloque entero (con justify-center del padre) se veía
+                    corrido hacia arriba respecto al ícono de la izquierda. */}
+                <h1 className="font-black text-[15px] lg:text-lg leading-none truncate">{title}</h1>
+                {subtitle && <p className="text-[11px] text-ink-dim font-medium leading-none mt-0.5 truncate hidden lg:block">{subtitle}</p>}
+              </>
+            )}
+          </div>
         </div>
 
         {/* Acciones */}
         <div className={`flex items-center gap-1 shrink-0 ${hideActionsOnMobile ? 'hidden lg:flex' : 'flex'}`}>
           {actionSlot}
+          {/* Mismo diseño/comportamiento que el toggle de tema del footer de
+              tienda pública (TiendaFooter.jsx: .tp-footer-theme) — antes
+              usaba ui-icon-btn, que trae un scale(1.05) en :hover pensado
+              para botones de ícono puro; sobre este botón se notaba como un
+              salto de ~1px del ícono. El del footer no tiene ningún
+              transform en hover, solo cambia fondo/color al primario (regla
+              .sa-theme-toggle:hover vive en styles/components.css). */}
           <button
             onClick={toggleTheme}
-            className="ui-icon-btn hover:bg-surface-card-2 dark:hover:bg-white/8 text-ink-dim transition-colors hidden lg:inline-flex"
+            className="sa-theme-toggle hidden lg:inline-flex"
             title={isDark ? 'Modo claro' : 'Modo oscuro'}
+            style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 40, height: 40, borderRadius: '50%', border: 'none', cursor: 'pointer',
+              background: 'transparent', color: 'var(--text-secondary)',
+              transition: 'background-color .15s ease, color .15s ease',
+            }}
           >
-            {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
           <button
             onClick={() => setMoreSheetOpen(v => !v)}
@@ -1128,7 +1319,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 py-2 px-3 overflow-y-auto overflow-x-hidden">
+        <nav className="flex-1 py-2 px-3 overflow-y-auto no-scrollbar overflow-x-hidden">
           {navItems.map(({ label, icon: Icon, id, badge, newBadge }) => {
             const isActive = screen === id;
             return (
@@ -1533,7 +1724,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         </div>
 
         {/* Lista */}
-        <div className="flex-1 overflow-y-auto flex flex-col">
+        <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col">
           {/* Barra de progreso top cuando recarga con datos ya visibles */}
           {inboxLoading && visibleThreads.length > 0 && (
             <div className="top-progress" style={{ position: 'absolute', top: 0, left: 0, right: 0 }} />
@@ -1727,7 +1918,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           </div>
 
           {/* Cuerpo */}
-          <div ref={scrollRef || null} className="flex-1 overflow-y-auto p-4 bg-surface-card-2 dark:bg-surface-card-2" onClick={() => setSwipedMsgId(null)}>
+          <div ref={scrollRef || null} className="flex-1 overflow-y-auto no-scrollbar p-4 bg-surface-card-2 dark:bg-surface-card-2" onClick={() => setSwipedMsgId(null)}>
             {!selectedThread ? (
               <div className="flex flex-col items-center justify-center h-full text-center gap-4">
                 <div className="w-20 h-20 rounded-3xl bg-surface-card border border-slate-100 dark:border-white/8 flex items-center justify-center shadow-sm">
@@ -2170,11 +2361,11 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 id: 'tienda-publica',
                 icon: Globe,
                 label: 'Página pública',
-                desc: td?.slug ? `lokal.ar/${td.slug}` : 'Sin slug configurado',
+                desc: td?.slug ? `${window.location.host}/${td.slug}` : 'Sin slug configurado',
                 color: 'text-brand',
                 bg: 'bg-violet-50 dark:bg-violet-900/20',
                 disabled: !td?.slug,
-                build: () => ({ type: 'tienda-publica', slug: td?.slug, nombre: td?.nombre, url: `https://lokal.ar/${td?.slug}` }),
+                build: () => ({ type: 'tienda-publica', slug: td?.slug, nombre: td?.nombre, url: `${window.location.origin}/${td?.slug}` }),
               },
             ];
 
@@ -2334,7 +2525,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       const uid = selectedThread.partnerUid;
 
       return (
-        <div className="w-64 xl:w-72 border-l border-slate-100 dark:border-white/8 flex flex-col bg-surface-card overflow-y-auto">
+        <div className="w-64 xl:w-72 border-l border-slate-100 dark:border-white/8 flex flex-col bg-surface-card overflow-y-auto no-scrollbar">
           {/* Header */}
           <div className="px-4 pt-4 pb-3 border-b border-slate-100 dark:border-white/8 shrink-0 flex items-center justify-between">
             <p className="text-xs font-bold uppercase tracking-wider text-ink-dim">Info del cliente</p>
@@ -2440,7 +2631,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       return (
         <div className="fixed inset-0 z-50 flex flex-col justify-end lg:hidden" onClick={() => setInboxInfoOpen(false)}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative bg-surface-card rounded-t-3xl p-5 flex flex-col gap-4 max-h-[80vh] overflow-y-auto animate-fade-in"
+          <div className="relative bg-surface-card rounded-t-3xl p-5 flex flex-col gap-4 max-h-[80vh] overflow-y-auto no-scrollbar animate-fade-in"
             onClick={e => e.stopPropagation()}>
             <div className="w-10 h-1 rounded-full bg-surface-card-2 dark:bg-white/15 mx-auto mb-1" />
             <div className="flex items-center justify-between">
@@ -2584,7 +2775,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     };
 
     return (
-      <div className="min-h-screen bg-surface-card-2 dark:bg-surface-card-2 pb-24 lg:pb-8">
+      <div className="min-h-screen sa-page-bg pb-24 lg:pb-8">
         {/* Banner "Vista marketplace" */}
         <div className="bg-brand/8 dark:bg-brand/12 border-b border-brand/15 px-4 py-2.5 flex items-center gap-2.5 sticky top-0 z-20">
           <div className="w-2 h-2 rounded-full bg-brand shrink-0" />
@@ -2662,9 +2853,9 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     };
 
     return (
-      <div className="h-[100dvh] flex flex-col bg-surface-card-2 dark:bg-surface-card-2">
+      <div className="h-[100dvh] flex flex-col sa-page-bg">
         <StorePageHeader title="Suscripción" subtitle="Gestioná tu plan y facturación" onBack={() => setScreen('perfil')} />
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto no-scrollbar">
         <SuscripcionContent
           planActual={planActual}
           isActiva={isActiva}
@@ -2951,21 +3142,24 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     });
 
     return (
-      <div className="w-full lg:w-80 flex-shrink-0 h-full overflow-y-auto flex flex-col divide-y divide-slate-100 dark:divide-white/8">
+      <div className="w-full lg:w-80 flex-shrink-0 h-full overflow-y-auto no-scrollbar flex flex-col divide-y divide-slate-100 dark:divide-white/8">
 
         {/* URL — solo en desktop */}
         {!hideUrl && !hasSlug ? (
           <div className="p-4 bg-amber-50 dark:bg-amber-500/10">
             <p className="text-xs font-bold text-amber-700 dark:text-amber-400 mb-2">Primero elegí tu URL</p>
-            <div className="flex items-center bg-white dark:bg-white/5 rounded-xl border border-amber-200 dark:border-amber-500/30 overflow-hidden focus-within:border-brand transition-colors">
-              <span className="pl-3 text-xs text-ink-dim whitespace-nowrap">lokal.ar/t/</span>
+            <div className="flex items-stretch gap-1.5 p-1.5 rounded-2xl border-2 border-amber-200 dark:border-amber-500/30 focus-within:border-brand transition-colors bg-white dark:bg-white/5">
+              <span className="flex items-center gap-1.5 pl-3 pr-3 py-2.5 rounded-xl bg-brand/10 dark:bg-brand/15 text-brand text-xs font-bold whitespace-nowrap" style={{ fontFamily: "'Menlo','Monaco','Courier New',monospace" }}>
+                <Link2 className="w-3 h-3 shrink-0" />
+                {window.location.host}/
+              </span>
               <input
                 value={publicPageForm.slug}
                 onChange={e => setPublicPageForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
                 onKeyDown={e => e.key === 'Enter' && publicPageForm.slug.trim() && savePagina()}
                 placeholder="mi-tienda"
                 autoFocus autoCapitalize="none" autoCorrect="off" spellCheck={false}
-                className="flex-1 bg-transparent px-2 py-2.5 text-sm outline-none"
+                className="flex-1 min-w-0 bg-transparent px-3 py-2.5 text-sm outline-none"
               />
             </div>
             <p className="text-xs text-amber-600/70 dark:text-amber-400/60 mt-1.5">Solo letras, números y guiones</p>
@@ -2976,7 +3170,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
               <ExternalLink className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             </div>
             <a href={previewUrl} target="_blank" rel="noreferrer" className="flex-1 text-sm font-semibold text-brand-dark dark:text-brand hover:underline truncate">
-              lokal.ar/{slug}
+              {window.location.host}/{slug}
             </a>
             <button onClick={() => { const url = `${window.location.origin}/${slug}`; if (navigator.share) { navigator.share({ title: tienda?.nombre || '', url }); } else { navigator.clipboard.writeText(url).then(() => { setPaginaSaved(true); setTimeout(() => setPaginaSaved(false), 2000); }); } }}
               className="text-xs font-semibold bg-surface-card-2 dark:bg-white/8 px-2.5 py-1.5 rounded-lg shrink-0">
@@ -3083,7 +3277,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     const storeId = tienda?.id || tiendaData?.id;
 
     return (
-      <div className="fixed inset-0 bg-surface-card-2 dark:bg-surface-card-2 flex flex-col z-[5000] lg:relative lg:inset-auto lg:z-auto lg:min-h-screen">
+      <div className="fixed inset-0 sa-page-bg flex flex-col z-[5000] lg:relative lg:inset-auto lg:z-auto lg:min-h-screen">
         {/* Header */}
         <div className="bg-surface-card border-b border-slate-100 dark:border-white/8 px-4 py-3 flex items-center gap-3 shrink-0">
           <button onClick={() => setScreen('perfil')} className="w-9 h-9 rounded-xl hover:bg-surface-card-2 dark:hover:bg-white/8 flex items-center justify-center transition-colors">
@@ -3168,7 +3362,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
               </p>
             </button>
             {/* Contenido scrolleable */}
-            <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-white/8">
+            <div className="flex-1 overflow-y-auto no-scrollbar divide-y divide-slate-100 dark:divide-white/8">
               <EditorPanel
                 hasSlug={hasSlug} slug={slug} previewUrl={previewUrl}
                 paginaForm={paginaForm} setPaginaForm={setPaginaForm}
@@ -3246,8 +3440,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       : 'text-ink-dim bg-surface-card-2 dark:bg-white/5 border-slate-200 dark:border-white/10';
 
     return (
-      <div className="min-h-screen bg-surface-card-2 dark:bg-surface-card-2 pb-24 lg:pb-8">
-        <StorePageHeader title="Estadísticas" subtitle="Rendimiento de tu tienda" />
+      <div className="min-h-screen sa-page-bg pb-24 lg:pb-8">
+        <StorePageHeader title="Estadísticas" subtitle="Rendimiento de tu tienda" icon={TrendingUp} />
 
         <div className="max-w-3xl mx-auto px-5 py-6 space-y-5">
           {/* Cards visitas mock */}
@@ -3472,58 +3666,100 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   // ── Edit Info Modal ───────────────────────────────────────────────────────
   const MediaEditorModal = () => {
     if (!mediaModal) return null;
-    const isSingle = mediaModal === 'foto' || mediaModal === 'portada';
-    const title = mediaModal === 'foto' ? 'Foto de perfil' : mediaModal === 'portada' ? 'Portada' : 'Galería';
-    const subtitle = mediaModal === 'foto'
+    const isSingle = mediaModal === 'foto';
+    const title = isSingle ? 'Foto de perfil' : 'Portada';
+    const subtitle = isSingle
       ? 'Elegí la imagen principal de tu tienda.'
-      : mediaModal === 'portada'
-        ? 'Esta imagen aparece arriba de tu perfil público.'
-        : 'Organizá las imágenes que muestran mejor tu local o productos.';
-    const emptyLabel = mediaModal === 'foto' ? 'Sin foto de perfil' : mediaModal === 'portada' ? 'Sin portada' : 'Sin imágenes';
+      : 'La primera foto es la que ven al entrar; si subís más de una, se van alternando de fondo.';
+    const emptyLabel = isSingle ? 'Sin foto de perfil' : 'Sin imágenes';
     const maxItems = isSingle ? 1 : 6;
+    const atLimit = mediaDraft.length + cropQueue.length >= maxItems;
 
     return (
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center" onClick={closeMediaEditor}>
-        <div className="bg-surface-card rounded-t-3xl lg:rounded-3xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[6000] flex items-end lg:items-center justify-center" onClick={closeMediaEditor}>
+        <div className={`bg-surface-card rounded-t-3xl lg:rounded-3xl w-full ${isSingle ? 'max-w-md' : 'max-w-3xl'} max-h-[90vh] flex flex-col shadow-2xl`} onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-white/10 shrink-0">
             <div>
               <h2 className="font-bold text-base">{title}</h2>
               <p className="text-xs text-ink-dim mt-0.5">{subtitle}</p>
             </div>
-            <button onClick={closeMediaEditor} className="w-8 h-8 rounded-xl hover:bg-surface-card-2 dark:hover:bg-white/10 flex items-center justify-center">
+            <button onClick={closeMediaEditor} className="w-8 h-8 shrink-0 rounded-xl hover:bg-surface-card-2 dark:hover:bg-white/10 flex items-center justify-center">
               <X className="w-4 h-4" />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-5 space-y-4">
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 dark:border-white/10 bg-surface-card-2 dark:bg-white/5 px-4 py-3">
-              <div>
+          <div className="flex-1 overflow-y-auto no-scrollbar p-5 space-y-4">
+            <input ref={mediaInputRef} type="file" accept="image/*" multiple={!isSingle} className="hidden" onChange={handleMediaFiles} />
+
+            {/* Contador — solo tiene sentido cuando hay más de 1 posible
+                (portada, hasta 6 fotos). En foto de perfil siempre es "1 de
+                1": un contador ahí no informa nada, antes se mostraba igual. */}
+            {!isSingle && (
+              <div className="text-center rounded-2xl border border-slate-200 dark:border-white/10 bg-surface-card-2 dark:bg-white/5 px-4 py-3">
                 <p className="text-sm font-semibold">{mediaDraft.length} / {maxItems} imágenes</p>
-                <p className="text-xs text-ink-dim">Podés subir nuevas o conservar las ya usadas.</p>
+                <p className="text-xs text-ink-dim mt-0.5">Podés subir nuevas o conservar las ya usadas</p>
               </div>
-              <button onClick={() => mediaInputRef.current?.click()} disabled={mediaDraft.length >= maxItems} className="px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark disabled:opacity-50 text-white text-sm font-semibold transition-colors">
-                {isSingle && mediaDraft.length > 0 ? 'Cambiar' : 'Agregar'}
-              </button>
-              <input ref={mediaInputRef} type="file" accept="image/*" multiple={!isSingle} className="hidden" onChange={handleMediaFiles} />
-            </div>
-            {mediaDraft.length === 0 ? (
-              <div className="rounded-3xl border-2 border-dashed border-slate-200 dark:border-white/10 p-10 text-center text-ink-dim">
-                <Camera className="w-10 h-10 mx-auto mb-3" />
-                <p className="font-semibold">{emptyLabel}</p>
+            )}
+
+            {/* Dropzone real — click en cualquier punto abre el selector de
+                archivos, y arrastrar una foto encima la encola (antes era
+                puramente decorativo: ni clickeable ni reaccionaba al drag).
+                En foto de perfil (isSingle) desaparece apenas hay una foto
+                en el draft — antes quedaba visible debajo del preview,
+                invitando a "cambiar" cuando en realidad hay que borrar
+                primero (con el tacho) para volver a elegir. */}
+            {(!isSingle || mediaDraft.length === 0) && (
+              <div
+                onClick={() => !atLimit && mediaInputRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); if (!atLimit) setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={handleMediaDrop}
+                className={`rounded-3xl border-2 border-dashed p-8 text-center transition-colors ${atLimit ? 'opacity-50 cursor-not-allowed border-slate-200 dark:border-white/10 text-ink-dim' : 'cursor-pointer text-ink-dim'} ${dragOver && !atLimit ? 'border-brand bg-brand/5 text-brand' : 'border-slate-200 dark:border-white/10'}`}
+              >
+                <Camera className="w-8 h-8 mx-auto mb-2" />
+                <p className="font-semibold text-sm">{emptyLabel}</p>
+                <p className="text-xs mt-1">Arrastrá una imagen acá o tocá para elegir</p>
               </div>
-            ) : (
-              <div className={`grid gap-3 ${isSingle ? 'grid-cols-1' : 'grid-cols-2 lg:grid-cols-3'}`}>
-                {mediaDraft.map((item, index) => (
-                  <div key={`${item.url}-${index}`} className="relative rounded-3xl overflow-hidden bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 group">
-                    <img src={item.url} alt="" loading="lazy" decoding="async" className={`w-full object-cover ${isSingle ? 'aspect-[16/9]' : 'aspect-square'}`} />
-                    <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/70 to-transparent text-white text-xs font-semibold">
-                      {item.existing ? 'Ya usada' : 'Nueva'}
+            )}
+
+            {mediaDraft.length > 0 && (
+              isSingle ? (
+                // Foto de perfil: un solo preview cuadrado grande, centrado
+                // — reemplaza al dropzone (no conviven los dos a la vez).
+                <div className="flex justify-center">
+                  {mediaDraft.map((item, index) => (
+                    <div key={`${item.url}-${index}`} className="relative w-48 h-48 overflow-hidden bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-[32px] group">
+                      <img src={item.url} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                      {/* En mobile no hay hover — el tacho queda siempre
+                          visible (semi-transparente); en desktop se revela
+                          recién al pasar el mouse. */}
+                      <button onClick={() => removeMediaDraftItem(index)} className="absolute top-2 right-2 w-8 h-8 rounded-xl bg-black/60 text-white flex items-center justify-center opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                    <button onClick={() => removeMediaDraftItem(index)} className="absolute top-2 right-2 w-8 h-8 rounded-xl bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                // Portada: apiladas UNA ARRIBA DE OTRA, con el aspect-ratio
+                // REAL que usa el hero público (16/9) — antes era un grid de
+                // cuadrados, que no dejaba ver cómo iba a verse encuadrada
+                // cada foto en el banner real.
+                <div className="space-y-3">
+                  {mediaDraft.map((item, index) => (
+                    <div key={`${item.url}-${index}`} className="relative overflow-hidden bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl group">
+                      <img src={item.url} alt="" loading="lazy" decoding="async" className="w-full aspect-[16/9] object-cover" />
+                      {index === 0 && (
+                        <div className="absolute top-2 left-2 px-2 py-1 rounded-lg bg-black/60 text-white text-[10px] font-bold uppercase tracking-wide">Portada</div>
+                      )}
+                      <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/70 to-transparent text-white text-xs font-semibold">
+                        {item.existing ? 'Ya usada' : 'Nueva'}
+                      </div>
+                      <button onClick={() => removeMediaDraftItem(index)} className="absolute top-2 right-2 w-8 h-8 rounded-xl bg-black/60 text-white flex items-center justify-center opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )
             )}
             {mediaError && <p className="text-sm text-rose-500 font-semibold">{mediaError}</p>}
           </div>
@@ -3534,6 +3770,16 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             </button>
           </div>
         </div>
+        {cropQueue[0] && (
+          <ImageCropModal
+            file={cropQueue[0]}
+            shape={isSingle ? 'rounded' : 'rect'}
+            aspect={isSingle ? 1 : 16 / 9}
+            maxSize={isSingle ? 600 : 1600}
+            onConfirm={handleCropConfirm}
+            onClose={handleCropSkip}
+          />
+        )}
       </div>
     );
   };
@@ -3559,7 +3805,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     };
 
     return (
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center" onClick={() => setLocationModal(false)}>
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[6000] flex items-end lg:items-center justify-center" onClick={() => setLocationModal(false)}>
         <div className="bg-surface-card rounded-t-3xl lg:rounded-3xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-white/10 shrink-0">
             <div>
@@ -3570,7 +3816,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
               <X className="w-4 h-4" />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <div className="flex-1 overflow-y-auto no-scrollbar p-5 space-y-4">
             {/* Acciones de ubicación — misma fila, GPS y mapa como
                 alternativas reales a tipear (antes eran dos cajas de
                 coordenadas crudas sin acción, solo texto). */}
@@ -3665,7 +3911,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     };
 
     return (
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center" onClick={() => setHorarioModal(false)}>
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[6000] flex items-end lg:items-center justify-center" onClick={() => setHorarioModal(false)}>
         <div className="bg-surface-card rounded-t-3xl lg:rounded-3xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-white/10 shrink-0">
             <div>
@@ -3677,7 +3923,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-5 space-y-3">
+          <div className="flex-1 overflow-y-auto no-scrollbar p-5 space-y-3">
             {diasSemana.map(({ key, label }) => (
               <div key={key} className={`rounded-2xl border p-4 transition-colors ${horarioForm[key]?.abierto ? 'border-brand/30 bg-brand/5' : 'border-slate-200 dark:border-white/10 bg-surface-card-2 dark:bg-white/5'}`}>
                 <div className="flex items-center justify-between">
@@ -3736,184 +3982,118 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     );
   };
 
-  const EditInfoModal = () => {
-    const rootCats = allCategories.filter(c => c.parentId === null);
-    const selectedRubros = editModalRubros;
-    const setSelectedRubros = setEditModalRubros;
-    const activeTab = editInfoTab;
-    const setActiveTab = setEditInfoTab;
-    const isGeneralScope = editInfoScope === 'general';
-    const isPhoneScope = editInfoScope === 'contacto'; // teléfono+whatsapp+instagram+tagline juntos
-    const isDescriptionScope = editInfoScope === 'descripcion';
-    const modalTitle = isPhoneScope ? 'Contacto e info' : isDescriptionScope ? 'Editar descripción' : 'Editar perfil';
-
-    const toggleRubro = (id) => setSelectedRubros(prev =>
-      prev.includes(id) ? prev.filter(r => r !== id) : prev.length < 5 ? [...prev, id] : prev
-    );
-
-    const saveRubros = async () => {
-      setSavingInfo(true);
-      setSaveInfoErr(null);
-      try {
-        const res = await apiFetch(`${API_BASE}/tiendas-crud`, {
-          method: 'PATCH', authRequired: true,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: tiendaData.id, rubros: selectedRubros }),
-        });
-        if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Error'); }
-        const updated = await res.json();
-        setTienda(updated);
-        onTiendaUpdate(updated);
-        setEditInfoModal(false);
-      } catch (e) { setSaveInfoErr(e.message); }
-      finally { setSavingInfo(false); }
-    };
+  // ── FieldEditorSheet — reemplaza EditInfoModal (el viejo formulario largo
+  // "editar todo de una", ver auditoría UX hallazgos A1/B5). Es un sheet
+  // ENFOCADO y genérico: recibe qué campos mostrar (fieldEditor.fields) y
+  // guarda con optimistic UI (cierra al instante, ver saveFieldEditor
+  // arriba) — a diferencia del viejo modal que bloqueaba con spinner hasta
+  // que el PATCH volvía (hallazgo A2). Cada campo (descripción, contacto)
+  // sigue teniendo UN solo lugar real de edición; este componente solo
+  // cambia CÓMO se ve ese lugar, no agrega una ruta nueva.
+  const FieldEditorSheet = () => {
+    if (!fieldEditor) return null;
+    const [localValues, setLocalValues] = useState(fieldEditor.values);
+    const setField = (key, value) => setLocalValues(v => ({ ...v, [key]: value }));
 
     return (
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center" onClick={() => setEditInfoModal(false)}>
-        <div className="bg-surface-card rounded-t-3xl lg:rounded-3xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-          {/* Header */}
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[6000] flex items-end lg:items-center justify-center" onClick={() => setFieldEditor(null)}>
+        <div className="bg-surface-card rounded-t-3xl lg:rounded-3xl w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-white/10 shrink-0">
-            <h2 className="font-bold text-base">{modalTitle}</h2>
-            <button onClick={() => setEditInfoModal(false)} className="w-8 h-8 rounded-xl hover:bg-surface-card-2 dark:hover:bg-white/10 flex items-center justify-center">
+            <h2 className="font-bold text-base">{fieldEditor.title}</h2>
+            <button onClick={() => setFieldEditor(null)} className="w-8 h-8 shrink-0 rounded-xl hover:bg-surface-card-2 dark:hover:bg-white/10 flex items-center justify-center">
               <X className="w-4 h-4" />
             </button>
           </div>
-
-          {/* Tabs */}
-          {isGeneralScope && (
-            <div className="flex border-b border-slate-100 dark:border-white/10 shrink-0">
-              {[{ id: 'info', label: 'Info básica' }, { id: 'rubros', label: 'Rubros' }].map(t => (
-                <button key={t.id} onClick={() => setActiveTab(t.id)}
-                  className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-colors ${activeTab === t.id ? 'border-brand text-brand' : 'border-transparent text-ink-dim'}`}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="flex-1 overflow-y-auto p-5 space-y-4">
-            {activeTab === 'info' ? (
-              <>
-                {isGeneralScope && (
-                  <div className="space-y-3">
-                    <p className="text-xs text-ink-dim">Desde acá podés ajustar la info general y abrir ediciones específicas para imágenes y ubicación.</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      {[
-                        { key: 'foto', label: 'Foto de perfil', meta: tiendaInfo.foto ? 'Configurada' : 'Agregar', action: () => { setEditInfoModal(false); openMediaEditor('foto'); } },
-                        { key: 'portada', label: 'Portada', meta: tiendaData?.galeria?.[0] ? 'Configurada' : 'Agregar', action: () => { setEditInfoModal(false); openMediaEditor('portada'); } },
-                        { key: 'galeria', label: 'Galería', meta: `${(tiendaData?.galeria || []).length} imagen${(tiendaData?.galeria || []).length === 1 ? '' : 'es'}`, action: () => { setEditInfoModal(false); openMediaEditor('galeria'); } },
-                      ].map(item => (
-                        <button
-                          key={item.key}
-                          onClick={item.action}
-                          className="rounded-2xl border border-slate-200 dark:border-white/10 bg-surface-card-2 dark:bg-white/5 p-3 text-left hover:border-brand/40 hover:bg-brand/5 transition-colors"
-                        >
-                          <p className="text-xs text-ink-dim font-medium">{item.label}</p>
-                          <p className="text-sm font-bold mt-1">{item.meta}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {!isPhoneScope && !isDescriptionScope && (
-                  <div>
-                    <label className="text-xs font-semibold text-ink-dim mb-1 block">Nombre de la tienda *</label>
-                    <input value={editInfoForm.nombre} onChange={e => setEditInfoForm(f => ({ ...f, nombre: e.target.value }))}
-                      placeholder="Nombre de tu tienda"
-                      className="w-full bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand" />
-                  </div>
-                )}
-                {!isPhoneScope && (
-                  <div>
-                  <label className="text-xs font-semibold text-ink-dim mb-1 block">Descripción</label>
-                  <textarea value={editInfoForm.descripcion} onChange={e => setEditInfoForm(f => ({ ...f, descripcion: e.target.value }))}
-                    placeholder="Contá de qué se trata tu tienda, qué productos o servicios ofrecés..."
-                    rows={3} maxLength={1500}
+          <div className="flex-1 overflow-y-auto no-scrollbar p-5 space-y-4">
+            {fieldEditor.fields.map(f => (
+              <div key={f.key}>
+                <label className="text-xs font-semibold text-ink-dim mb-1 block">{f.label}</label>
+                {f.type === 'textarea' ? (
+                  <textarea
+                    value={localValues[f.key]} onChange={e => setField(f.key, e.target.value)}
+                    placeholder={f.placeholder} rows={f.rows || 3} maxLength={f.maxLength}
+                    autoFocus={fieldEditor.focusField === f.key}
                     className="w-full bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand resize-none" />
-                </div>
-                )}
-                <div>
-                  <label className="text-xs font-semibold text-ink-dim mb-1 block">Teléfono / WhatsApp</label>
-                  <input value={editInfoForm.telefono} onChange={e => setEditInfoForm(f => ({ ...f, telefono: e.target.value }))}
-                    placeholder="+5493XX XXXXXXX"
-                    className="w-full bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand" />
-                </div>
-                {isPhoneScope && (
-                  <>
-                    <div>
-                      <label className="text-xs font-semibold text-ink-dim mb-1 block">WhatsApp (si es distinto al teléfono)</label>
-                      <input value={editInfoForm.whatsapp} onChange={e => setEditInfoForm(f => ({ ...f, whatsapp: e.target.value }))}
-                        placeholder="+5493XX XXXXXXX"
-                        className="w-full bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-ink-dim mb-1 block">Instagram</label>
-                      <div className="flex items-center bg-surface-card-2 dark:bg-white/5 rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
-                        <span className="pl-3 text-xs text-ink-dim">@</span>
-                        <input value={editInfoForm.instagram} onChange={e => setEditInfoForm(f => ({ ...f, instagram: e.target.value.replace('@', '') }))}
-                          placeholder="mitienda" maxLength={60}
-                          className="flex-1 bg-transparent px-2 py-2.5 text-sm outline-none" />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-ink-dim mb-1 block">Tagline</label>
-                      <input value={editInfoForm.tagline} onChange={e => setEditInfoForm(f => ({ ...f, tagline: e.target.value }))}
-                        placeholder="Tu frase o eslogan" maxLength={160}
-                        className="w-full bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand" />
-                    </div>
-                  </>
-                )}
-                {!isPhoneScope && !isDescriptionScope && (
-                  <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-surface-card-2 dark:bg-white/5 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs text-ink-dim font-medium">Ubicación</p>
-                        <p className="text-sm font-bold mt-1">{[tiendaInfo.direccion, tiendaInfo.ciudad].filter(Boolean).join(', ') || 'Sin configurar'}</p>
-                        <p className="text-xs text-ink-dim mt-1">Usá el mapa para confirmar la dirección exacta y mover el pin.</p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setEditInfoModal(false);
-                          openLocationEditor();
-                        }}
-                        className="shrink-0 px-3 py-2 rounded-xl bg-surface-card border border-slate-200 dark:border-white/10 text-sm font-semibold hover:border-brand/40 transition-colors"
-                      >
-                        Editar mapa
-                      </button>
-                    </div>
+                ) : f.prefix ? (
+                  <div className="flex items-center bg-surface-card-2 dark:bg-white/5 rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden focus-within:border-brand transition-colors">
+                    <span className="pl-3 text-xs text-ink-dim">{f.prefix}</span>
+                    <input
+                      value={localValues[f.key]} onChange={e => setField(f.key, e.target.value.replace(f.prefix, ''))}
+                      placeholder={f.placeholder} maxLength={f.maxLength}
+                      autoFocus={fieldEditor.focusField === f.key}
+                      className="flex-1 bg-transparent px-2 py-2.5 text-sm outline-none" />
                   </div>
+                ) : (
+                  <input
+                    value={localValues[f.key]} onChange={e => setField(f.key, e.target.value)}
+                    placeholder={f.placeholder} maxLength={f.maxLength}
+                    autoFocus={fieldEditor.focusField === f.key}
+                    className="w-full bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand" />
                 )}
-                {saveInfoErr && <p className="text-xs text-rose-500 font-semibold">{saveInfoErr}</p>}
-              </>
-            ) : (
-              <>
-                <p className="text-xs text-ink-dim">Seleccioná hasta 5 rubros que describan tu tienda.</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {rootCats.map(cat => {
-                    const sel = selectedRubros.includes(cat.id);
-                    return (
-                      <button key={cat.id} onClick={() => toggleRubro(cat.id)}
-                        className={`flex items-center gap-2 p-3 rounded-2xl border-2 text-left transition-all ${sel ? 'border-brand bg-brand/8 dark:bg-brand/10' : 'border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20'}`}>
-                        <CategoryIcon name={cat.icon} className={`w-4 h-4 shrink-0 ${sel ? 'text-brand' : 'text-ink-dim'}`} />
-                        <span className={`text-sm font-semibold ${sel ? 'text-brand-dark dark:text-brand' : 'text-ink dark:text-ink-dim'}`}>{cat.name}</span>
-                        {sel && <CheckCircle className="w-3.5 h-3.5 text-brand ml-auto shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-                {saveInfoErr && <p className="text-xs text-rose-500 font-semibold">{saveInfoErr}</p>}
-              </>
-            )}
+              </div>
+            ))}
           </div>
-
           <div className="px-5 pb-5 pt-3 border-t border-slate-100 dark:border-white/10 shrink-0">
             <button
-              onClick={activeTab === 'info' ? saveInfoBasica : saveRubros}
-              disabled={savingInfo || (activeTab === 'info' && !isPhoneScope && !isDescriptionScope && !editInfoForm.nombre.trim())}
-              className="w-full py-3 bg-brand hover:bg-brand-dark disabled:opacity-50 text-white font-bold text-sm rounded-2xl flex items-center justify-center gap-2 transition-colors"
+              onClick={() => saveFieldEditor(localValues)}
+              className="w-full py-3 bg-brand hover:bg-brand-dark text-white font-bold text-sm rounded-2xl flex items-center justify-center gap-2 transition-colors"
             >
-              {savingInfo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              <Save className="w-4 h-4" />
+              Guardar cambios
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ── PublicUrlSheet — editor de la URL pública (slug), disparado por el
+  // botón "Editar URL" de la fila de acciones rápidas bajo el hero. Antes
+  // se expandía inline dentro de la card "Diseño de mi página"; ahora es un
+  // sheet propio, mismo patrón visual que FieldEditorSheet. */}
+  const PublicUrlSheet = () => {
+    if (!editingPublicPage) return null;
+    const close = () => { setEditingPublicPage(false); setPublicPageError(null); };
+    return (
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[6000] flex items-end lg:items-center justify-center" onClick={close}>
+        <div className="bg-surface-card rounded-t-3xl lg:rounded-3xl w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-white/10 shrink-0">
+            <h2 className="font-bold text-base">URL pública</h2>
+            <button onClick={close} className="w-8 h-8 shrink-0 rounded-xl hover:bg-surface-card-2 dark:hover:bg-white/10 flex items-center justify-center">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto no-scrollbar p-5 space-y-3">
+            <div>
+              <label className="text-xs font-semibold text-ink-dim mb-1.5 block">Tu URL en LOKAL</label>
+              {/* Rediseño con más carácter que un simple "dos cajas
+                  pegadas": el dominio vive en un chip propio con ícono e
+                  identidad de marca (fondo brand/10, texto brand), separado
+                  del campo por un pequeño gap real (no un borde interno) —
+                  se lee como "prefijo fijo" + "lo que vos elegís", en vez
+                  de un input partido a la mitad. Tipografía monoespaciada
+                  en ambos lados: comunica "esto es código/URL", no texto
+                  común, y alinea visualmente el slash con el slug. */}
+              <div className={`flex items-stretch gap-1.5 p-1.5 rounded-2xl border-2 transition-colors ${publicPageError ? 'border-rose-400 dark:border-rose-500/60' : 'border-slate-200 dark:border-white/10 focus-within:border-brand'}`}>
+                <span className="flex items-center gap-1.5 pl-3 pr-3 py-2.5 rounded-xl bg-brand/10 dark:bg-brand/15 text-brand text-sm font-semibold whitespace-nowrap">
+                  <Link2 className="w-3 h-3 shrink-0" />
+                  {window.location.host}/
+                </span>
+                <input
+                  value={publicPageForm.slug}
+                  onChange={e => setPublicPageForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
+                  onKeyDown={e => e.key === 'Enter' && savePublicPage()}
+                  placeholder="mi-tienda"
+                  autoFocus autoCapitalize="none" autoCorrect="off" spellCheck={false}
+                  className="flex-1 min-w-0 bg-transparent px-3 py-2.5 text-sm outline-none"
+                />
+              </div>
+              {publicPageError && <p className="text-xs text-rose-500 font-semibold mt-1.5">{publicPageError}</p>}
+            </div>
+          </div>
+          <div className="px-5 pb-5 pt-3 border-t border-slate-100 dark:border-white/10 shrink-0">
+            <button onClick={savePublicPage} disabled={savingPublicPage} className="w-full py-3 rounded-2xl bg-brand hover:bg-brand-dark disabled:opacity-60 text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors">
+              {savingPublicPage ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Guardar cambios
             </button>
           </div>
@@ -3980,7 +4160,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
     return (
       <>
-        <div className="fixed inset-0 z-[5000] bg-[#f5f5f5] dark:bg-[#080808] overflow-y-auto pb-24">
+        <div className="fixed inset-0 z-[5000] bg-[#f5f5f5] dark:bg-[#080808] overflow-y-auto no-scrollbar pb-24">
           <StorePageHeader
             title={productoEditing ? 'Editar producto' : 'Nuevo producto'}
             onBack={() => setProductoShowForm(false)}
@@ -4028,45 +4208,57 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     const handleFoto = (e) => {
       const file = e.target.files?.[0];
       if (!file) return;
+      setOfertaFotoLoading(true);
       setOfertaFotoFile(file);
+      setOfertaFotoRemoved(false);
       setOfertaFotoPreview(URL.createObjectURL(file));
       e.target.value = '';
     };
 
-    const handleSave = async () => {
-      if (!ofertaForm.nombre.trim()) return;
-      setOfertaSaving(true); setOfertaSaveErr(null);
-      try {
-        let imageUrl = ofertaEditing?.imageUrl || null;
-        if (ofertaFotoFile) imageUrl = await uploadFile(ofertaFotoFile);
-        if (!imageUrl) throw new Error('Subí una foto para la oferta');
+    const handleQuitarFoto = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (ofertaFotoPreview) URL.revokeObjectURL(ofertaFotoPreview);
+      setOfertaFotoFile(null);
+      setOfertaFotoPreview(null);
+      setOfertaFotoRemoved(true);
+      setOfertaFotoLoading(false);
+    };
 
-        const payload = {
-          nombre: ofertaForm.nombre.trim(),
-          imageUrl,
-          thumbUrl: imageUrl,
-          expireAt: ofertaForm.expireAt ? new Date(ofertaForm.expireAt).toISOString() : null,
-          visible: ofertaForm.visible,
-        };
+    // Optimista: ya NO espera la red. Junta lo cargado, entrega a la cola de
+    // fondo (handleOfertaGuardadaOptimista, arriba) y cierra el formulario
+    // al instante — la subida real (compresión de imagen + POST/PATCH) sigue
+    // corriendo atrás, con su propia card de progreso en la grilla. Antes
+    // este botón dejaba toda la pantalla trabada con spinner varios segundos.
+    // ofertaFotoRemoved: si el dueño quitó con la X la foto ya guardada
+    // (modo edición) y no eligió una nueva, no hay imagen válida para
+    // guardar — igual que "Nueva oferta" sin ninguna foto todavía.
+    const hayFotoValida = ofertaFotoFile || (ofertaEditing?.imageUrl && !ofertaFotoRemoved);
+    const hayNombre = !!ofertaForm.nombre.trim();
+    // Qué falta, para resaltar el campo puntual (no solo un texto rojo
+    // genérico). El botón queda SIEMPRE clickeable (no disabled): tocarlo
+    // con algo faltante no guarda, pero SÍ marca ofertaIntentoGuardar — recién
+    // ahí se resalta el borde del campo que falta y se ve el mensaje. Antes
+    // de ese primer intento el formulario no "grita" en rojo apenas se abre.
+    const faltante = !hayFotoValida ? 'foto' : !hayNombre ? 'nombre' : null;
 
-        if (ofertaEditing) {
-          const res = await apiFetch(`${API_BASE}/ofertas`, { method: 'PATCH', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: ofertaEditing.id, ...payload }) });
-          if (!res.ok) throw new Error('Error al actualizar');
-          const updated = await res.json();
-          setMisProductos(prev => prev.map(o => o.id === updated.id ? updated : o));
-        } else {
-          const res = await apiFetch(`${API_BASE}/ofertas`, { method: 'POST', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tiendaId: tiendaData.id, ...payload }) });
-          if (!res.ok) throw new Error('Error al crear');
-          const nueva = await res.json();
-          setMisProductos(prev => [nueva, ...prev]);
-        }
-        setOfertaShowForm(false);
-      } catch (err) { setOfertaSaveErr(err.message); }
-      finally { setOfertaSaving(false); }
+    const handleSave = () => {
+      if (faltante) { setOfertaIntentoGuardar(true); return; }
+      handleOfertaGuardadaOptimista({
+        nombre: ofertaForm.nombre.trim(),
+        fotoFile: ofertaFotoFile,
+        previewUrl: ofertaFotoPreview,
+        editingId: ofertaEditing?.id || null,
+        existingImageUrl: ofertaFotoRemoved ? null : (ofertaEditing?.imageUrl || null),
+        existingThumbUrl: ofertaFotoRemoved ? null : (ofertaEditing?.thumbUrl || null),
+        existingOgImageUrl: ofertaFotoRemoved ? null : (ofertaEditing?.ogImageUrl || null),
+        expireAt: ofertaForm.expireAt ? new Date(ofertaForm.expireAt).toISOString() : null,
+        visible: ofertaForm.visible,
+      });
+      setOfertaShowForm(false);
     };
 
     return (
-      <div className="fixed inset-0 z-[5000] bg-[#f5f5f5] dark:bg-[#080808] overflow-y-auto pb-24">
+      <div className="fixed inset-0 z-[5000] bg-[#f5f5f5] dark:bg-[#080808] overflow-y-auto no-scrollbar pb-24">
         <StorePageHeader
           title={ofertaEditing ? 'Editar oferta' : 'Nueva oferta'}
           onBack={() => setOfertaShowForm(false)}
@@ -4075,10 +4267,42 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           {/* Foto */}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-ink-dim mb-2">Foto</label>
-            <label className="block aspect-square rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 bg-surface-card-2 dark:bg-white/5 overflow-hidden cursor-pointer relative hover:border-brand transition-colors">
+            {/* aspect-[1/1.414] — MISMA proporción que la card real (lista
+              de ofertas del admin y la vista pública, ambas ya ajustadas):
+              antes era 1:1 acá, así la vista previa al cargar/editar no
+              coincidía con cómo se ve encuadrada la foto en ningún otro
+              lado de la app. */}
+            <label className={`block aspect-[1/1.414] rounded-2xl border-2 border-dashed bg-surface-card-2 dark:bg-white/5 overflow-hidden cursor-pointer relative hover:border-brand transition-colors ${ofertaIntentoGuardar && faltante === 'foto' ? 'border-rose-400 dark:border-rose-500/60' : 'border-slate-200 dark:border-white/10'}`}>
               <input type="file" accept="image/*" className="hidden" onChange={handleFoto} />
-              {(ofertaFotoPreview || ofertaEditing?.imageUrl) ? (
-                <img src={ofertaFotoPreview || ofertaEditing.imageUrl} alt="" className="w-full h-full object-cover" />
+              {hayFotoValida ? (
+                <>
+                  <img
+                    src={ofertaFotoPreview || ofertaEditing.imageUrl} alt=""
+                    className="w-full h-full object-cover"
+                    onLoad={() => setOfertaFotoLoading(false)}
+                  />
+                  {/* Spinner mientras el navegador decodifica/pinta la foto
+                      recién elegida — createObjectURL es instantáneo, pero
+                      fotos pesadas de cámara tardan un poco en aparecer, y
+                      sin este feedback esos segundos se sentían como que
+                      "elegir foto" no había hecho nada. */}
+                  {ofertaFotoLoading && (
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                      <Loader2 className="w-6 h-6 text-white animate-spin" />
+                    </div>
+                  )}
+                  {/* X para quitar — mismo patrón que OfertaQuickForm (carga
+                      rápida desde la tienda pública): círculo flotante en la
+                      esquina, solo visible con foto ya elegida. */}
+                  <button
+                    type="button"
+                    onClick={handleQuitarFoto}
+                    aria-label="Quitar foto"
+                    className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/75 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </>
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-ink-dim">
                   <Camera className="w-8 h-8" />
@@ -4096,7 +4320,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
               onChange={e => setOfertaForm(f => ({ ...f, nombre: e.target.value }))}
               placeholder="Ej: 2x1 en aceite de girasol"
               maxLength={160}
-              className="w-full px-4 py-3 rounded-2xl text-sm border outline-none bg-surface-card-2 dark:bg-white/5 border-slate-200 dark:border-white/10 focus:border-brand transition-colors"
+              className={`w-full px-4 py-3 rounded-2xl text-sm border outline-none bg-surface-card-2 dark:bg-white/5 focus:border-brand transition-colors ${ofertaIntentoGuardar && faltante === 'nombre' ? 'border-rose-400 dark:border-rose-500/60' : 'border-slate-200 dark:border-white/10'}`}
             />
           </div>
 
@@ -4109,20 +4333,33 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
               placeholder="Sin fecha límite"
               minISO={new Date().toISOString().slice(0, 10)}
             />
-            <p className="text-xs text-ink-dim mt-1.5">Sin fecha, la oferta queda vigente hasta que la ocultes.</p>
+            {/* visibility:hidden (no display:none / render condicional): el
+                espacio queda RESERVADO siempre, así elegir/quitar la fecha
+                no empuja el resto del formulario hacia abajo/arriba —
+                ningún salto de layout al aparecer/desaparecer el texto. */}
+            <p className="text-xs text-ink-dim mt-1.5" style={{ visibility: ofertaForm.expireAt ? 'hidden' : 'visible' }}>
+              Sin fecha, la oferta queda vigente hasta que la ocultes.
+            </p>
           </div>
 
           {/* El toggle visible/oculto va en la card de la oferta ya creada
               (pausar/reactivar), no acá: una oferta nueva nace visible. */}
 
-          {ofertaSaveErr && <p className="text-xs text-rose-500 font-semibold">{ofertaSaveErr}</p>}
+          {/* Mensaje centrado, solo tras un intento de guardar con algo
+              faltante — resalta CUÁL de los dos campos falta (arriba,
+              directo en el borde) en vez de un texto rojo genérico sin
+              contexto de dónde mirar. */}
+          {ofertaIntentoGuardar && faltante && (
+            <p className="text-sm text-rose-500 font-semibold text-center">
+              {faltante === 'foto' ? 'Subí una foto para publicar la oferta' : 'Escribí un nombre para la oferta'}
+            </p>
+          )}
 
           <button
             onClick={handleSave}
-            disabled={ofertaSaving || !ofertaForm.nombre.trim()}
-            className="w-full py-3.5 bg-brand hover:bg-brand-dark disabled:opacity-50 text-white font-bold text-sm rounded-2xl flex items-center justify-center gap-2 transition-colors"
+            className="w-full py-3.5 bg-brand hover:bg-brand-dark text-white font-bold text-sm rounded-2xl flex items-center justify-center gap-2 transition-colors"
           >
-            {ofertaSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            <Save className="w-4 h-4" />
             {ofertaEditing ? 'Guardar cambios' : 'Publicar oferta'}
           </button>
         </div>
@@ -4135,7 +4372,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       setOfertaEditing(null);
       setOfertaForm({ nombre: '', expireAt: '', visible: true });
       setOfertaFotoFile(null); setOfertaFotoPreview(null);
-      setOfertaSaveErr(null);
+      setOfertaIntentoGuardar(false);
       setOfertaShowForm(true);
     };
 
@@ -4147,7 +4384,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         visible: o.visible !== false,
       });
       setOfertaFotoFile(null); setOfertaFotoPreview(null);
-      setOfertaSaveErr(null);
+      // Sin este reset, ofertaFotoRemoved/ofertaFotoLoading quedaban con el
+      // valor de una apertura ANTERIOR del formulario (ej. si la vez pasada
+      // se quitó la foto con la X, ofertaFotoRemoved seguía en true acá) —
+      // eso hacía que hayFotoValida diera false y la vista previa mostrara
+      // el placeholder "Elegir foto" en vez de la foto real ya guardada.
+      setOfertaFotoRemoved(false);
+      setOfertaFotoLoading(false);
+      setOfertaIntentoGuardar(false);
       setOfertaShowForm(true);
     };
 
@@ -4174,8 +4418,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         if (!res.ok) throw new Error();
       } catch {
         if (original) setMisProductos(prev => [...prev, original]);
-      } finally {
-        setOfertaConfirmDelete(null);
       }
     };
 
@@ -4186,34 +4428,124 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     const OfertaCard = ({ o }) => {
       const estaVencida = vencida(o);
       const inactiva = o.visible === false || estaVencida;
+      // Card en subida optimista: mismo criterio que la carga rápida desde
+      // la tienda pública — foto real (blob) + spinner mientras sube, o
+      // borde rojo + "Reintentar" si falló. Sin _status, es una oferta
+      // normal ya persistida (comportamiento de siempre).
+      const pending = o._status === 'uploading';
+      const failed = o._status === 'error';
       return (
-        <div className={`bg-surface-card rounded-2xl overflow-hidden border transition-all ${inactiva ? 'border-dashed border-slate-200 dark:border-white/10 opacity-55' : 'border-slate-100 dark:border-white/8 hover:shadow-md hover:shadow-black/5'}`}>
-          <div className="aspect-square bg-surface-card-2 dark:bg-white/6 relative overflow-hidden">
+        <div className={`bg-surface-card rounded-2xl overflow-hidden border transition-all ${failed ? 'border-danger/50' : inactiva ? 'border-dashed border-slate-200 dark:border-white/10 opacity-55' : 'border-slate-100 dark:border-white/8 hover:shadow-md hover:shadow-black/5'}`}>
+          {/* aspect-[1/1.414] — MISMA proporción que la card de oferta en
+              la vista pública real (commerce-modern.jsx, sección Ofertas:
+              aspectRatio '1/1.414'), antes era 1:1 cuadrado acá — la
+              preview del admin no reflejaba cómo se ve la foto encuadrada
+              en la tienda real. */}
+          <div className="aspect-[1/1.414] bg-surface-card-2 dark:bg-white/6 relative overflow-hidden">
             {o.imageUrl ? <LazyImg src={o.thumbUrl || o.imageUrl} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Package className="w-10 h-10 text-ink-dim dark:text-white/20" /></div>}
-            {estaVencida && <span className="absolute top-2 right-2 bg-danger text-white text-[9px] font-bold px-1.5 py-0.5 rounded-xl shadow">Vencida</span>}
-            {!estaVencida && o.visible === false && <span className="absolute top-2 right-2 bg-ink-dim text-white text-[9px] font-bold px-1.5 py-0.5 rounded-xl shadow">Oculta</span>}
+            {/* Estado (Vencida/Oculta) a la izquierda, fecha a la derecha —
+                antes ambos vivían en el mismo top-2 right-2, se hubieran
+                superpuesto si coexistían. */}
+            {estaVencida && (
+              <span
+                className="absolute top-2 left-2 flex items-center gap-1 text-white text-[11px] font-bold leading-none tracking-wide px-2.5 py-[5px] rounded-full"
+                style={{ background: 'rgba(220,38,38,.85)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', boxShadow: '0 2px 8px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.15)' }}
+              >
+                <AlertTriangle className="w-3 h-3" strokeWidth={2.5} />
+                Vencida
+              </span>
+            )}
+            {!estaVencida && o.visible === false && (
+              <span
+                className="absolute top-2 left-2 flex items-center gap-1 text-white text-[11px] font-bold leading-none tracking-wide px-2.5 py-[5px] rounded-full"
+                style={{ background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', boxShadow: '0 2px 8px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.1)' }}
+              >
+                <EyeOff className="w-3 h-3" strokeWidth={2.5} />
+                Oculta
+              </span>
+            )}
+            {/* Badge flotante en vez de línea de texto abajo: antes la fecha
+                era una <p> condicional dentro del bloque de texto, así que
+                una card con fecha medía más alto que la de al lado sin
+                fecha — mismo grid, distinta altura, los botones de acción
+                quedaban desalineados entre columnas. Como badge sobre la
+                foto, el bloque de texto de abajo (nombre + botones) siempre
+                tiene la MISMA estructura fija, sin nada condicional que le
+                cambie el alto. */}
+            {o.expireAt && (
+              <span
+                className="absolute top-2 right-2 flex items-center gap-1 text-white text-[11px] font-bold leading-none tracking-wide px-2.5 py-[5px] rounded-full"
+                style={{ background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', boxShadow: '0 2px 8px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.1)' }}
+              >
+                <CalendarClock className="w-3 h-3" strokeWidth={2.5} />
+                {new Date(o.expireAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })}
+              </span>
+            )}
+            {/* Spinner grande con X cancelable en el centro — mismo patrón
+                que subir una foto por WhatsApp: el círculo de progreso ES el
+                botón de cancelar, no un ícono puramente decorativo. Antes
+                era un Loader2 chico sin acción; ahora aborta el request real
+                (AbortController) y descarta la card. */}
+            {pending && (
+              <button
+                onClick={() => handleCancelarOfertaAdmin(o._localId)}
+                aria-label="Cancelar subida"
+                className="absolute inset-0 bg-black/45 flex items-center justify-center"
+              >
+                <span className="relative w-12 h-12 flex items-center justify-center">
+                  <Loader2 className="absolute inset-0 w-12 h-12 text-white/90 animate-spin" strokeWidth={2.5} />
+                  <X className="w-5 h-5 text-white" strokeWidth={2.5} />
+                </span>
+              </button>
+            )}
+            {failed && (
+              <div className="absolute inset-0 bg-danger/80 flex flex-col items-center justify-center gap-1 text-white text-center px-2">
+                <AlertTriangle className="w-6 h-6" />
+                <span className="text-[10px] font-bold">No se pudo subir</span>
+              </div>
+            )}
           </div>
           <div className="p-2.5">
-            <p className="font-bold text-[12px] leading-snug line-clamp-2 mb-1.5">{o.nombre}</p>
-            {o.expireAt && (
-              <p className="flex items-center gap-1 text-[10px] text-ink-dim mb-2">
-                <CalendarClock className="w-3 h-3 shrink-0" />
-                {estaVencida ? 'Venció' : 'Vence'} {new Date(o.expireAt).toLocaleDateString('es-AR')}
-              </p>
+            <p className="font-bold text-[12px] leading-snug line-clamp-2 mb-1.5 text-center">{o.nombre}</p>
+            {failed ? (
+              // Solo Reintentar/Eliminar mientras está en error — Ocultar/
+              // Editar no aplican todavía porque no hay id real de servidor.
+              <div className="grid grid-cols-2 gap-1.5">
+                <button onClick={() => handleReintentarOfertaAdmin(o._localId)}
+                  className="flex flex-col items-center justify-center gap-0.5 py-2 rounded-xl bg-brand/10 text-[10px] font-bold text-brand hover:bg-brand/20 transition-colors">
+                  <RotateCcw className="w-4 h-4" />
+                  Reintentar
+                </button>
+                <button onClick={() => setMisProductos(prev => prev.filter(x => x._localId !== o._localId))}
+                  className="flex flex-col items-center justify-center gap-0.5 py-2 rounded-xl bg-surface-card-2 dark:bg-white/8 text-[10px] font-bold text-ink-dim hover:bg-danger/10 hover:text-danger transition-colors">
+                  <Trash2 className="w-4 h-4" />
+                  Descartar
+                </button>
+              </div>
+            ) : (
+              // 3 columnas iguales (no "1 ancho + 2 chicos de solo ícono") —
+              // antes Editar/Eliminar eran cuadraditos de w-8 con ícono de
+              // 3px, muy chicos para tocar cómodo en mobile. Ahora las 3
+              // acciones tienen el mismo peso visual y área de toque.
+              // Deshabilitadas mientras pending: todavía no hay id real.
+              <div className="grid grid-cols-3 gap-1.5">
+                <button onClick={() => toggleVisible(o)} disabled={pending}
+                  className={`flex flex-col items-center justify-center gap-0.5 py-2 rounded-xl text-[10px] font-bold transition-colors disabled:opacity-50 ${o.visible !== false ? 'bg-surface-card-2 dark:bg-white/8 text-ink-dim' : 'bg-brand/10 text-brand'}`}>
+                  {o.visible !== false ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                  {o.visible !== false ? 'Ocultar' : 'Mostrar'}
+                </button>
+                <button onClick={() => openEdit(o)} disabled={pending}
+                  className="flex flex-col items-center justify-center gap-0.5 py-2 rounded-xl bg-surface-card-2 dark:bg-white/8 text-[10px] font-bold text-ink-dim hover:bg-brand/10 hover:text-brand transition-colors disabled:opacity-50">
+                  <Edit3 className="w-4 h-4" />
+                  Editar
+                </button>
+                <button onClick={() => setOfertaConfirmDelete(o.id)} disabled={pending}
+                  className="flex flex-col items-center justify-center gap-0.5 py-2 rounded-xl bg-surface-card-2 dark:bg-white/8 text-[10px] font-bold text-ink-dim hover:bg-danger/10 hover:text-danger transition-colors disabled:opacity-50">
+                  <Trash2 className="w-4 h-4" />
+                  Eliminar
+                </button>
+              </div>
             )}
-            <div className="flex gap-1">
-              <button onClick={() => toggleVisible(o)}
-                className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-xl text-[10px] font-bold transition-colors ${o.visible !== false ? 'bg-surface-card-2 dark:bg-white/8 text-ink-dim' : 'bg-brand/10 text-brand'}`}>
-                {o.visible !== false ? <ToggleRight className="w-3 h-3" /> : <ToggleLeft className="w-3 h-3" />}
-                {o.visible !== false ? 'Ocultar' : 'Mostrar'}
-              </button>
-              <button onClick={() => openEdit(o)} className="flex items-center justify-center w-8 rounded-xl text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8 hover:text-brand transition-colors">
-                <Edit3 className="w-3 h-3" />
-              </button>
-              <button onClick={() => setOfertaConfirmDelete(o.id)} className="flex items-center justify-center w-8 rounded-xl text-ink-dim hover:bg-danger/10 hover:text-danger transition-colors">
-                <Trash2 className="w-3 h-3" />
-              </button>
-            </div>
           </div>
         </div>
       );
@@ -4221,10 +4553,11 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
     return (
       <>
-      <div className="h-[100dvh] flex flex-col bg-surface-card-2 dark:bg-surface-card-2">
+      <div className="h-[100dvh] flex flex-col sa-page-bg">
         <StorePageHeader
           title="Ofertas"
           subtitle={`${misProductos.length} publicación${misProductos.length !== 1 ? 'es' : ''}`}
+          icon={Tag}
           actionSlot={(
             <>
               {loadingProductos && <Loader2 className="w-4 h-4 animate-spin text-ink-dim shrink-0" />}
@@ -4237,7 +4570,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         />
 
         {loadingProductos && misProductos.length === 0 ? (
-          <div className="flex-1 overflow-y-auto p-4 pb-24 lg:pb-4">
+          <div className="flex-1 overflow-y-auto no-scrollbar p-4 pb-24 lg:pb-4">
             <SkeletonProductosGrid cols={2} count={6} />
           </div>
         ) : misProductos.length === 0 && !loadingProductos ? (
@@ -4254,7 +4587,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             </button>
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto p-4 pb-24 lg:pb-4">
+          <div className="flex-1 overflow-y-auto no-scrollbar p-4">
             {/* Barra de resumen — contexto de gestión, no repite lo que ya
                 muestra la pantalla de Estadísticas. */}
             <div className="flex items-center gap-4 px-1 pb-4 text-xs">
@@ -4278,6 +4611,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {misProductos.map(o => <OfertaCard key={o.id} o={o} />)}
             </div>
+            {/* Espaciador = SOLO la altura del nav (78px), sin sumar nada
+                extra: el propio p-4 de este contenedor ya aporta 16px de
+                padding-bottom real después de la última fila — el mismo
+                aire que hay a los costados. Ese padding + el espaciador
+                exacto del nav dan el mismo margen visible que el lateral,
+                sin duplicar ningún aire. Sumarle algo más acá (como antes,
+                +16 o +18px) desalineaba de nuevo el resultado. */}
+            <div style={{ height: 84 }} className="lg:hidden" aria-hidden="true" />
           </div>
         )}
       </div>
@@ -4292,7 +4633,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             <p className="text-sm text-ink-dim text-center mb-6">Esta acción no se puede deshacer.</p>
             <div className="flex gap-3">
               <button onClick={() => setOfertaConfirmDelete(null)} className="flex-1 py-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-sm font-bold text-ink-dim dark:text-ink-dim">Cancelar</button>
-              <button onClick={() => deleteOferta(ofertaConfirmDelete)} className="flex-1 py-2.5 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold transition-colors">
+              <button onClick={() => { deleteOferta(ofertaConfirmDelete); setOfertaConfirmDelete(null); }} className="flex-1 py-2.5 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold transition-colors">
                 Eliminar
               </button>
             </div>
@@ -4681,7 +5022,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           </div>
 
           {/* Body scrolleable */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto no-scrollbar">
             {/* Carrusel de fotos */}
             {fotos.length > 0 ? (
               <div className="relative bg-black select-none">
@@ -4803,7 +5144,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     return (
       <>
       {ProductoDetail()}
-      <div className="h-[100dvh] flex flex-col bg-surface-card-2 dark:bg-surface-card-2">
+      <div className="h-[100dvh] flex flex-col sa-page-bg">
         {/* Header */}
         <StorePageHeader
           title="Mis productos"
@@ -4820,7 +5161,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         />
 
         {loadingProductos && misProductos.length === 0 ? (
-          <div className="flex-1 overflow-y-auto p-4 pb-24 lg:pb-4">
+          <div className="flex-1 overflow-y-auto no-scrollbar p-4 pb-24 lg:pb-4">
             <SkeletonProductosGrid cols={2} count={6} />
           </div>
         ) : misProductos.length === 0 && !loadingProductos ? (
@@ -4840,7 +5181,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           <div className="flex flex-1 min-h-0">
 
             {/* ── Sidebar izquierda (desktop) ── */}
-            <div className="hidden lg:flex flex-col w-56 xl:w-64 border-r border-slate-100 dark:border-white/8 bg-surface-card shrink-0 overflow-y-auto">
+            <div className="hidden lg:flex flex-col w-56 xl:w-64 border-r border-slate-100 dark:border-white/8 bg-surface-card shrink-0 overflow-y-auto no-scrollbar">
               <div className="p-4 space-y-5">
 
                 {/* Capacidad */}
@@ -4957,7 +5298,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
               </div>
 
               {/* Lista / Grilla */}
-              <div className="flex-1 overflow-y-auto p-4 pb-24 lg:pb-4">
+              <div className="flex-1 overflow-y-auto no-scrollbar p-4 pb-24 lg:pb-4">
                 {filtered.length === 0 ? (
                   <div className="flex flex-col items-center text-center gap-3 pt-12 pb-8">
                     <Search className="w-8 h-8 text-ink-dim dark:text-ink-dim" />
@@ -5081,28 +5422,52 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const PerfilScreen = () => {
     const galeria = tiendaData?.galeria || [];
     const rubros = tiendaInfo.rubros || [];
+    // Carrusel del hero — mismo patrón que el hero público real (fotosHero
+    // en commerce-modern.jsx): índice de foto activa + navegación LINEAL
+    // (flechas desaparecen en los extremos, no loop circular). El estado
+    // (heroPhotoIdx) vive arriba, a nivel de StoreApp — ver comentario ahí.
+    const heroFotos = galeria.length > 0 ? galeria : [];
+    const heroMultiFoto = heroFotos.length > 1;
+    const heroPhotoIdxClamped = Math.min(heroPhotoIdx, Math.max(0, heroFotos.length - 1));
 
-    // Profile completion
+    // Profile completion — este array es la ÚNICA fuente de verdad: tanto
+    // el anillo de % como las filas visuales de "Contacto e info" (más
+    // abajo) se generan desde acá. Antes eran dos cosas separadas: el
+    // anillo contaba 12 ítems pero solo 4 aparecían como filas, así que el
+    // % nunca coincidía con lo que el dueño podía ver/completar desde ahí
+    // (auditoría UX, hallazgo A5). Cada ítem es un ACCESO DIRECTO al editor
+    // real de esa cosa — la lista no tiene inputs propios, solo invita e
+    // indica estado (ver auditoría, hallazgo B5: "invitador", no editor).
+    //
+    // 4 categorías, en el orden en que un dueño nuevo las necesita:
+    //  1) Perfil básico — identidad de la tienda.
+    //  2) Configuración — setup de la página pública.
+    //  3) Contenido — lo que de verdad hace que la tienda sirva de algo.
+    //  4) Personalización — opcional, estético.
     const usaCatalogoPerfil = isModuleActive(tiendaData, 'catalogo');
     const profileItems = [
-      { key: 'foto',        done: !!tiendaInfo.foto,                               label: 'Foto de perfil',       action: () => openProfileEdit('foto') },
-      { key: 'descripcion', done: (tiendaInfo.descripcion || '').length >= 20,     label: 'Descripción',          action: () => openProfileEdit('descripcion') },
-      { key: 'telefono',    done: !!tiendaInfo.telefono,                            label: 'Teléfono',             action: () => openProfileEdit('telefono') },
-      { key: 'ciudad',      done: !!tiendaInfo.ciudad,                              label: 'Ciudad',               action: () => openProfileEdit('ciudad') },
-      { key: 'direccion',   done: !!tiendaInfo.direccion,                           label: 'Dirección',            action: () => openProfileEdit('direccion') },
-      { key: 'rubros',      done: rubros.length > 0,                                label: 'Rubro/s',              action: () => openProfileEdit('rubros') },
-      { key: 'galeria',     done: galeria.length >= 2,                              label: 'Galería (2+ fotos)',   action: () => openProfileEdit('galeria') },
-      { key: 'horarios',    done: !!(tiendaInfo.horarios && typeof tiendaInfo.horarios === 'object' ? Object.keys(tiendaInfo.horarios).length > 0 : tiendaInfo.horarios), label: 'Horarios', action: () => openProfileEdit('horarios') },
-      { key: 'slug',        done: !!tiendaInfo.slug,                                label: 'URL personalizada',    action: () => openProfileEdit('slug') },
-      { key: 'tagline',     done: (tiendaInfo.tagline || '').length >= 5,           label: 'Tagline',              action: () => openProfileEdit('tagline') },
-      { key: 'instagram',   done: !!tiendaInfo.instagram,                           label: 'Instagram',            action: () => openProfileEdit('instagram') },
-      // Ítem específico según el módulo de negocio activo de la tienda — el
-      // resto del checklist es genérico de cualquier perfil, este es el
-      // único paso que depende de si vende con catálogo (precio/stock) u
-      // ofertas (imagen+vigencia). Ver _lib/modules.js.
+      // — Perfil básico —
+      { key: 'foto',        group: 'perfil', icon: User,     done: !!tiendaInfo.foto,                           label: 'Foto de perfil', action: () => openProfileEdit('foto') },
+      { key: 'galeria',     group: 'perfil', icon: Camera,   done: galeria.length >= 1,                         label: 'Portada',        action: () => openProfileEdit('galeria') },
+      { key: 'descripcion', group: 'perfil', icon: Edit3,    done: (tiendaInfo.descripcion || '').length >= 20, label: 'Descripción',    action: () => openProfileEdit('descripcion') },
+      { key: 'telefono',    group: 'perfil', icon: Phone,    done: !!tiendaInfo.telefono,                       label: 'Teléfono / WhatsApp', action: () => openProfileEdit('telefono') },
+      { key: 'instagram',   group: 'perfil', icon: Instagram,done: !!tiendaInfo.instagram,                      label: 'Instagram',      action: () => openProfileEdit('instagram') },
+      // Ciudad+dirección fusionados en un solo paso "Ubicación": se
+      // completan juntos desde el mismo mapa (LocationEditorModal), contarlos
+      // separados infla el checklist con dos pasos que en la práctica son uno.
+      { key: 'ubicacion',   group: 'perfil', icon: MapPin,   done: !!(tiendaInfo.direccion || tiendaInfo.ciudad), label: 'Ubicación', action: () => openProfileEdit('direccion') },
+      { key: 'tagline',     group: 'perfil', icon: Sparkles, done: (tiendaInfo.tagline || '').length >= 5,      label: 'Tagline',        action: () => openProfileEdit('tagline') },
+      // — Configuración —
+      { key: 'slug',        group: 'config', icon: Link2,    done: !!tiendaInfo.slug,                           label: 'URL personalizada', action: () => openProfileEdit('slug') },
+      { key: 'horarios',    group: 'config', icon: Clock,    done: !!(tiendaInfo.horarios && typeof tiendaInfo.horarios === 'object' ? Object.keys(tiendaInfo.horarios).length > 0 : tiendaInfo.horarios), label: 'Horarios', action: () => openProfileEdit('horarios') },
+      // — Contenido — el paso que de verdad hace que la tienda sirva de
+      // algo; antes existía SOLO en el cálculo del %, invisible como fila.
       usaCatalogoPerfil
-        ? { key: 'primer-producto', done: misProductos.length > 0, label: 'Primer producto', action: () => navigateTo('productos') }
-        : { key: 'primera-oferta',  done: misProductos.length > 0, label: 'Primera oferta',  action: () => navigateTo('productos') },
+        ? { key: 'primer-producto', group: 'contenido', icon: Package, done: misProductos.length > 0, label: 'Primer producto', action: () => navigateTo('productos') }
+        : { key: 'primera-oferta',  group: 'contenido', icon: Tag,     done: misProductos.length > 0, label: 'Primera oferta',  action: () => navigateTo('productos') },
+      // — Personalización — opcional, estético. Antes vivía enterrada en un
+      // acordeón de "Editar diseño" poco descubierto (hallazgo B4).
+      { key: 'color', group: 'custom', icon: Palette, done: !!(tiendaInfo.pagina?.color && tiendaInfo.pagina.color !== '#e4002b'), label: 'Color de marca', action: () => navigateTo('mi-pagina') },
     ];
     const profileDone = profileItems.filter(i => i.done).length;
     const profilePct = Math.round((profileDone / profileItems.length) * 100);
@@ -5110,157 +5475,269 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     const circ = 2 * Math.PI * r;
     const dash = circ * (profilePct / 100);
 
+    // Texto a mostrar en la fila cuando el paso YA está completo — cada
+    // campo tiene su propio formato (no todos son "mostrar el valor tal
+    // cual": ubicación combina 2 campos, portada cuenta fotos, etc.). Los
+    // pasos sin texto propio (ej. "Primera oferta") devuelven null y la fila
+    // solo muestra el label + ícono en color de marca, sin segunda línea.
+    const rowValue = (key) => {
+      switch (key) {
+        case 'telefono':   return tiendaInfo.telefono;
+        case 'instagram':  return `@${tiendaInfo.instagram}`;
+        case 'ubicacion':  return [tiendaInfo.direccion, tiendaInfo.ciudad].filter(Boolean).join(', ');
+        case 'tagline':    return tiendaInfo.tagline;
+        case 'slug':       return `${window.location.host}/${tiendaInfo.slug}`;
+        case 'galeria':    return `${galeria.length} imagen${galeria.length === 1 ? '' : 'es'}`;
+        case 'color':      return tiendaInfo.pagina?.color || null;
+        default:           return null;
+      }
+    };
+
     const { abierta: heroAbierta } = getEstadoApertura(tiendaInfo.horarios);
 
     return (
-      <div className="h-[100dvh] flex flex-col bg-surface-card-2 dark:bg-surface-card-2">
+      <div className="h-[100dvh] flex flex-col sa-page-bg">
+        {/* Sin title: el nombre de la tienda ya se lee grande en el hero de
+            abajo — repetirlo acá era ruido. "Ver página" va en leftSlot
+            (izquierda, no derecha): es la acción principal de esta pantalla,
+            mismo botón sólido que antes vivía en la card "Diseño de mi
+            página" (bg-brand, más protagónico que un ícono chico). */}
         <StorePageHeader
-          title={tiendaInfo?.nombre || 'Mi tienda'}
-          subtitle={tiendaInfo?.tagline || 'Editá tu perfil público'}
-          actionSlot={tiendaInfo.slug && (
+          title=""
+          leftSlot={tiendaInfo.slug && (
             <a href={`/${tiendaInfo.slug}`} target="_blank" rel="noreferrer"
-              className="flex items-center gap-1.5 bg-brand hover:bg-brand-light text-white text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0 shadow-sm shadow-brand/20">
-              <Globe className="w-4 h-4" /><span className="hidden sm:inline">Ver página</span>
+              className="inline-flex items-center gap-1.5 bg-brand hover:bg-brand-light text-white text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm shadow-brand/20">
+              <Globe className="w-4 h-4" /><span>Ver página</span>
             </a>
           )}
         />
-        <div className="flex-1 overflow-y-auto pb-24 lg:pb-8">
+        <div className="flex-1 overflow-y-auto lg:pb-8 no-scrollbar">
 
-        {/* ── Hero compacto — calcado literal del hero real de OfertaIndividual.jsx
-            (franja de color de marca fundida + card flotante horizontal con
-            logo/nombre/estado), con los mismos elementos convertidos en
-            botones editables en vez de solo-lectura. Antes era un fondo
-            bordó fijo sin relación con el color de marca real. ──────────── */}
-        <div className="relative" style={{ background: 'var(--tp-surface)' }}>
-          <div className="relative" style={{
-            height: 88,
-            background: 'linear-gradient(135deg, var(--tp-primary), color-mix(in srgb, var(--tp-primary) 60%, #000))',
-            WebkitMaskImage: 'linear-gradient(to top, transparent 0%, rgba(0,0,0,.15) 28px, #000 76px)',
-            maskImage: 'linear-gradient(to top, transparent 0%, rgba(0,0,0,.15) 28px, #000 76px)',
-          }}>
-            {galeria[0] && (
-              <img src={galeria[0]} alt="" className="absolute inset-0 w-full h-full object-cover opacity-40" />
+        {/* ── Hero — clon LITERAL del hero REALMENTE en uso hoy en la vista
+            pública: 'editorial' (HeroEditorial en commerce-modern.jsx,
+            líneas ~1266-1430), no 'card' — TiendaPublicaRenderer.jsx tiene
+            heroLayout forzado a 'editorial' (comentario "TEMP: forzado para
+            preview" en la línea que arma <Template>), así que es lo que el
+            dueño ve HOY en su propia tienda. Mismas clases/valores que
+            .cm-hero-ed-*: foto banner de ACENTO (150px, no 240 — acá la
+            info manda, no la foto), SIN card flotante separada — el logo
+            (84px, radius 20) va en una fila (align-items:flex-end,
+            marginTop:-40) directo contra el fondo de página, con el nombre
+            en columna a su DERECHA (no centrado ni debajo). */}
+        {/* Fondo del hero: MISMO azul-negro fijo que usa login (#040a14,
+            AdminLogin.jsx línea 58: isDark ? '#040a14' : surface-solid) —
+            pero SOLO acá, como color local del hero, NO tocando --surface-
+            dim/--surface-solid globales (esa vía se probó y rompió bordes/
+            cards/nav en toda la app: esos tokens alimentan --tp-bg/--tp-
+            surface de la vista pública Y todo bg-surface-card/-2 del resto
+            del admin, así que un valor "casi tan oscuro como el fondo"
+            colapsó el contraste que muchos otros componentes daban por
+            garantizado). En light sigue el token normal (var(--surface-
+            solid)) — el enriquecido es un tratamiento de dark, como en
+            login. El degradado de la foto funde hacia ESE MISMO color
+            (heroBg), logrando la ilusión de desvanecimiento del banner
+            contra el fondo real que lo rodea. */}
+        <style>{`
+          .sa-hero-ed-row { position: relative; z-index: 2; display: flex; align-items: flex-end; gap: 14px; padding: 0 18px; margin-top: -40px; }
+          .sa-hero-ed-logo { width: 84px; height: 84px; border-radius: 20px; flex-shrink: 0; overflow: hidden;
+            border: 4px solid rgb(var(--surface-solid-2-rgb)); box-shadow: 0 4px 10px rgba(0,0,0,.15); display: grid; place-items: center; }
+          .dark .sa-hero-ed-logo { border-color: rgba(255,255,255,.10); box-shadow: 0 4px 14px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.08); }
+          .sa-hero-ed-name { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          /* Flechas del carrusel — clon literal de .cm-hero-arrow (hero público real) */
+          .sa-hero-arrow { background: rgba(255,255,255,.9); color: #18181b; border: 1px solid rgba(0,0,0,.08);
+            transition: transform .12s cubic-bezier(0.34,1.56,0.64,1), filter .15s ease; }
+          .dark .sa-hero-arrow { background: rgba(82,82,82,.65); color: #fff; border: 1px solid rgba(255,255,255,.12); }
+          @media (hover: hover) { .sa-hero-arrow:hover { filter: brightness(0.85); } }
+          .sa-hero-arrow:active { transform: scale(0.93); transition: transform .06s ease; }
+        `}</style>
+        {/* Fondo del hero: MISMO valor que sa-page-bg (surface-dim en light,
+            #040a14 en dark) — antes usaba --surface-solid (blanco de card)
+            en light, un tono DISTINTO del fondo real de página, así el
+            degradado de la foto (que funde hacia este color) no calzaba
+            con lo que lo rodea. */}
+        <header className="sa-hero-ed" style={{ position: 'relative', background: isDark ? '#040a14' : 'rgb(var(--surface-dim, 245 245 245))' }}>
+          <div className="sa-hero-ed-photo" style={{ position: 'relative', overflow: 'hidden', height: 150, background: isDark ? '#040a14' : 'rgb(var(--surface-dim, 245 245 245))' }}>
+            {heroFotos.length > 0
+              ? heroFotos.map((src, i) => (
+                  <img key={src} src={src} alt=""
+                    style={{
+                      position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block',
+                      opacity: i === heroPhotoIdxClamped ? 1 : 0, transition: 'opacity .4s ease', pointerEvents: i === heroPhotoIdxClamped ? 'auto' : 'none',
+                      WebkitMaskImage: 'linear-gradient(to top, transparent 0%, rgba(0,0,0,.2) 40px, #000 110px)',
+                      maskImage: 'linear-gradient(to top, transparent 0%, rgba(0,0,0,.2) 40px, #000 110px)',
+                    }} />
+                ))
+              : <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, rgb(var(--brand)), rgb(var(--surface-solid-2-rgb)))' }} />}
+            {/* Oscurecido superior — legibilidad de flechas/dots sobre
+                cualquier foto clara (mismo criterio que .cm-hero-ed-photo::before) */}
+            <div style={{ position: 'absolute', inset: '0 0 auto 0', height: 64, zIndex: 1, background: 'linear-gradient(to bottom, rgba(0,0,0,.3), transparent)', pointerEvents: 'none' }} />
+            {/* Flechas + dots — dots ARRIBA centrado (no abajo): ahí abajo
+                pisa el logo de perfil (margin-top:-40px en la fila de
+                abajo), y competían por el mismo espacio visual. */}
+            {heroMultiFoto && (
+              <>
+                {heroPhotoIdxClamped > 0 && (
+                  <button className="sa-hero-arrow" onClick={() => setHeroPhotoIdx(i => i - 1)} aria-label="Foto anterior"
+                    style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', zIndex: 2, width: 32, height: 32, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 2px rgba(0,0,0,.06)' }}>
+                    <ChevronLeft size={18} />
+                  </button>
+                )}
+                {heroPhotoIdxClamped < heroFotos.length - 1 && (
+                  <button className="sa-hero-arrow" onClick={() => setHeroPhotoIdx(i => i + 1)} aria-label="Foto siguiente"
+                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', zIndex: 2, width: 32, height: 32, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 2px rgba(0,0,0,.06)' }}>
+                    <ChevronRight size={18} />
+                  </button>
+                )}
+                <div className="absolute top-2.5 left-1/2 -translate-x-1/2 z-[3] flex gap-1.5">
+                  {heroFotos.map((_, i) => (
+                    <button key={i} onClick={() => setHeroPhotoIdx(i)} aria-label={`Foto ${i + 1}`}
+                      className="h-[5px] rounded-full transition-all" style={{ width: i === heroPhotoIdxClamped ? 16 : 5, background: i === heroPhotoIdxClamped ? '#fff' : 'rgba(255,255,255,.5)' }} />
+                  ))}
+                </div>
+              </>
             )}
-            <div className="absolute right-2.5 top-3.5 flex items-center gap-2">
-              {tiendaInfo.slug && (
-                <a href={`/${tiendaInfo.slug}`} target="_blank" rel="noreferrer" aria-label="Ver mi página"
-                  className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors" style={{ background: 'rgba(255,255,255,.14)', color: '#fff', backdropFilter: 'blur(4px)' }}>
-                  <Globe className="w-4 h-4" />
-                </a>
-              )}
-              <button onClick={() => openProfileEdit('portada')} aria-label="Cambiar portada"
-                className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors" style={{ background: 'rgba(255,255,255,.14)', color: '#fff', backdropFilter: 'blur(4px)' }}>
-                <Camera className="w-4 h-4" />
-              </button>
-              <button onClick={() => openGeneralProfileEditor()} aria-label="Editar perfil"
-                className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors" style={{ background: 'rgba(255,255,255,.14)', color: '#fff', backdropFilter: 'blur(4px)' }}>
-                <Edit3 className="w-4 h-4" />
-              </button>
-            </div>
+            {/* Cambiar portada — botón SIEMPRE visible (no hover): en
+                mobile/táctil el hover no es confiable (no hay mouse que
+                "entre" al elemento, y algunos navegadores lo disparan mal),
+                así que en vez de depender de :hover para revelarlo, queda
+                fijo en la esquina superior derecha — mismo lenguaje que las
+                flechas del carrusel (sa-hero-arrow). */}
+            <button className="sa-hero-arrow" onClick={() => openProfileEdit('portada')} aria-label="Cambiar portada"
+              style={{ position: 'absolute', right: 10, top: 10, zIndex: 2, width: 32, height: 32, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 2px rgba(0,0,0,.06)' }}>
+              <Camera size={16} />
+            </button>
           </div>
 
-          {/* Card flotante — logo/nombre/estado, mismo layout horizontal que
-              la vista pública compacta, con el logo editable. */}
-          <div className="px-4 lg:px-8 pb-3">
-            <div className="flex items-center justify-center gap-2 flex-wrap" style={{ marginTop: -14 }}>
-              <div className="relative shrink-0 group">
-                <div className="w-14 h-14 rounded-2xl overflow-hidden flex items-center justify-center" style={{ background: tiendaInfo.foto ? 'var(--tp-primary-soft)' : 'var(--tp-primary)', border: '3px solid var(--tp-surface)', boxShadow: '0 4px 20px rgba(0,0,0,.12)' }}>
-                  {tiendaInfo.foto
-                    ? <img src={tiendaInfo.foto} alt="" className="w-full h-full object-cover" />
-                    : <Store className="w-7 h-7 text-white" />}
-                </div>
-                <button onClick={() => openProfileEdit('foto')} aria-label="Cambiar foto de perfil"
-                  className="absolute -bottom-1 -right-1 w-6 h-6 bg-brand text-white rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 active:opacity-100 transition-opacity">
-                  <Camera className="w-3 h-3" />
-                </button>
+          {/* Fila logo (izquierda) + nombre (derecha) — SIN card flotante,
+              directo contra el fondo de página, igual que HeroEditorial real. */}
+          <div className="sa-hero-ed-row">
+            {/* Wrapper SIN overflow — el badge tiene que sobresalir del
+                cuadrado del logo, pero .sa-hero-ed-logo tiene overflow:
+                hidden (necesario para recortar la foto/ícono adentro). Sin
+                este wrapper aparte, el propio overflow:hidden del logo
+                recortaba el badge que sobresalía por encima del borde. */}
+            <div className="relative shrink-0" style={{ width: 84, height: 84 }}>
+              <div className="sa-hero-ed-logo" style={{ width: '100%', height: '100%', background: tiendaInfo.foto ? 'rgb(var(--brand) / .15)' : 'rgb(var(--brand))' }}>
+                {tiendaInfo.foto
+                  ? <img src={tiendaInfo.foto} alt="" className="w-full h-full object-cover" />
+                  : <User size={40} color="#fff" />}
               </div>
-              {editingNombre ? (
-                <input
-                  autoFocus
-                  value={nombreDraft}
-                  onChange={e => setNombreDraft(e.target.value)}
-                  onBlur={async () => {
-                    setEditingNombre(false);
-                    const trim = nombreDraft.trim();
-                    if (!trim || trim === tiendaInfo.nombre) return;
-                    try {
-                      const res = await apiFetch(`${API_BASE}/tiendas-crud`, {
-                        method: 'PATCH', authRequired: true,
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id: tiendaData.id, nombre: trim }),
-                      });
-                      if (res.ok) { const u = await res.json(); setTienda(u); onTiendaUpdate(u); }
-                    } catch { /* silencioso */ }
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') e.target.blur();
-                    if (e.key === 'Escape') { setEditingNombre(false); setNombreDraft(tiendaInfo.nombre || ''); }
-                  }}
-                  className="text-lg font-black bg-transparent border-b-2 border-brand outline-none max-w-[200px]"
-                  style={{ color: 'var(--tp-text)' }}
-                  maxLength={120}
-                />
+              {/* Badge de lápiz SIEMPRE visible (no overlay por hover): en
+                  mobile/táctil el hover no es confiable — mismo criterio
+                  que el botón de portada de arriba. */}
+              <button onClick={() => openProfileEdit('foto')} aria-label="Cambiar foto de perfil"
+                className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-brand text-white flex items-center justify-center shadow-md border-2"
+                style={{ borderColor: isDark ? '#040a14' : 'var(--surface-solid, #fff)' }}>
+                <Camera className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="flex-1 min-w-0 pb-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                {editingNombre ? (
+                  <input
+                    autoFocus
+                    value={nombreDraft}
+                    onChange={e => setNombreDraft(e.target.value)}
+                    onBlur={async () => {
+                      setEditingNombre(false);
+                      const trim = nombreDraft.trim();
+                      if (!trim || trim === tiendaInfo.nombre) return;
+                      try {
+                        const res = await apiFetch(`${API_BASE}/tiendas-crud`, {
+                          method: 'PATCH', authRequired: true,
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ id: tiendaData.id, nombre: trim }),
+                        });
+                        if (res.ok) { const u = await res.json(); setTienda(u); onTiendaUpdate(u); }
+                      } catch { /* silencioso */ }
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') e.target.blur();
+                      if (e.key === 'Escape') { setEditingNombre(false); setNombreDraft(tiendaInfo.nombre || ''); }
+                    }}
+                    className="sa-hero-ed-name bg-transparent border-b-2 border-brand outline-none max-w-[220px]"
+                    maxLength={120}
+                  />
+                ) : (
+                  <h1
+                    className="sa-hero-ed-name cursor-pointer hover:opacity-70 transition-opacity inline-flex items-center gap-1"
+                    onClick={() => { setNombreDraft(tiendaInfo.nombre || ''); setEditingNombre(true); }}
+                  >
+                    {tiendaInfo.nombre}
+                    {/* Lápiz siempre visible (no hover): en mobile no hay
+                        forma de "pasar el mouse" para descubrirlo. */}
+                    <Edit3 className="w-3.5 h-3.5 opacity-60 shrink-0" />
+                  </h1>
+                )}
+              </div>
+              {/* Descripción — reemplaza el botón "Descripción" que vivía
+                  en la fila separada bajo el hero. Con texto: se muestra
+                  clickeable (mismo lugar donde se lee en la vista pública).
+                  Sin texto: placeholder tipo "+ agregar", mismo lenguaje
+                  punteado que el resto del checklist. */}
+              {tiendaInfo.descripcion ? (
+                <p onClick={openDescripcionEditor}
+                  className="text-xs text-ink-dim mt-1 cursor-pointer hover:text-brand transition-colors line-clamp-2">
+                  {tiendaInfo.descripcion}
+                </p>
               ) : (
-                <h1
-                  className="text-lg font-black cursor-pointer hover:opacity-70 transition-opacity inline-flex items-center gap-1 group"
-                  style={{ color: 'var(--tp-text)' }}
-                  onClick={() => { setNombreDraft(tiendaInfo.nombre || ''); setEditingNombre(true); }}
-                >
-                  {tiendaInfo.nombre}
-                  <Edit3 className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: 'var(--tp-text-muted)' }} />
-                </h1>
+                <button onClick={openDescripcionEditor}
+                  className="text-xs text-brand font-semibold mt-1 hover:underline">
+                  + Agregar descripción
+                </button>
               )}
               {(tiendaInfo.horarios && Object.keys(tiendaInfo.horarios).length > 0) && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold" style={heroAbierta ? { background: 'color-mix(in srgb, #22C55E 14%, transparent)', color: '#22C55E' } : { background: 'color-mix(in srgb, #ef4444 14%, transparent)', color: '#ef4444' }}>
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: heroAbierta ? '#22C55E' : '#ef4444' }} />
-                  {heroAbierta ? 'Abierto' : 'Cerrado'}
-                </span>
+                <div className="mt-1.5">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold" style={heroAbierta ? { background: 'color-mix(in srgb, #22C55E 14%, transparent)', color: '#22C55E' } : { background: 'color-mix(in srgb, #ef4444 14%, transparent)', color: '#ef4444' }}>
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: heroAbierta ? '#22C55E' : '#ef4444' }} />
+                    {heroAbierta ? 'Abierto' : 'Cerrado'}
+                  </span>
+                </div>
               )}
             </div>
           </div>
+        </header>
+
+        {/* ── Acciones rápidas — reemplaza la vieja fila de Ver página /
+            Portada / Descripción (esas se integraron donde corresponde
+            visualmente: "Ver página" en el header, "Portada" como hover
+            sobre la foto, "Descripción" bajo el título del hero). Este
+            hueco ahora tiene lo que SÍ quedaba suelto sin atajo rápido:
+            editar diseño y editar URL — antes solo vivían más abajo del
+            todo, en la card "Diseño de mi página". */}
+        <div className="max-w-3xl mx-auto px-5 lg:px-8 pt-5 grid grid-cols-2 gap-2">
+          <button
+            onClick={() => {
+              setPaginaForm({ template: tiendaInfo.pagina?.template || 'commerce-modern', color: tiendaInfo.pagina?.color || '#e4002b', modoOscuro: tiendaInfo.pagina?.modoOscuro || false });
+              setPublicPageForm({ slug: tiendaInfo.slug || '', tagline: tiendaInfo.tagline || '', whatsapp: tiendaInfo.whatsapp || tiendaInfo.telefono || '', instagram: tiendaInfo.instagram || '' });
+              setPublicPageError(null);
+              setScreen('mi-pagina');
+            }}
+            className="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-surface-card dark:bg-white/8 text-xs font-bold hover:bg-brand/10 hover:text-brand transition-colors">
+            <Palette className="w-3.5 h-3.5" /> Editar diseño
+          </button>
+          <button
+            onClick={() => {
+              setPublicPageForm(f => ({ ...f, slug: tiendaInfo.slug || '' }));
+              setPublicPageError(null);
+              setEditingPublicPage(true);
+            }}
+            className="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-surface-card dark:bg-white/8 text-xs font-bold hover:bg-brand/10 hover:text-brand transition-colors">
+            <Link2 className="w-3.5 h-3.5" /> Editar URL
+          </button>
         </div>
 
-        {/* ── Rubro — el nombre ya se edita en el hero; ciudad y
-            descripción se sacaron de acá (quedaban duplicadas: ya viven
-            como cards en "Contacto e info" más abajo, con el mismo patrón
-            punteado que el resto de campos). Rubro se queda SOLO acá, con
-            label explícito (antes era un chip suelto sin contexto). No es
-            un tag puramente cosmético: al CREAR la tienda determina el
-            preset inicial de módulos (Catálogo vs. Ofertas) — pero
-            cambiarlo después NO mueve esos módulos ni afecta productos ya
-            cargados (ver netlify/functions/_lib/modules.js), así que acá no
-            hace falta ninguna advertencia de riesgo al editarlo. */}
-        <div className="px-5 lg:px-8 pt-4 pb-1 max-w-3xl mx-auto">
-          <p className="text-[11px] font-black text-ink-dim uppercase tracking-widest mb-2">
-            Rubro <span className="normal-case font-medium text-ink-dim/70">— categoría de tu negocio en LOKAL</span>
-          </p>
-          {rubros.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {rubros.map(r => {
-                const cat = allCategories.find(c => c.id === r);
-                return (
-                  <button key={r} onClick={() => openProfileEdit('rubros')}
-                    className="flex items-center gap-1 text-xs bg-brand/15 dark:bg-brand/20 text-brand-dark dark:text-brand px-2.5 py-1 rounded-full font-semibold hover:bg-brand/25 transition-colors">
-                    {cat?.icon && <CategoryIcon name={cat.icon} className="w-3 h-3" />}
-                    {cat?.name || r}
-                    <Edit3 className="w-2.5 h-2.5 opacity-60" />
-                  </button>
-                );
-              })}
-              <button onClick={() => openProfileEdit('rubros')}
-                className="flex items-center gap-1 text-xs bg-surface-card-2 dark:bg-white/10 text-ink-dim px-2.5 py-1 rounded-full font-semibold hover:bg-brand/15 hover:text-brand transition-colors">
-                <Plus className="w-3 h-3" /> Rubro
-              </button>
-            </div>
-          ) : (
-            <button onClick={() => openProfileEdit('rubros')}
-              className="flex items-center gap-1 text-xs bg-surface-card-2 dark:bg-white/10 text-ink-dim px-2.5 py-1 rounded-full font-semibold hover:bg-brand/15 hover:text-brand transition-colors">
-              <Plus className="w-3 h-3" /> Agregar rubro
-            </button>
-          )}
-        </div>
+        {/* El chip de "Rubro" se sacó de acá — ver auditoría UX hallazgo A3:
+            solo se usa al CREAR la tienda para el preset inicial de módulos
+            (Catálogo vs. Ofertas, ver netlify/functions/_lib/modules.js);
+            cambiarlo después no mueve nada, y las categorías disponibles
+            están cableadas a comida rápida (no aplican a una tienda de
+            ofertas). Ocupaba una franja entera sugiriendo una importancia
+            que no tiene. El dato tienda.rubros se sigue guardando. */}
 
-        <div className="max-w-3xl mx-auto px-5 lg:px-8 mt-6 space-y-5">
+        <div className="max-w-3xl mx-auto px-5 lg:px-8 mt-5 space-y-5">
 
           {/* ── Suscripción — resumen, detalle completo en su propia pantalla.
               El conteo de ofertas activas se sacó de acá: es redundante con
@@ -5288,37 +5765,41 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             <ChevronRight className="w-4 h-4 text-ink-dim shrink-0" />
           </button>
 
-          {/* ── Galería de imágenes ─────────────────────────────────────── */}
-          {galeria.length > 0 && (
-            <div className="bg-surface-card rounded-3xl border border-slate-100 dark:border-white/8 p-5">
-              <div className="flex items-center justify-between mb-3 gap-3">
-                <h3 className="font-bold flex items-center gap-2">
-                  <Camera className="w-4 h-4 text-ink-dim" /> Galería
-                </h3>
-                <button onClick={() => openProfileEdit('galeria')}
-                  className="text-xs font-semibold text-brand-dark dark:text-brand hover:underline flex items-center gap-1">
-                  <Edit3 className="w-3.5 h-3.5" /> Editar
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {galeria.map((url, i) => (
-                  <div key={i} className={`overflow-hidden rounded-2xl bg-surface-card-2 dark:bg-surface-card-2 ${i === 0 && galeria.length > 2 ? 'col-span-2' : ''}`}>
-                    <img src={url} alt="" loading="lazy" decoding="async" className="w-full object-cover aspect-video" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* La card con el listado de fotos de portada se sacó de acá — el
+              dueño ya puede ver y editar sus fotos de portada desde el
+              checklist de completitud de perfil (item "Portada", ver
+              profileItems arriba) que abre el mismo sheet (MediaEditorModal,
+              mediaModal='galeria'). Mostrar el mismo listado dos veces en la
+              misma pantalla era redundante. */}
 
-          {/* ── Contacto e info — header fusiona el anillo de completitud
-              (antes era una card separada arriba). Cada campo, lleno o
-              vacío, sigue el mismo patrón visual (sólido vs. punteado
-              "+ agregar"), y el botón editar tiene la misma forma cuadrada
-              que el bloque de ícono a la izquierda de cada fila. ────────── */}
-          <div className="bg-surface-card rounded-3xl border border-slate-100 dark:border-white/8 p-5">
-            <div className="flex items-center gap-4 mb-4">
-              {/* Ring SVG */}
-              <div className="relative shrink-0 w-[56px] h-[56px]">
+          {/* ── Centro de completitud — generado ÍNTEGRAMENTE desde
+              profileItems (mismo array que calcula el anillo, arriba). Antes
+              esta lista estaba escrita a mano con solo 4 de los 12 pasos
+              (teléfono/IG/ubicación/tagline): el % nunca coincidía con lo
+              que el dueño podía ver acá (hallazgo A5). Ahora son la MISMA
+              fuente: el anillo y las filas nunca se desincronizan, y las
+              4 categorías (perfil/config/contenido/personalización) hacen
+              de índice de TODO lo que hay para hacer en la tienda, no solo
+              de datos de contacto.
+              Cada fila es un ACCESO DIRECTO al editor real de esa cosa — no
+              hay inputs acá (ver hallazgo B5: esto es un "invitador", no un
+              editor). El valor mostrado cuando está completo sale de
+              rowValue(), un mapeo puntual por key (cada campo tiene su
+              propio formato de texto). */}
+          <div className="bg-surface-card rounded-3xl border border-slate-100 dark:border-white/8 overflow-hidden">
+            {/* El padding vive EN el botón (no en el div contenedor de
+                afuera) — así el área clickeable cubre toda la tarjeta,
+                borde a borde. Antes el p-5 estaba en el div de afuera: tocar
+                cerca del borde caía fuera del <button>, y solo el centro
+                (donde sí estaba el botón) respondía al toggle. */}
+            <button
+              onClick={() => setProfileChecklistCollapsed(c => !c)}
+              className="w-full flex items-center gap-4 text-left p-5"
+              aria-expanded={!profileChecklistCollapsed}
+            >
+              {/* Ring SVG — pointer-events:none: es puramente decorativo,
+                  no debe poder "robar" el click del botón que lo envuelve. */}
+              <div className="relative shrink-0 w-[56px] h-[56px]" style={{ pointerEvents: 'none' }}>
                 <svg width="56" height="56" viewBox="0 0 76 76">
                   <circle cx="38" cy="38" r={r} fill="none" strokeWidth="7" className="stroke-surface-card-2 dark:stroke-white/10" />
                   <circle
@@ -5335,243 +5816,95 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="font-bold">Contacto e info</h3>
+                <h3 className="font-bold">Completá tu tienda</h3>
                 <p className="text-xs text-ink-dim mt-0.5">
-                  {profilePct === 100 ? '¡Perfil completo!' : `${profileDone} de ${profileItems.length} secciones completas`}
+                  {profilePct === 100 ? '¡Todo listo!' : `${profileDone} de ${profileItems.length} pasos completos`}
                 </p>
               </div>
-              <button onClick={() => openProfileEdit('telefono')}
-                className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:bg-brand/10 hover:text-brand transition-colors">
-                <Edit3 className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="space-y-2">
-              {tiendaInfo.telefono ? (
-                <button onClick={() => openProfileEdit('telefono')}
-                  className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface-card-2 dark:bg-white/5 hover:bg-brand/8 dark:hover:bg-brand/10 transition-colors group text-left">
-                  <div className="w-9 h-9 bg-brand/15 dark:bg-brand/20 rounded-xl flex items-center justify-center shrink-0">
-                    <Phone className="w-4 h-4 text-brand-dark dark:text-brand" />
+              <ChevronDown className={`w-4 h-4 text-ink-dim shrink-0 transition-transform ${profileChecklistCollapsed ? '' : 'rotate-180'}`} style={{ pointerEvents: 'none' }} />
+            </button>
+            {/* Grid-rows 0fr↔1fr animado — a diferencia de max-height con un
+                valor fijo, esta técnica anima a la altura REAL del contenido
+                (que cambia según cuántos pasos falten/Ver más), sin saltos
+                ni recortes. El contenido siempre está montado (necesario
+                para poder animar), solo cambia el alto disponible. */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateRows: profileChecklistCollapsed ? '0fr' : '1fr',
+                transition: 'grid-template-rows .25s ease',
+              }}
+            >
+              <div style={{ overflow: 'hidden', minHeight: 0 }}>
+                <div className="px-5 pb-5">
+                {(() => {
+              // Solo los PENDIENTES ocupan lugar acá — un paso ya hecho
+              // cumplió su función de invitar, no necesita seguir listado
+              // (antes se mostraban todos, completos o no, forzando el alto
+              // de toda la pantalla sin aportar nada nuevo una vez hecho).
+              // UNA sola lista aplanada (no un "Ver más" por categoría): el
+              // label de grupo se muestra solo cuando cambia respecto al
+              // ítem anterior, como separador dentro del mismo recorte.
+              const groupLabels = { perfil: 'Perfil', config: 'Configuración', contenido: 'Contenido', custom: 'Personalización' };
+              const pending = profileItems.filter(i => !i.done);
+              if (!pending.length) {
+                return <p className="text-xs text-ink-dim mt-4">Ya completaste todos los pasos de tu perfil.</p>;
+              }
+              const visible = profileChecklistExpanded ? pending : pending.slice(0, 5);
+              const hiddenCount = pending.length - visible.length;
+              let lastGroup = null;
+              return (
+                <div className="mt-4">
+                  <div className="space-y-2">
+                    {visible.map(item => {
+                      const Icon = item.icon;
+                      const showLabel = item.group !== lastGroup;
+                      lastGroup = item.group;
+                      return (
+                        <React.Fragment key={item.key}>
+                          {showLabel && (
+                            <p className="text-[11px] font-black text-ink-dim uppercase tracking-widest pt-1 first:pt-0">{groupLabels[item.group]}</p>
+                          )}
+                          <button onClick={item.action}
+                            className="w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-brand dark:hover:border-brand/40 transition-colors group text-left">
+                            <div className="w-9 h-9 bg-surface-card-2 dark:bg-white/5 rounded-xl flex items-center justify-center shrink-0">
+                              <Icon className="w-4 h-4 text-ink-dim" />
+                            </div>
+                            <div>
+                              <p className="text-xs text-ink-dim font-medium">{item.label}</p>
+                              <p className="text-xs text-brand font-semibold">+ Agregar</p>
+                            </div>
+                          </button>
+                        </React.Fragment>
+                      );
+                    })}
                   </div>
-                  <div className="flex-1">
-                    <p className="text-xs text-ink-dim font-medium">Teléfono / WhatsApp</p>
-                    <p className="font-semibold text-sm">{tiendaInfo.telefono}</p>
-                  </div>
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-ink-dim group-hover:text-brand transition-colors">
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </div>
-                </button>
-              ) : (
-                <button onClick={() => openProfileEdit('telefono')}
-                  className="w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-brand dark:hover:border-brand/40 transition-colors group text-left">
-                  <div className="w-9 h-9 bg-surface-card-2 dark:bg-white/5 rounded-xl flex items-center justify-center shrink-0">
-                    <Phone className="w-4 h-4 text-ink-dim" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-ink-dim font-medium">Teléfono / WhatsApp</p>
-                    <p className="text-xs text-brand font-semibold">+ Agregar teléfono</p>
-                  </div>
-                </button>
-              )}
-              {tiendaInfo.instagram ? (
-                <button onClick={() => openProfileEdit('instagram')}
-                  className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface-card-2 dark:bg-white/5 hover:bg-brand/8 dark:hover:bg-brand/10 transition-colors group text-left">
-                  <div className="w-9 h-9 bg-brand/15 dark:bg-brand/20 rounded-xl flex items-center justify-center shrink-0">
-                    <Instagram className="w-4 h-4 text-brand-dark dark:text-brand" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs text-ink-dim font-medium">Instagram</p>
-                    <p className="font-semibold text-sm">@{tiendaInfo.instagram}</p>
-                  </div>
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-ink-dim group-hover:text-brand transition-colors">
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </div>
-                </button>
-              ) : (
-                <button onClick={() => openProfileEdit('instagram')}
-                  className="w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-brand dark:hover:border-brand/40 transition-colors group text-left">
-                  <div className="w-9 h-9 bg-surface-card-2 dark:bg-white/5 rounded-xl flex items-center justify-center shrink-0">
-                    <Instagram className="w-4 h-4 text-ink-dim" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-ink-dim font-medium">Instagram</p>
-                    <p className="text-xs text-brand font-semibold">+ Agregar Instagram</p>
-                  </div>
-                </button>
-              )}
-              {(tiendaInfo.direccion || tiendaInfo.ciudad) ? (
-                <button onClick={() => openProfileEdit('direccion')}
-                  className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface-card-2 dark:bg-white/5 hover:bg-brand/5 dark:hover:bg-brand/10 transition-colors group text-left">
-                  <div className="w-9 h-9 bg-brand/10 dark:bg-brand/20 rounded-xl flex items-center justify-center shrink-0">
-                    <MapPin className="w-4 h-4 text-brand" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs text-ink-dim font-medium">Dirección</p>
-                    <p className="font-semibold text-sm">{[tiendaInfo.direccion, tiendaInfo.ciudad].filter(Boolean).join(', ')}</p>
-                  </div>
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-ink-dim group-hover:text-brand transition-colors">
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </div>
-                </button>
-              ) : (
-                <button onClick={() => openProfileEdit('ciudad')}
-                  className="w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-brand dark:hover:border-brand/40 transition-colors group text-left">
-                  <div className="w-9 h-9 bg-surface-card-2 dark:bg-white/5 rounded-xl flex items-center justify-center shrink-0">
-                    <MapPin className="w-4 h-4 text-ink-dim" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-ink-dim font-medium">Ubicación</p>
-                    <p className="text-xs text-brand font-semibold">+ Agregar ciudad / dirección</p>
-                  </div>
-                </button>
-              )}
-              {tiendaInfo.tagline ? (
-                <button onClick={() => openProfileEdit('tagline')}
-                  className="w-full flex items-center gap-3 p-3 rounded-2xl bg-surface-card-2 dark:bg-white/5 hover:bg-brand/8 dark:hover:bg-brand/10 transition-colors group text-left">
-                  <div className="w-9 h-9 bg-brand/15 dark:bg-brand/20 rounded-xl flex items-center justify-center shrink-0">
-                    <Sparkles className="w-4 h-4 text-brand-dark dark:text-brand" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs text-ink-dim font-medium">Tagline</p>
-                    <p className="font-semibold text-sm truncate">{tiendaInfo.tagline}</p>
-                  </div>
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-ink-dim group-hover:text-brand transition-colors">
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </div>
-                </button>
-              ) : (
-                <button onClick={() => openProfileEdit('tagline')}
-                  className="w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-brand dark:hover:border-brand/40 transition-colors group text-left">
-                  <div className="w-9 h-9 bg-surface-card-2 dark:bg-white/5 rounded-xl flex items-center justify-center shrink-0">
-                    <Sparkles className="w-4 h-4 text-ink-dim" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-ink-dim font-medium">Tagline</p>
-                    <p className="text-xs text-brand font-semibold">+ Agregar frase o eslogan</p>
-                  </div>
-                </button>
-              )}
-              {/* Descripción: se edita desde el hero (bajo el título, más
-                  visible), no duplicada acá también. */}
-            </div>
-          </div>
-
-          {/* ── Diseño de mi página — presentación visual: template, color,
-              modo oscuro, URL. Datos de contacto (teléfono/whatsapp/
-              instagram/tagline) viven en "Contacto e info", arriba. ────── */}
-          <div id="perfil-pagina-publica" className="bg-surface-card rounded-3xl border border-slate-100 dark:border-white/8 overflow-hidden">
-            {/* Cabecera */}
-            <div className="px-5 pt-5 pb-3">
-              <h3 className="font-bold flex items-center gap-2">
-                <Palette className="w-4 h-4 text-brand" /> Diseño de mi página
-              </h3>
-            </div>
-
-            {/* Accesos prominentes: ver la página real + editar su diseño,
-                mismo peso visual, en la misma fila — antes "Diseño" era
-                texto chico perdido arriba a la derecha del header. */}
-            <div className="px-5 pb-4 space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                {/* Deshabilitado (no oculto) sin slug: mantiene el layout
-                    de dos botones estable y comunica que la acción existe,
-                    solo falta completar la URL — antes desaparecía y
-                    "Editar diseño" quedaba solo ocupando el ancho completo. */}
-                {tiendaInfo.slug ? (
-                  <a href={`/${tiendaInfo.slug}`} target="_blank" rel="noreferrer"
-                    className="flex items-center justify-center gap-2 py-2.5 rounded-2xl bg-brand hover:bg-brand-dark text-white text-sm font-bold transition-colors shadow-sm shadow-brand/20">
-                    <Globe className="w-4 h-4" /> Ver página
-                  </a>
-                ) : (
-                  <div className="flex items-center justify-center gap-2 py-2.5 rounded-2xl bg-surface-card-2 dark:bg-white/5 text-ink-dim text-sm font-bold opacity-60 cursor-not-allowed" title="Elegí una URL para poder ver tu página">
-                    <Globe className="w-4 h-4" /> Ver página
-                  </div>
-                )}
-                <button
-                  onClick={() => {
-                    setPaginaForm({ template: tiendaInfo.pagina?.template || 'commerce-modern', color: tiendaInfo.pagina?.color || '#e4002b', modoOscuro: tiendaInfo.pagina?.modoOscuro || false });
-                    setPublicPageForm({ slug: tiendaInfo.slug || '', tagline: tiendaInfo.tagline || '', whatsapp: tiendaInfo.whatsapp || tiendaInfo.telefono || '', instagram: tiendaInfo.instagram || '' });
-                    setPublicPageError(null);
-                    setScreen('mi-pagina');
-                  }}
-                  className="flex items-center justify-center gap-2 py-2.5 rounded-2xl bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 hover:text-brand text-ink dark:text-ink-dim text-sm font-bold transition-colors"
-                >
-                  <Palette className="w-4 h-4" /> Editar diseño
-                </button>
+                  {hiddenCount > 0 && (
+                    <button onClick={() => setProfileChecklistExpanded(true)}
+                      className="w-full text-center text-xs font-semibold text-brand py-2 mt-2 hover:underline">
+                      Ver {hiddenCount} más
+                    </button>
+                  )}
+                  {profileChecklistExpanded && pending.length > 5 && (
+                    <button onClick={() => setProfileChecklistExpanded(false)}
+                      className="w-full text-center text-xs font-semibold text-ink-dim py-2 mt-2 hover:underline">
+                      Ver menos
+                    </button>
+                  )}
+                </div>
+              );
+                })()}
+                </div>
               </div>
-              {/* Edición inline del slug, sin desplegable — único lugar
-                  donde se edita la URL pública (antes había un editor
-                  duplicado en "Contacto e info" para el mismo campo). */}
-              {editingPublicPage ? (
-                <div className="space-y-2">
-                  <div className="flex items-center bg-surface-card-2 dark:bg-white/5 rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden focus-within:border-brand transition-colors">
-                    <span className="pl-3 text-xs text-ink-dim whitespace-nowrap">lokal.ar/</span>
-                    <input
-                      value={publicPageForm.slug}
-                      onChange={e => setPublicPageForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
-                      onKeyDown={e => e.key === 'Enter' && savePublicPage()}
-                      placeholder="mi-tienda"
-                      autoFocus autoCapitalize="none" autoCorrect="off" spellCheck={false}
-                      className="flex-1 bg-transparent px-2 py-2 text-sm outline-none"
-                    />
-                  </div>
-                  {publicPageError && <p className="text-xs text-rose-500 font-semibold">{publicPageError}</p>}
-                  <div className="flex gap-2">
-                    <button onClick={() => { setEditingPublicPage(false); setPublicPageError(null); }} className="flex-1 py-2 rounded-xl border border-slate-200 dark:border-white/10 text-xs font-bold text-ink-dim">
-                      Cancelar
-                    </button>
-                    <button onClick={savePublicPage} disabled={savingPublicPage} className="flex-1 py-2 rounded-xl bg-brand hover:bg-brand-dark disabled:opacity-60 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
-                      {savingPublicPage ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                      Guardar
-                    </button>
-                  </div>
-                </div>
-              ) : tiendaInfo.slug ? (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="flex-1 text-xs text-ink-dim truncate">lokal.ar/{tiendaInfo.slug}</span>
-                  <button
-                    onClick={() => { setPublicPageForm(f => ({ ...f, slug: tiendaInfo.slug || '' })); setPublicPageError(null); setEditingPublicPage(true); }}
-                    aria-label="Editar URL" title="Editar URL"
-                    className="w-6 h-6 flex items-center justify-center rounded-lg text-ink-dim hover:text-brand hover:bg-brand/10 transition-colors"
-                  >
-                    <Edit3 className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={() => { const url = `${window.location.origin}/${tiendaInfo.slug}`; if (navigator.share) { navigator.share({ title: tiendaInfo.nombre, url }); } else { navigator.clipboard.writeText(url).then(() => alert('¡Link copiado!')); } }}
-                    className="flex items-center gap-1 text-xs font-semibold bg-brand/10 dark:bg-brand/15 text-brand-dark dark:text-brand px-2.5 py-1 rounded-xl hover:bg-brand/20 transition-colors"
-                  >
-                    <ExternalLink className="w-3 h-3" /> Compartir
-                  </button>
-                </div>
-              ) : (
-                // Mismo lenguaje visual que el resto de campos sin
-                // completar del perfil (teléfono, instagram, etc.): card
-                // con borde punteado, no un link de texto suelto — para que
-                // "esto falta completar" se lea igual en toda la pantalla.
-                <button
-                  onClick={() => { setPublicPageForm(f => ({ ...f, slug: '' })); setPublicPageError(null); setEditingPublicPage(true); }}
-                  className="w-full flex items-center gap-3 p-3 rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/10 hover:border-brand dark:hover:border-brand/40 transition-colors group text-left">
-                  <div className="w-9 h-9 bg-surface-card-2 dark:bg-white/5 rounded-xl flex items-center justify-center shrink-0">
-                    <Link2 className="w-4 h-4 text-ink-dim" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-ink-dim font-medium">URL pública</p>
-                    <p className="text-xs text-brand font-semibold">+ Elegir URL</p>
-                  </div>
-                </button>
-              )}
             </div>
-
-            {/* Chip de "Color" sacado: era solo informativo (no
-                clickeable), redundante con lo que ya se ve/edita al entrar
-                a "Editar diseño" — quedaba flotando sin acción propia. */}
-
-            {/* URL personalizada: ya no vive acá como desplegable — se
-                edita directo desde "Diseño de mi página" (arriba muestra
-                lokal.ar/slug + lápiz de editar), mismo criterio que llevó a
-                tagline/whatsapp/instagram a "Contacto e info": un solo
-                lugar por dato, sin duplicar el mismo campo en dos pantallas
-                distintas con nombres distintos ("Diseño" vs "Editor
-                público"). */}
           </div>
+
+          {/* Card "URL pública" eliminada — quedaba redundante con el botón
+              "Editar URL" de la fila de acciones rápidas de arriba, que ya
+              cubre mostrar/editar el slug. Esta card no aportaba una
+              función propia salvo "Compartir" (navigator.share/copiar
+              link), que no tiene reemplazo directo hoy en otro lugar de
+              esta pantalla — "Ver página" del header solo ABRE la URL. */}
 
           {/* Suscripción: la card resumen de arriba (junto a Estadísticas)
               ya muestra estado+plan y navega a la pantalla completa, donde
@@ -5596,6 +5929,12 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             </button>
           </div>
 
+          {/* Mismo ajuste que en Ofertas: espaciador SOLO de la altura del
+              nav (84px), no un pb-24 mezclado con el aire estético — el
+              padding real de esta pantalla ya viene de cada bloque interno
+              (px-5 lg:px-8, space-y-5), así que este bloque cubre nav sin
+              sumar aire extra encima de eso. */}
+          <div style={{ height: 84 }} className="lg:hidden" aria-hidden="true" />
         </div>
         </div>{/* fin overflow-y-auto */}
       </div>
@@ -5684,8 +6023,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             setOfertaForm({ nombre: '', expireAt: '', visible: true });
             setOfertaFotoFile(null);
             setOfertaFotoPreview(null);
-            setOfertaSaveErr(null);
-            setOfertaShowForm(true);
+                  setOfertaShowForm(true);
           }
         }
       },
@@ -5722,7 +6060,38 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex min-h-screen bg-surface-card-2 dark:bg-surface-card-2">
+    <>
+      {/* Paleta de dark del panel de tienda: azul-negro enriquecido
+          (#040a14, mismo tono que login/splash — AdminLogin.jsx/
+          LokalLoader.jsx), scopeada DENTRO de .sa-root vía overrides CSS —
+          NO tocando --surface-solid/--surface-solid-2 globales (esas
+          variables también alimentan la vista pública de tienda vía
+          --tp-surface, y bajarles el contraste ahí rompió bordes/cards/nav
+          la primera vez que se probó). El scope .sa-root (clase en el
+          wrapper raíz de StoreApp) garantiza que esto NUNCA se filtre a
+          tienda pública, aunque ambas corran bajo la misma clase .dark.
+            - .sa-page-bg: fondo de PÁGINA de cada screen (antes gris).
+            - bg-surface-card/-2: quedan overrideadas a un azul-negro casi
+              neutro (derivado de blanco 7%/12% sobre #040a14, NO gris puro
+              desconectado) — así toda card/input arma con el fondo en vez
+              de flotar como un gris ajeno encima. */}
+      <style>{`
+        /* Fondo de página en LIGHT: --surface-dim (#f5f5f5), la MISMA
+           jerarquía de 3 niveles que ya usa la vista pública de tienda
+           (--tp-bg/--tp-surface/--tp-surface2 → --surface-dim/-solid/-2):
+           fondo de página ligeramente gris, card blanca por encima
+           (bg-surface-card, #fff), superficie secundaria/chip un escalón
+           más (bg-surface-card-2, #f0f0f0). Antes el fondo de página usaba
+           --surface-solid-2 directo — el MISMO valor que bg-surface-card-2,
+           así que cualquier botón/chip con ese fondo (ej. "Editar diseño"/
+           "Editar URL" bajo el hero) se fundía invisible contra la página. */
+        .sa-page-bg { background: rgb(var(--surface-dim, 245 245 245)); }
+        .dark .sa-root.sa-page-bg,
+        .dark .sa-root .sa-page-bg { background: #040a14; }
+        .dark .sa-root .bg-surface-card   { background-color: #161b24 !important; }
+        .dark .sa-root .bg-surface-card-2 { background-color: #222730 !important; }
+      `}</style>
+    <div className="flex min-h-screen sa-root sa-page-bg">
       {Sidebar()}
       {/* spacer so content shifts with sidebar on desktop */}
       <div className="hidden lg:block shrink-0" style={{ width: sidebarExpanded ? 224 : 64, transition: 'width 380ms cubic-bezier(0.16,1,0.3,1)' }} />
@@ -5790,7 +6159,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         {MediaEditorModal()}
         {LocationEditorModal()}
         {HorarioEditorModal()}
-        {editInfoModal && EditInfoModal()}
+        {FieldEditorSheet()}
+        {PublicUrlSheet()}
 
         {/* ── Chat flotante (estilo Messenger — persiste entre pantallas) ── */}
         {/* ── Multi floating chat ── */}
@@ -5912,7 +6282,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                       </div>
 
                       {/* Mensajes */}
-                      <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-surface-card-2 dark:bg-surface-card-2">
+                      <div className="flex-1 overflow-y-auto no-scrollbar p-3 space-y-2 bg-surface-card-2 dark:bg-surface-card-2">
                         {msgs.length === 0 ? (
                           <div className="flex flex-col items-center justify-center h-full gap-2 text-center">
                             <MessageSquare className="w-8 h-8 text-ink-dim dark:text-ink" />
@@ -5958,5 +6328,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
       </div>
     </div>
+    </>
   );
 }

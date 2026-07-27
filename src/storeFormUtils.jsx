@@ -34,6 +34,99 @@ export async function uploadFile(file) {
   return data.url;
 }
 
+// ── Redimensionado client-side (Canvas) ───────────────────────────────────────
+// Sin esto, /upload guarda el archivo TAL CUAL llega del navegador — una foto
+// de cámara de celular puede pesar varios MB en resolución nativa (3000-4000px
+// de lado). Consecuencias reales: (1) el <og:image> de WhatsApp/FB no
+// renderiza el preview con archivos tan pesados o de proporción no estándar,
+// (2) el catálogo carga la MISMA imagen full-size en la card chica que en el
+// detalle, sin versión liviana. Acá generamos 3 variantes de una sola foto
+// antes de subir, cada una con el tamaño que su uso real necesita — ningún
+// pipeline de servidor (sharp, etc.), todo con canvas 2D nativo del browser.
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => { resolve(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen')); };
+    img.src = url;
+  });
+}
+
+// Redimensiona conservando proporción hasta que el lado más largo mida
+// `maxDim` (nunca agranda una imagen más chica) y recorta al centro si se
+// pide un aspectRatio fijo (necesario para ogImage: WhatsApp/FB esperan un
+// ratio horizontal consistente, no lo que sea que el dueño haya fotografiado).
+function resizeToCanvas(img, { maxDim, aspectRatio } = {}) {
+  const srcW = img.naturalWidth || img.width;
+  const srcH = img.naturalHeight || img.height;
+
+  let sx = 0, sy = 0, sw = srcW, sh = srcH;
+  if (aspectRatio) {
+    const srcRatio = srcW / srcH;
+    if (srcRatio > aspectRatio) { sw = srcH * aspectRatio; sx = (srcW - sw) / 2; }
+    else if (srcRatio < aspectRatio) { sh = srcW / aspectRatio; sy = (srcH - sh) / 2; }
+  }
+
+  const outRatio = sw / sh;
+  let outW = sw, outH = sh;
+  if (maxDim && Math.max(outW, outH) > maxDim) {
+    if (outW >= outH) { outW = maxDim; outH = Math.round(maxDim / outRatio); }
+    else { outH = maxDim; outW = Math.round(maxDim * outRatio); }
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(outW);
+  canvas.height = Math.round(outH);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+function canvasToFile(canvas, fileName, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) return reject(new Error('No se pudo procesar la imagen'));
+      resolve(new File([blob], fileName, { type: 'image/jpeg' }));
+    }, 'image/jpeg', quality);
+  });
+}
+
+/**
+ * Genera y sube 3 variantes de una foto de oferta/producto:
+ *   - full:  hasta 1600px de lado, calidad 85% — el detalle/zoom individual.
+ *   - thumb: hasta 480px de lado, calidad 78% — las cards del catálogo.
+ *   - og:    1200×630 (ratio fijo, recortado al centro), calidad 80% — meta
+ *            og:image para WhatsApp/Facebook (tamaño y proporción que esas
+ *            plataformas esperan, sin depender de qué foto haya subido el
+ *            dueño).
+ * Devuelve { imageUrl, thumbUrl, ogImageUrl }. Si el archivo no es una
+ * imagen procesable por canvas (ej. ya viene raro), cae a subir el original
+ * tal cual en los 3 campos — nunca bloquea la publicación por esto.
+ */
+export async function uploadOfertaImages(file) {
+  try {
+    const img = await loadImageFromFile(file);
+    const base = (file.name || 'foto').replace(/\.[^.]+$/, '');
+
+    const [fullFile, thumbFile, ogFile] = await Promise.all([
+      canvasToFile(resizeToCanvas(img, { maxDim: 1600 }), `${base}-full.jpg`, 0.85),
+      canvasToFile(resizeToCanvas(img, { maxDim: 480 }), `${base}-thumb.jpg`, 0.78),
+      canvasToFile(resizeToCanvas(img, { maxDim: 1200, aspectRatio: 1200 / 630 }), `${base}-og.jpg`, 0.8),
+    ]);
+    URL.revokeObjectURL(img.src);
+
+    const [imageUrl, thumbUrl, ogImageUrl] = await Promise.all([
+      uploadFile(fullFile), uploadFile(thumbFile), uploadFile(ogFile),
+    ]);
+    return { imageUrl, thumbUrl, ogImageUrl };
+  } catch {
+    const url = await uploadFile(file);
+    return { imageUrl: url, thumbUrl: url, ogImageUrl: url };
+  }
+}
+
 // Tipos de resultado de Nominatim que SÍ son ciudades/localidades reales.
 // Filtramos por `addresstype` (no `type`/`class`): Nominatim dibuja pueblos
 // como category:"boundary"+type:"administrative" (es el polígono del

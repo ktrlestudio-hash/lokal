@@ -20,14 +20,11 @@
     <script src="/theme-init.js"></script>
   </head>
   <body>
-    <script>
-      (function(){
-        var t=localStorage.getItem('lokal-theme');
-        var dark=t!=='light';
-        var bg=dark?'#060d1a':'#ffffff';
-        document.body.style.background=bg;
-      })();
-    </script>
+    <!-- El seteo de fondo de <body> según tema (antes acá como <script>
+         inline) ahora vive en theme-init.js (ver ese archivo) — necesario
+         para que script-src del CSP de producción pueda quedar sin hashes
+         fijos y permitir el script inline dinámico de Google Identity
+         Services durante el login. -->
     <!-- Splash HTML estático sacado: quedaba superpuesto con el splash de
          React (AdminLoader/SplashScreenFull en Root.jsx, TiendaPublica.jsx)
          — dos diseños distintos en secuencia (ícono cuadrado icon-light.jpg

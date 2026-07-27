@@ -9,16 +9,13 @@
  * (ver "esDueño" en TiendaPublica.jsx / prop mismo nombre acá).
  */
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { X, Camera, Loader2, Save, CalendarClock } from 'lucide-react';
-import { uploadFile } from '../../storeFormUtils.jsx';
-import { apiFetch } from '../../api.js';
+import { X, Camera, Save, CalendarClock } from 'lucide-react';
 import { haptic } from '../../haptic.js';
 import { useSheetOpen } from '../hooks/useSheetOpen.js';
 import { SHEET_TRANSITION_CSS } from './sheetTransitionCss.js';
 import { TpMiniCalendario } from '../components/TpMiniCalendario.jsx';
 import { RADIUS, SHADOW, FONT } from '../tokens.js';
 
-const API_BASE = '/.netlify/functions';
 const F = { fontFamily: FONT.family };
 
 export function OfertaQuickForm({ open, onClose, tienda, onCreated }) {
@@ -28,8 +25,6 @@ export function OfertaQuickForm({ open, onClose, tienda, onCreated }) {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [fotoFile, setFotoFile] = useState(null);
   const [fotoPreview, setFotoPreview] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState(null);
   const calendarRef = useRef(null);
   const photoBoxRef = useRef(null); // contenedor que mide el espacio real disponible (flex:1)
   const [photoSize, setPhotoSize] = useState(null); // { w, h } medido, no estimado
@@ -84,8 +79,11 @@ export function OfertaQuickForm({ open, onClose, tienda, onCreated }) {
 
   if (!mounted) return null;
 
+  // OJO: NO revoca fotoPreview acá — ese object URL viaja al padre como
+  // previewUrl de la card pendiente (ver handleSave) y sigue en uso hasta
+  // que termine de subir. El padre es quien lo revoca cuando ya no hace falta.
   const reset = () => {
-    setNombre(''); setExpireAt(''); setFotoFile(null); setFotoPreview(null); setErr(null); setCalendarOpen(false);
+    setNombre(''); setExpireAt(''); setFotoFile(null); setFotoPreview(null); setCalendarOpen(false);
   };
 
   const handleFoto = (e) => {
@@ -96,36 +94,26 @@ export function OfertaQuickForm({ open, onClose, tienda, onCreated }) {
     e.target.value = '';
   };
 
-  const handleSave = async () => {
+  // El sheet ya NO espera a que termine la subida: entrega los datos al padre
+  // (TiendaPublica.jsx, que sobrevive al cierre de este componente) y cierra
+  // al instante. El padre inserta la oferta en la grilla en estado "pendiente"
+  // y sube en segundo plano — antes este mismo botón dejaba el sheet trabado
+  // con un spinner varios segundos (lo que tarde el upload de 3 variantes +
+  // POST), sin poder cancelar, cerrar ni seguir usando la página.
+  const handleSave = () => {
     if (!nombre.trim() || !fotoFile) return;
-    setSaving(true); setErr(null);
-    try {
-      const imageUrl = await uploadFile(fotoFile);
-      const payload = {
-        tiendaId: tienda.id,
-        nombre: nombre.trim(),
-        imageUrl,
-        thumbUrl: imageUrl,
-        expireAt: expireAt ? new Date(expireAt).toISOString() : null,
-        visible: true,
-      };
-      const res = await apiFetch(`${API_BASE}/ofertas`, {
-        method: 'POST', authRequired: true,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error('No se pudo publicar la oferta');
-      const nueva = await res.json();
-      haptic('success');
-      onCreated?.(nueva);
-      reset();
-      onClose();
-    } catch (e) {
-      setErr(e.message);
-      haptic('error');
-    } finally {
-      setSaving(false);
-    }
+    haptic('success');
+    onCreated?.({
+      nombre: nombre.trim(),
+      fotoFile,
+      // La preview local (blob) se usa como imagen de la card mientras sube:
+      // se ve la foto real desde el primer frame, no un placeholder gris. El
+      // padre revoca este object URL cuando llega la URL definitiva.
+      previewUrl: fotoPreview,
+      expireAt: expireAt ? new Date(expireAt).toISOString() : null,
+    });
+    reset();
+    onClose();
   };
 
   return (
@@ -324,21 +312,23 @@ export function OfertaQuickForm({ open, onClose, tienda, onCreated }) {
             )}
           </div>
 
-          {err && <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#EF4444' }}>{err}</p>}
         </div>
         </div>
 
         {/* Footer sticky — flexShrink:0, siempre visible dentro del maxHeight
-            del panel, nunca hace falta scrollear para llegar al botón. */}
+            del panel, nunca hace falta scrollear para llegar al botón. El
+            sheet cierra al toque (sin spinner ni "saving"): la subida real
+            corre en segundo plano en TiendaPublica.jsx, con su propia card
+            de progreso en la grilla — ver handleSave más arriba. */}
         <div style={{ padding: '12px 18px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', borderTop: '1px solid var(--tp-border)', flexShrink: 0 }}>
-          <button onClick={handleSave} disabled={saving || !nombre.trim() || !fotoFile} className="no-press oqf-save"
+          <button onClick={handleSave} disabled={!nombre.trim() || !fotoFile} className="no-press oqf-save"
             style={{
               width: '100%', padding: '14px', border: 'none', borderRadius: RADIUS.lg, cursor: 'pointer',
               background: 'var(--tp-primary)', color: 'var(--tp-on-primary)', fontWeight: 800, fontSize: 15,
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              opacity: (saving || !nombre.trim() || !fotoFile) ? .5 : 1,
+              opacity: (!nombre.trim() || !fotoFile) ? .5 : 1,
             }}>
-            {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+            <Save size={18} />
             Publicar oferta
           </button>
         </div>

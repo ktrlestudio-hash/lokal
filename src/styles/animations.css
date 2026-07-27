@@ -275,6 +275,27 @@
   .skeleton-shimmer::after { animation: none; }
 }
 
+/* Shimmer de CARD COMPLETA — una sola onda de luz recorre toda la card
+   (imagen + textos + botones juntos), en vez de cada hueso interno animando
+   por su cuenta (ver Skeletons.jsx → SkeletonCard). Mismo keyframe/curva que
+   .skeleton-shimmer, aplicado UNA vez por card en vez de N veces por hueso. */
+.skeleton-shimmer-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 40%, rgba(255, 255, 255, 0.35) 50%, transparent 60%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease infinite;
+  pointer-events: none;
+}
+.dark .skeleton-shimmer-card::after {
+  background: linear-gradient(110deg, transparent 40%, rgba(255, 255, 255, 0.09) 50%, transparent 60%);
+  background-size: 200% 100%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer-card::after { animation: none; }
+}
+
 .animate-spin {
   animation: spin 1s linear infinite;
 }

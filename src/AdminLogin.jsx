@@ -55,7 +55,7 @@ export default function AdminLogin({ isDark, toggleTheme, onVolver }) {
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden" style={{ background: 'var(--surface-solid, #0a0a0a)' }}>
+    <div className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden" style={{ background: isDark ? '#040a14' : 'var(--surface-solid, #fff)' }}>
       {/* Ambiente de luz de marca — mismo lenguaje que el splash de carga
           (AdminLoader): glow radial superior que pulsa + reflejo inferior
           tenue. Usa el color de marca (--brand) en vez del turquesa fijo del
@@ -74,10 +74,18 @@ export default function AdminLogin({ isDark, toggleTheme, onVolver }) {
       }} />
 
       <div className="relative w-full max-w-sm">
-        {/* Card — mismo lenguaje visual que el resto del panel (borde +
-            fondo de superficie), en vez de texto flotando directo sobre el
-            fondo oscuro. relative para el toggle de tema flotante. */}
-        <div className="relative bg-surface-card border border-slate-100 dark:border-white/8 rounded-3xl shadow-2xl px-6 py-8 text-center">
+        {/* Card en modo oscuro: "glass" real — blanco a baja opacidad +
+            blur, deja pasar el color/glow del fondo A TRAVÉS del blur en
+            vez de imponer un color propio encima (que fue el primer
+            intento, mal: un azul más CLARO que el fondo terminaba viéndose
+            más claro en vez de "enriquecido" con él). Este es el mismo
+            truco que un vidrio esmerilado de verdad: no tiñe, difumina lo
+            que ya está atrás. Modo claro sigue sólida (bg-surface-card):
+            sobre fondo blanco el glass no aporta nada. */}
+        <div
+          className={`relative border border-slate-100 dark:border-white/8 rounded-3xl shadow-2xl px-6 py-8 text-center ${isDark ? '' : 'bg-surface-card'}`}
+          style={isDark ? { background: 'rgba(255,255,255,.06)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)' } : undefined}
+        >
           {/* Retroceso — esquina izquierda, espejo del toggle de tema.
               Vuelve al sitio público. Mismo lenguaje de botón-ícono
               (cuadrado con borde redondeado) que el resto de la interfaz. */}
@@ -87,7 +95,8 @@ export default function AdminLogin({ isDark, toggleTheme, onVolver }) {
               onMouseEnter={() => setBackTooltip(true)}
               onMouseLeave={() => setBackTooltip(false)}
               aria-label="Volver al sitio"
-              className="w-8 h-8 rounded-xl flex items-center justify-center bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 hover:text-brand text-ink-dim transition-colors active:scale-90"
+              className="w-8 h-8 rounded-xl flex items-center justify-center bg-surface-card-2 hover:bg-brand/10 hover:text-brand text-ink-dim transition-colors active:scale-90"
+              style={isDark ? { background: 'rgba(255,255,255,.08)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' } : undefined}
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
@@ -111,7 +120,8 @@ export default function AdminLogin({ isDark, toggleTheme, onVolver }) {
               onMouseEnter={() => setThemeTooltip(true)}
               onMouseLeave={() => setThemeTooltip(false)}
               aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-              className="w-8 h-8 rounded-xl flex items-center justify-center bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 hover:text-brand text-ink-dim transition-colors active:scale-90"
+              className="w-8 h-8 rounded-xl flex items-center justify-center bg-surface-card-2 hover:bg-brand/10 hover:text-brand text-ink-dim transition-colors active:scale-90"
+              style={isDark ? { background: 'rgba(255,255,255,.08)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' } : undefined}
             >
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>

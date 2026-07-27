@@ -74,10 +74,15 @@ export default async function handler(request, context) {
       }));
     }
 
+    // ogImageUrl: variante liviana (1200×630, JPEG ~80%) generada al subir
+    // la foto — imageUrl es la ORIGINAL sin comprimir (puede pesar varios
+    // MB en resolución de cámara), que WhatsApp frecuentemente no logra
+    // renderizar como preview. Fallback a thumbUrl/imageUrl para ofertas
+    // creadas antes de que existiera este campo.
     return htmlResp(paginaOG({
       title: `${oferta.nombre} — ${nombreTienda}`,
       desc: oferta.descripcion?.trim() || `Oferta de ${nombreTienda}. Miralo y compartilo.`,
-      image: oferta.imageUrl || oferta.thumbUrl,
+      image: oferta.ogImageUrl || oferta.thumbUrl || oferta.imageUrl,
       url: pageUrl, brand,
     }));
   } catch (_) {

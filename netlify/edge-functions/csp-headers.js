@@ -2,23 +2,25 @@
 // producción real (o cualquier contexto que no sea 'dev' local).
 //
 // Por qué una Edge Function y no un [[headers]] estático en netlify.toml:
-// script-src con hashes fijos de los <script> inline de index.html se
-// rompe bajo `netlify dev` — Vite inyecta ahí su script de HMR con
-// contenido (y por lo tanto hash) distinto en cada arranque, que ningún
-// hash hardcodeado puede cubrir de antemano. Esta función chequea el
-// contexto de deploy real en runtime, así nunca depende de que alguien
-// recuerde comentar/descomentar el CSP a mano antes de un deploy.
+// esta función chequea el contexto de deploy real en runtime, así nunca
+// depende de que alguien recuerde comentar/descomentar el CSP a mano antes
+// de un deploy.
 //
-// Pendiente real (deuda técnica, no resuelta hoy): los hashes de script-src
-// para producción están hardcodeados abajo — hay que recalcularlos si se
-// edita cualquier <script> inline de index.html (ver ese archivo). La
-// solución de fondo sería un nonce dinámico o externalizar esos scripts.
+// script-src usa 'unsafe-inline' (no hashes fijos): index.html ya NO tiene
+// ningún <script> inline propio (ver theme-init.js, externalizado a
+// propósito) — así 'unsafe-inline' cubre el script inline DINÁMICO que
+// Google Identity Services (FedCM/One Tap) inyecta durante
+// signInWithPopup(), cuyo contenido varía y ningún hash fijo podría cubrir
+// de antemano. Si algún día se agrega un <script> inline propio de nuevo,
+// usar hashes ahí anularía 'unsafe-inline' por completo (la spec de CSP lo
+// ignora si hay al menos un hash/nonce en la directiva) — mejor
+// externalizarlo como .js aparte, como ya se hizo acá.
 const CSP_PROD = [
   "default-src 'self'",
   "base-uri 'self'",
   "object-src 'none'",
   "frame-ancestors 'none'",
-  "script-src 'self' 'sha256-8D/Yj9xkdCf7ek10BdGWbgO28Lf9wkLqNER/Batlsk0=' 'sha256-Fzfeqzuxec/8RoIqnby/qzWnO3etbTjheOrJQRuKKmo=' https://apis.google.com https://accounts.google.com",
+  "script-src 'self' 'unsafe-inline' https://apis.google.com https://accounts.google.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' https: data: blob:",

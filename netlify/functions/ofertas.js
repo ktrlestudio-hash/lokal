@@ -96,6 +96,16 @@ function sanitizeOfertaInput(body, tienda, existingSlug) {
   const nombre = requireText(body.nombre, { field: 'nombre', min: 2, max: 160, multiline: false });
   const imageUrl = sanitizeMediaUrls(body.imageUrl ? [body.imageUrl] : [], { maxItems: 1 })[0] || null;
   const thumbUrl = sanitizeMediaUrls(body.thumbUrl ? [body.thumbUrl] : [], { maxItems: 1 })[0] || imageUrl;
+  // ogImageUrl: variante generada client-side (canvas resize, ver
+  // storeFormUtils.jsx → uploadFotoOferta) pensada para redes sociales
+  // (WhatsApp/FB) — 1200×630, JPEG ~80%, pocos KB. Antes el <og:image> del
+  // SSR (oferta-og.js) usaba imageUrl directo, la foto ORIGINAL sin
+  // comprimir subida por el dueño (puede pesar varios MB en resolución de
+  // cámara de celular) — WhatsApp frecuentemente no renderiza el preview
+  // con archivos así de pesados/con proporción no estándar. Opcional: si no
+  // viene (ofertas viejas, o subida por un flujo que no la generó todavía),
+  // cae a thumbUrl.
+  const ogImageUrl = sanitizeMediaUrls(body.ogImageUrl ? [body.ogImageUrl] : [], { maxItems: 1 })[0] || thumbUrl;
 
   return {
     tiendaId: tienda.id,
@@ -103,6 +113,7 @@ function sanitizeOfertaInput(body, tienda, existingSlug) {
     slug: existingSlug || generateSlug(nombre),
     imageUrl,
     thumbUrl,
+    ogImageUrl,
     publishAt: body.publishAt || new Date().toISOString(),
     expireAt: body.expireAt || null,
     visible: body.visible !== false,
@@ -200,7 +211,7 @@ export const handler = async (event) => {
       ensureStoreOwner(user, tienda);
 
       const update = {};
-      if ('nombre' in body || 'imageUrl' in body || 'thumbUrl' in body || 'publishAt' in body || 'expireAt' in body) {
+      if ('nombre' in body || 'imageUrl' in body || 'thumbUrl' in body || 'ogImageUrl' in body || 'publishAt' in body || 'expireAt' in body) {
         Object.assign(update, sanitizeOfertaInput({ ...ofertas[idx], ...body }, tienda, ofertas[idx].slug));
       }
       if ('visible' in body) update.visible = !!body.visible;

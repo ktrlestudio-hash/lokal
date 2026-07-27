@@ -20,7 +20,8 @@ export const META = { label: 'Commerce', desc: 'Estilo Rappi/PedidosYa: hero, ch
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import {
   Star, MapPin, Clock, Search, Share2, ShoppingBag,
-  Tag, Users, ChevronLeft, ChevronRight, Navigation, Store, Globe, Filter, ArrowUpDown, X, Check, Plus, BarChart3, MoreVertical,
+  Tag, Users, ChevronLeft, ChevronRight, Navigation, Store, Globe, Filter, ArrowUpDown, X, Check, Plus, BarChart3, MoreVertical, Pencil,
+  Loader2, RotateCw, User,
 } from 'lucide-react';
 
 import { MapaSection, MapaModal } from '../sections/MapaSection.jsx';
@@ -30,7 +31,6 @@ import { TiendaNavBar } from '../sections/TiendaNavBar.jsx';
 import { TiendaFooter } from '../sections/TiendaFooter.jsx';
 import { ShareSheet } from '../sections/ShareSheet.jsx';
 import { ProductDetailModal } from '../sections/ProductDetailModal.jsx';
-import { LogoSymbol } from '../../Brand.jsx';
 
 import { getEstadoApertura, formatPrice } from '../utils.js';
 import { usePhotoSwipe, PhotoSwipeStyles, PhotoSwipeOverlay } from '../hooks/usePhotoSwipe.jsx';
@@ -68,6 +68,8 @@ function IconInstagram(props) {
 }
 
 const GLOBAL_CSS = `
+  @keyframes cm-spin { to { transform: rotate(360deg); } }
+  .cm-spin { animation: cm-spin 0.8s linear infinite; }
   .cm-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
   @media (min-width: 620px) { .cm-grid { grid-template-columns: repeat(3, 1fr); gap: 16px; } }
   @media (min-width: 980px) { .cm-grid { grid-template-columns: repeat(4, 1fr); } }
@@ -316,7 +318,16 @@ export function TemplateCommerceModern({
   // rápida de oferta directo acá, sin ir al panel (ver OfertaQuickForm), y
   // el botón de 3 puntos por card (ver OfertaAdminSheet) para
   // ocultar/cambiar vencimiento/eliminar sin salir del catálogo público.
-  esDueño, onOfertaCreada, onOfertaActualizada, onOfertaEliminada,
+  // onIrAlPanel — atajo al panel admin completo, tercer FAB apilado (ver
+  // más abajo, junto a "+"/estadísticas). Antes vivía como botón fijo
+  // propio en TiendaPublica.jsx (bottom:16 sin relación al nav), ahora
+  // sigue el mismo criterio de elevación que los otros dos.
+  // onOfertaReintentar/onOfertaCancelarPendiente — solo actúan sobre la card
+  // "pendiente" que aparece al instante tras publicar (ver más abajo, sección
+  // Ofertas): reintenta la subida en segundo plano o la descarta sin haber
+  // llegado a existir en el backend.
+  esDueño, onOfertaCreada, onOfertaActualizada, onOfertaEliminada, onIrAlPanel,
+  onOfertaReintentar, onOfertaCancelarPendiente,
 }) {
   // Estado de sheets/modales del hero (mapa + horarios). onAbrirMapa se
   // resuelve más abajo una vez calculado si hay coordenadas.
@@ -330,6 +341,11 @@ export function TemplateCommerceModern({
   // dinámico, distinto del share genérico de la tienda de arriba).
   const [shareOfertaOpen, setShareOfertaOpen] = useState(false);
   const [ofertaCompartir, setOfertaCompartir] = useState(null);
+  // Cuánto "invade" el banner CTA ("¿Tenés un negocio?") la franja inferior
+  // del scroll — los FABs del dueño suben la misma cantidad de píxeles para
+  // no taparlo al llegar al final. 0 mientras el banner no asomó todavía.
+  const [fabLift, setFabLift] = useState(0);
+  const ctaBannerRef = useRef(null);
   const s = Object.fromEntries(secciones.map(sec => [sec.id, sec]));
 
   const productos = (tienda.productos || []).filter(p => p.activo !== false && p.disponible !== false);
@@ -446,13 +462,19 @@ export function TemplateCommerceModern({
   const border = 'var(--tp-border)', txt = 'var(--tp-text)', txtM = 'var(--tp-text-muted)';
   const primary = 'var(--tp-primary)', primarySoft = 'var(--tp-primary-soft)', onPrimary = 'var(--tp-on-primary)';
 
-  const heroImg = tienda.foto || tienda.galeria?.[0] || tienda.fotoPortada || null;
+  // tienda.foto es la FOTO DE PERFIL (logo redondeado sobre el hero, ver
+  // cm-hero-logo abajo) — nunca debe usarse como fondo/portada del hero.
+  // El fondo sale de tienda.galeria (portada = galeria[0], ver MediaEditorModal
+  // en StoreApp.jsx) — antes tienda.foto tenía prioridad acá, así que subir
+  // SOLO una foto de perfil (sin cargar portada/galería) la hacía aparecer
+  // como si fuera la portada del banner grande.
+  const heroImg = tienda.galeria?.[0] || null;
   // Mismo dedupe que usa el hero abajo (evita mostrar heroImg repetida si ya
   // está en tienda.galeria) — se recalcula acá, a nivel de componente, para
   // poder llamar los hooks de zoom (reglas de hooks: no dentro del IIFE).
   const fotosHero = [...new Set([heroImg, ...(tienda.galeria || [])].filter(Boolean))];
   const zoomBanner = usePhotoSwipe(fotosHero);
-  const zoomLogo = usePhotoSwipe(tienda.logo ? [tienda.logo] : []);
+  const zoomLogo = usePhotoSwipe(tienda.foto ? [tienda.foto] : []);
   // Solo uno puede estar abierto a la vez (banner O logo) — el overlay
   // custom (botones propios, ver PhotoSwipeOverlay) se monta con el que
   // esté activo en cada momento.
@@ -465,6 +487,36 @@ export function TemplateCommerceModern({
     if (!esDueño) trackPageview(tienda.id, 'tienda');
   }, [tienda.id, esDueño]);
   useTiempoEnPagina(esDueño ? null : tienda.id);
+
+  // Los FABs del dueño ("+"/estadísticas/editar) suben a medida que el
+  // banner CTA del footer entra por abajo del viewport — mismo criterio de
+  // espaciado que ya respetan del borde derecho, ahora también del borde
+  // superior de ese banner, para no taparlo nunca. rAF-throttle: el handler
+  // de scroll puede disparar más rápido que un frame de pintado.
+  useEffect(() => {
+    if (!esDueño) return undefined;
+    let raf = null;
+    const medir = () => {
+      raf = null;
+      const el = ctaBannerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const invade = window.innerHeight - rect.top;
+      setFabLift((prev) => {
+        const next = Math.max(0, Math.min(invade, rect.height));
+        return Math.abs(prev - next) < 0.5 ? prev : next;
+      });
+    };
+    const onScroll = () => { if (raf === null) raf = requestAnimationFrame(medir); };
+    medir();
+    window.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll, { capture: true });
+      window.removeEventListener('resize', onScroll);
+      if (raf !== null) cancelAnimationFrame(raf);
+    };
+  }, [esDueño]);
 
   // El chip de dirección abre el modal de mapa propio de la tienda (solo si
   // hay coordenadas). Ese modal — reusando MapaSection/MapaModal — muestra
@@ -510,7 +562,12 @@ export function TemplateCommerceModern({
           (zIndex:1) queda por encima. Técnica de PARALLAX.jsx del padre. */}
       {standaloneScroll && (
         <div aria-hidden="true" className="cm-orbs" style={{ position: 'fixed', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 0 }}>
-          <div style={{ position: 'absolute', left: '-15%', top: '-10%', width: 440, height: 440, borderRadius: '50%', background: 'color-mix(in srgb, var(--tp-primary) 18%, transparent)', filter: 'blur(120px)' }} />
+          {/* El orb superior-izquierdo se sacó: quedaba detrás de la zona
+              transparente del hero (donde el mask-image funde la foto de
+              portada a transparente, arriba de la card) — su borde circular
+              difuso se asomaba justo ahí, delatando "el final de un div" y
+              rompiendo la ilusión de fundido continuo. Se queda solo el
+              inferior, lejos del hero. */}
           <div style={{ position: 'absolute', right: '-15%', bottom: '-15%', width: 440, height: 440, borderRadius: '50%', background: 'color-mix(in srgb, var(--tp-primary) 12%, transparent)', filter: 'blur(140px)' }} />
         </div>
       )}
@@ -606,13 +663,14 @@ export function TemplateCommerceModern({
                   pero se pierde en dark (fondo casi negro). Se agrega la
                   clase cm-hero-logo para sumar el resplandor sutil de dark
                   vía CSS (mismo criterio que .cm-hero-card). */}
-              {/* Fondo de marca + símbolo LOKAL en blanco cuando no hay foto
-                  propia — igual criterio que el viejo LOKAL LINKS (referencia
-                  aprobada), en vez de la inicial del nombre. */}
-              <div className="cm-hero-logo" style={{ width: 72, height: 72, marginTop: -36, marginBottom: 10, borderRadius: 18, background: tienda.logo ? primarySoft : primary, border: `4px solid ${surf}`, boxShadow: SHADOW.md, overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
-                {tienda.logo
-                  ? <img src={tienda.logo} alt={tienda.nombre} onClick={(e) => { trackClick(tienda.id, 'zoom', { origen: 'logo' }); zoomLogo.abrir(0, e); }} style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />
-                  : <LogoSymbol size={38} color="#fff" />}
+              {/* Silueta de persona cuando no hay foto propia — antes el
+                  símbolo de LOKAL, que se leía como "el logo de la
+                  plataforma", no como "esta tienda todavía no cargó su
+                  foto de perfil". */}
+              <div className="cm-hero-logo" style={{ width: 72, height: 72, marginTop: -36, marginBottom: 10, borderRadius: 18, background: tienda.foto ? primarySoft : primary, border: `4px solid ${surf}`, boxShadow: SHADOW.md, overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
+                {tienda.foto
+                  ? <img src={tienda.foto} alt={tienda.nombre} onClick={(e) => { trackClick(tienda.id, 'zoom', { origen: 'logo' }); zoomLogo.abrir(0, e); }} style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />
+                  : <User size={34} color="#fff" />}
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -893,6 +951,48 @@ export function TemplateCommerceModern({
             ) : (
               <div className="cm-grid">
                 {ofertasList.map((o) => {
+                  // Card "pendiente" — recién publicada, todavía subiendo en
+                  // segundo plano (o._localId) o falló (o._status==='error').
+                  // Sin id/slug real todavía: no es clickeable como oferta
+                  // (no hay adónde navegar), no tiene compartir ni menú de
+                  // gestión — solo su propio feedback de progreso.
+                  if (o._localId) {
+                    const isError = o._status === 'error';
+                    return (
+                      <div key={o._localId} style={{ position: 'relative', display: 'block', aspectRatio: '1/1.414', borderRadius: RADIUS.lg, overflow: 'hidden', background: surf2, border: `1px solid ${isError ? '#EF4444' : border}` }}>
+                        <img src={o.thumbUrl} alt={o.nombre} loading="lazy"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', opacity: isError ? 0.4 : 0.75, filter: isError ? 'grayscale(.3)' : 'none' }} />
+                        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, background: isError ? 'rgba(0,0,0,.35)' : 'rgba(0,0,0,.2)' }}>
+                          {isError ? (
+                            <>
+                              <span style={{ padding: '4px 10px', borderRadius: RADIUS.sm, background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 800 }}>No se pudo publicar</span>
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <button onClick={() => onOfertaReintentar?.(o._localId)} aria-label="Reintentar" className="no-press"
+                                  style={{ width: 32, height: 32, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,.9)', color: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                                  <RotateCw size={15} />
+                                </button>
+                                <button onClick={() => onOfertaCancelarPendiente?.(o._localId)} aria-label="Descartar" className="no-press"
+                                  style={{ width: 32, height: 32, borderRadius: 10, border: 'none', background: 'rgba(0,0,0,.55)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                                  <X size={15} />
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <Loader2 size={26} color="#fff" className="cm-spin" />
+                              <button onClick={() => onOfertaCancelarPendiente?.(o._localId)} aria-label="Cancelar" className="no-press"
+                                style={{ width: 28, height: 28, borderRadius: 9, border: 'none', background: 'rgba(0,0,0,.5)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                                <X size={14} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                        <div style={{ position: 'absolute', inset: 'auto 0 0 0', padding: '10px', background: 'linear-gradient(to top, rgba(0,0,0,.7), transparent)', color: '#fff', fontSize: 12, fontWeight: 700 }}>
+                          {o.nombre}
+                        </div>
+                      </div>
+                    );
+                  }
                   // Vencida/oculta: solo pueden llegar acá cuando esDueño
                   // (el fetch público ya las filtra) — atenuadas + badge,
                   // mismo criterio visual que el panel admin completo
@@ -1008,7 +1108,7 @@ export function TemplateCommerceModern({
       {/* Footer de marca — fuera del flex:1, así queda pegado al final real
           de la pantalla cuando el contenido es corto (hueco vacío arriba lo
           empuja), en vez de flotar a mitad de página. */}
-      {footer && <TiendaFooter dark={footer.dark} toggleDark={footer.toggleDark} tiendaId={tienda.id} />}
+      {footer && <TiendaFooter dark={footer.dark} toggleDark={footer.toggleDark} tiendaId={tienda.id} ctaBannerRef={esDueño ? ctaBannerRef : undefined} />}
       </div>{/* fin scroll interno */}
 
       {/* ── Detalle — vista tipo flyer (imagen + compartir, sin carrito) ── */}
@@ -1076,10 +1176,16 @@ export function TemplateCommerceModern({
               usan del borde derecho — simetría real, no un valor a ojo. */}
           <style>{`
             :root { --cm-navbar-h: ${modo === 'standalone' ? '92px' : '0px'}; }
-            .cm-fab-add, .cm-fab-stats { transition: transform .12s cubic-bezier(0.34,1.56,0.64,1), filter .15s ease; }
-            @media (hover: hover) { .cm-fab-add:hover, .cm-fab-stats:hover { filter: brightness(1.08); } }
-            .cm-fab-add:active, .cm-fab-stats:active { transform: scale(0.93); transition: transform .06s ease; }
+            .cm-fab-add, .cm-fab-stats, .cm-fab-edit { transition: transform .12s cubic-bezier(0.34,1.56,0.64,1), filter .15s ease; }
+            @media (hover: hover) { .cm-fab-add:hover, .cm-fab-stats:hover, .cm-fab-edit:hover { filter: brightness(1.08); } }
+            .cm-fab-add:active, .cm-fab-stats:active, .cm-fab-edit:active { transform: scale(0.93); transition: transform .06s ease; }
           `}</style>
+          {/* Los 3 FABs suben juntos (fabLift, en px) a medida que el banner
+              CTA del footer asoma por abajo — nunca lo tapan, sin necesidad
+              de que el dueño deje de verlo para llegar al final de su propia
+              tienda. transition suave: fabLift se recalcula por frame de
+              scroll (rAF), pero el salto entre valores igual se nota sin un
+              easing corto acompañando. */}
           {/* Chip de stats — MISMA forma/tamaño que el "+" (56px, radius 18,
               misma sombra), solo cambia el color: neutro (surface) porque es
               la acción secundaria, el "+" en color de marca sigue siendo la
@@ -1088,7 +1194,8 @@ export function TemplateCommerceModern({
           <button onClick={() => setStatsOpen(true)} aria-label="Estadísticas de tu tienda" data-tooltip="Estadísticas" className="no-press cm-fab-stats"
             style={{
               position: 'fixed', right: 16,
-              bottom: 'calc(var(--cm-navbar-h) + 16px + env(safe-area-inset-bottom))',
+              bottom: `calc(var(--cm-navbar-h) + 16px + env(safe-area-inset-bottom) + ${fabLift}px)`,
+              transition: 'bottom .1s linear',
               zIndex: 260, width: 56, height: 56, borderRadius: 18, border: `1px solid var(--tp-border)`, cursor: 'pointer',
               background: 'var(--tp-surface)', color: 'var(--tp-text)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1099,7 +1206,8 @@ export function TemplateCommerceModern({
           <button onClick={() => setOfertaQuickOpen(true)} aria-label="Nueva oferta" data-tooltip="Nueva oferta" className="no-press cm-fab-add"
             style={{
               position: 'fixed', right: 16,
-              bottom: 'calc(var(--cm-navbar-h) + 16px + 72px + env(safe-area-inset-bottom))',
+              bottom: `calc(var(--cm-navbar-h) + 16px + 72px + env(safe-area-inset-bottom) + ${fabLift}px)`,
+              transition: 'bottom .1s linear',
               zIndex: 260, width: 56, height: 56, borderRadius: 18, border: 'none', cursor: 'pointer',
               background: 'var(--tp-primary)', color: 'var(--tp-on-primary)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1107,6 +1215,20 @@ export function TemplateCommerceModern({
             }}>
             <Plus size={26} />
           </button>
+          {onIrAlPanel && (
+            <button onClick={onIrAlPanel} aria-label="Editar mi tienda" data-tooltip="Editar mi tienda" className="no-press cm-fab-edit"
+              style={{
+                position: 'fixed', right: 16,
+                bottom: `calc(var(--cm-navbar-h) + 16px + 144px + env(safe-area-inset-bottom) + ${fabLift}px)`,
+                transition: 'bottom .1s linear',
+                zIndex: 260, width: 56, height: 56, borderRadius: 18, border: `1px solid var(--tp-border)`, cursor: 'pointer',
+                background: 'var(--tp-surface)', color: 'var(--tp-text)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: SHADOW.md,
+              }}>
+              <Pencil size={20} />
+            </button>
+          )}
           <OfertaQuickForm
             open={ofertaQuickOpen}
             onClose={() => setOfertaQuickOpen(false)}
@@ -1149,7 +1271,7 @@ const ED_SOCIAL_GRADIENTS = {
 function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, igUser, web, abierta, texto, onAbrirMapa, setHorariosOpen, compartir, modo, tokens }) {
   const { primary, primarySoft, surf, surf2, border, txt, txtM } = tokens;
   const zoomBanner = usePhotoSwipe(fotos);
-  const zoomLogo = usePhotoSwipe(tienda.logo ? [tienda.logo] : []);
+  const zoomLogo = usePhotoSwipe(tienda.foto ? [tienda.foto] : []);
   const activePswp = zoomBanner.pswp || zoomLogo.pswp;
   const socialStyle = (gradient) => ({ width: 36, height: 36, borderRadius: 11, background: gradient || surf2, border: gradient ? 'none' : `1px solid ${border}`, color: gradient ? '#fff' : txtM, display: 'flex', alignItems: 'center', justifyContent: 'center' });
   return (
@@ -1256,10 +1378,10 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
       <div className="cm-hero-ed-inner">
       {/* Fila: logo izquierda + info columna derecha */}
       <div className="cm-hero-ed-row">
-        <div className="cm-hero-ed-logo" style={{ background: tienda.logo ? primarySoft : primary }}>
-          {tienda.logo
-            ? <img src={tienda.logo} alt={tienda.nombre} onClick={(e) => { trackClick(tienda.id, 'zoom', { origen: 'logo' }); zoomLogo.abrir(0, e); }} style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />
-            : <LogoSymbol size={44} color="#fff" />}
+        <div className="cm-hero-ed-logo" style={{ background: tienda.foto ? primarySoft : primary }}>
+          {tienda.foto
+            ? <img src={tienda.foto} alt={tienda.nombre} onClick={(e) => { trackClick(tienda.id, 'zoom', { origen: 'logo' }); zoomLogo.abrir(0, e); }} style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />
+            : <User size={40} color="#fff" />}
         </div>
         <div className="cm-hero-ed-info">
           {/* Título+chip a la izquierda, redes a la derecha (aprovecha el
