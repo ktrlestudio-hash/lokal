@@ -131,7 +131,12 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
             landing sin tocar el control en sí (inestilable: lo dibuja
             Google en su propio iframe). */}
         <div
-          className="inline-flex p-1 rounded-[1.15rem]"
+          // overflow-hidden en la propia cápsula (no en el div interno): el
+          // botón "Continuar como X" trae su fondo blanco propio y, si
+          // sobresalía aunque sea 1-2px del radio del div interno, ese
+          // blanco quedaba visible en las puntas dentro del padding (p-1)
+          // en vez de quedar recortado por la cápsula entera.
+          className="inline-flex p-1 rounded-[1.15rem] overflow-hidden"
           style={{
             background: isDark
               ? 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.16), rgb(var(--brand, 0 184 217) / 0.04))'
@@ -143,7 +148,7 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
           {/* color-scheme sigue al tema real: forzarlo a light hacía que en
               modo oscuro el iframe se dibujara blanco contra el fondo casi
               negro de la landing. */}
-          <div ref={slotRef} className="overflow-hidden rounded-2xl"
+          <div ref={slotRef} className="rounded-2xl"
             style={{ colorScheme: isDark ? 'dark' : 'light' }} />
         </div>
         <span className="text-[11px] font-semibold text-center" style={{ color: 'var(--text-secondary, #999)' }}>
@@ -410,16 +415,22 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
   // un iframe propio, así que no se puede estilar con nuestro CSS — de ahí
   // que la apariencia se configure por parámetros en renderBotonGoogle.
   //
-  const CtaGoogle = (props) => (
-    <BotonGoogle
-      {...props}
-      isDark={isDark}
-      loading={loading}
-      onPopup={handleGoogle}
-      onLogin={irAlPanel}
-      onError={(err) => setError(err?.message || 'No se pudo iniciar sesión')}
-    />
-  );
+  // Mismo problema de fondo que ya se corrigió una vez: un componente
+  // declarado DENTRO de LandingScreen es una función nueva en cada render
+  // del padre, así que React lo trata como un tipo distinto y desmonta todo
+  // lo de abajo — el iframe de Google incluido. Antes pasaba por los
+  // callbacks inline; ahora volvía a pasar porque CtaGoogle en sí vivía acá
+  // adentro: cualquier re-render de LandingScreen (por ejemplo el estado
+  // `scrolled` en cada scroll) recreaba CtaGoogle y remontaba BotonGoogle,
+  // que es justo el parpadeo entre "Continuar con Google" y "Continuar como
+  // X" al recargar o scrollear. Se llama a BotonGoogle directo, sin wrapper.
+  const ctaGoogleProps = {
+    isDark,
+    loading,
+    onPopup: handleGoogle,
+    onLogin: irAlPanel,
+    onError: (err) => setError(err?.message || 'No se pudo iniciar sesión'),
+  };
 
   return (
     <div className="relative min-h-screen overflow-x-hidden"
@@ -503,7 +514,7 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
               </p>
             </FadeUp>
             <FadeUp delay={240}>
-              <CtaGoogle />
+              <BotonGoogle {...ctaGoogleProps} />
               {error && (
                 <div role="alert" aria-live="polite"
                   className="mt-4 flex items-center gap-2 text-sm text-rose-500 bg-rose-500/10 border border-rose-500/20 rounded-2xl px-4 py-3 text-left">
@@ -591,7 +602,7 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
                   </li>
                 ))}
               </ul>
-              <CtaGoogle full={false} />
+              <BotonGoogle {...ctaGoogleProps} full={false} />
             </div>
           </div>
         </FadeUp>
