@@ -205,6 +205,12 @@ export async function renderBotonGoogle(contenedor, { onLogin, onError, onOrigen
     shape: 'pill',
     logo_alignment: 'center',
     width,
+    // Sin esto (default: false) el botón sigue abriendo el diálogo clásico
+    // de Google con su propio header ("Acceso: cuentas de Google") en vez
+    // del selector nativo del navegador — en Android Chrome, un bottom
+    // sheet real del sistema. use_fedcm_for_prompt solo cubre el One Tap;
+    // el botón necesita este flag aparte para el mismo salto a FedCM.
+    use_fedcm_for_button: true,
   });
   return () => { try { gis.cancel(); } catch { /* ya desmontado */ } };
 }
