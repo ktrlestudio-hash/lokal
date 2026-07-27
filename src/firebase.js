@@ -144,7 +144,7 @@ export async function loginConIdToken(idToken) {
 // El botón lo dibuja Google dentro de un iframe propio: no se puede estilar
 // desde nuestro CSS (por eso los parámetros de apariencia van acá, no en
 // clases). `width` en píxeles porque GIS ignora anchos porcentuales.
-export async function renderBotonGoogle(contenedor, { onLogin, onError, theme = 'outline', width = 320 } = {}) {
+export async function renderBotonGoogle(contenedor, { onLogin, onError, onOrigenRechazado, mostrarOneTap = true, theme = 'outline', width = 320 } = {}) {
   const gis = await cargarGIS();
   gis.initialize({
     client_id: GIS_CLIENT_ID,
@@ -163,15 +163,25 @@ export async function renderBotonGoogle(contenedor, { onLogin, onError, theme = 
     auto_select: false,
     cancel_on_tap_outside: true,
   });
-  // Acá vivía un gis.prompt() como sonda para detectar orígenes no
-  // autorizados. Se quitó: prompt() no solo detecta, TAMBIÉN muestra el One
-  // Tap — el bloque flotante con la cuenta ya elegida, que no se puede
-  // estilar ni posicionar (con FedCM lo dibuja el navegador, no la página) y
-  // aparecía sobre la landing sin que nadie lo pidiera.
+  // One Tap: el diálogo con la cuenta ya detectada. Es el camino de login
+  // más corto (un toque, sin ventana intermedia) y por eso se deja activo.
+  // No se puede estilar ni posicionar — con FedCM lo dibuja el navegador,
+  // no la página—, así que se acepta como viene.
   //
-  // El costo de sacarlo: si el dominio no está en "Authorized JavaScript
-  // origins", el botón se dibuja igual y falla recién al tocarlo. Es un
-  // error de configuración, se arregla una vez y no vuelve.
+  // De paso sirve de sonda: renderButton NO avisa si el dominio falta en
+  // "Authorized JavaScript origins" (dibuja el botón igual y falla recién al
+  // tocarlo), mientras que prompt() sí reporta el motivo.
+  if (mostrarOneTap) {
+    try {
+      gis.prompt((notification) => {
+        const motivo = notification?.getNotDisplayedReason?.();
+        if (motivo === 'unregistered_origin' || motivo === 'invalid_client') {
+          onOrigenRechazado?.(motivo);
+        }
+      });
+    } catch { /* el botón sigue siendo el camino principal */ }
+  }
+
   gis.renderButton(contenedor, {
     type: 'standard',
     theme,

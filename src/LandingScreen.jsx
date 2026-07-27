@@ -73,6 +73,14 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
   const slotRef = useRef(null);
   const [gisListo, setGisListo] = useState(false);
 
+  // Los callbacks viajan por ref, NO por dependencias: el padre los crea
+  // inline, así que son funciones nuevas en cada render. Como dependencias
+  // reejecutaban este efecto en bucle — montar el iframe, desmontarlo,
+  // montarlo otra vez — y el botón nunca llegaba a estabilizarse, por lo que
+  // gisListo se quedaba en false y siempre se veía el botón de respaldo.
+  const cbRef = useRef({ onLogin, onError });
+  cbRef.current = { onLogin, onError };
+
   useEffect(() => {
     if (!gisDisponible() || !slotRef.current) return;
     let limpiar;
@@ -85,19 +93,28 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
       // 320px: el máximo que admite GIS es 400, pero por encima de ~330 el
       // botón se estira y el logo queda flotando lejos del texto.
       width: 320,
-      onLogin,
-      onError,
+      onLogin: (u) => cbRef.current.onLogin?.(u),
+      onError: (e) => cbRef.current.onError?.(e),
+      // El dominio no está en "Authorized JavaScript origins": el botón de
+      // Google fallaría con "Acceso bloqueado" al tocarlo, así que se
+      // esconde y queda el propio, que usa el popup y no depende de esa lista.
+      onOrigenRechazado: () => { if (vivo) setGisListo(false); },
     })
       .then((fn) => {
         if (!vivo) { fn?.(); return; }
         limpiar = fn;
         setGisListo(true);
       })
-      .catch(() => { /* queda el fallback visible */ });
+      .catch((err) => {
+        // Silenciarlo dejaba el fallback en pantalla sin explicación: el
+        // botón decía "Creá tu tienda gratis" y usaba el popup (con su
+        // ventana intermedia) sin que nada indicara que GIS había fallado.
+        console.warn('[LOKAL] Google Identity Services no cargó:', err?.message || err);
+      });
     return () => { vivo = false; limpiar?.(); };
     // isDark: Google no reestila un botón ya montado, hay que volver a
     // pedirlo para que acompañe el cambio de tema.
-  }, [isDark, onLogin, onError]);
+  }, [isDark]);
 
   return (
     <div className={full ? 'w-full sm:w-auto' : ''}>
