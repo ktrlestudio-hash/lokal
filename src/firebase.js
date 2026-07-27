@@ -96,6 +96,13 @@ const GIS_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const GIS_SRC = 'https://accounts.google.com/gsi/client';
 
 let gisPromise = null;
+// initialize() es GLOBAL, no por botón: la landing monta dos BotonGoogle
+// (hero y bloque de precio) y la segunda llamada pisaba la config de la
+// primera, incluido su callback. Se inicializa una sola vez y los callbacks
+// se leen de esta ref, así el botón que se toque usa los del momento.
+let gisInicializado = false;
+let oneTapDisparado = false;
+const gisCallbacks = { onLogin: null, onError: null };
 
 // Carga el script una sola vez, sin bloquear el render inicial. Se reusa la
 // misma promesa en llamadas concurrentes (dos botones en la misma página).
@@ -159,25 +166,46 @@ export async function loginConIdToken(idToken) {
 // El botón lo dibuja Google dentro de un iframe propio: no se puede estilar
 // desde nuestro CSS (por eso los parámetros de apariencia van acá, no en
 // clases). `width` en píxeles porque GIS ignora anchos porcentuales.
-export async function renderBotonGoogle(contenedor, { onLogin, onError, onOrigenRechazado, mostrarOneTap = true, theme = 'outline', width = 320 } = {}) {
+export async function renderBotonGoogle(contenedor, { onLogin, onError, onOrigenRechazado, mostrarOneTap = true, theme = 'outline', width = 320, colorScheme = 'light' } = {}) {
   const gis = await cargarGIS();
-  gis.initialize({
+
+  // Los callbacks se guardan aparte del initialize: como éste corre una sola
+  // vez, el closure quedaría atado a los callbacks del primer botón montado.
+  gisCallbacks.onLogin = onLogin;
+  gisCallbacks.onError = onError;
+
+  if (!gisInicializado) {
+    gisInicializado = true;
+    gis.initialize({
     client_id: GIS_CLIENT_ID,
     callback: async (response) => {
       try {
         const user = await loginConIdToken(response.credential);
-        onLogin?.(user);
+        gisCallbacks.onLogin?.(user);
       } catch (err) {
-        onError?.(err);
+        gisCallbacks.onError?.(err);
       }
     },
     // FedCM: la API del navegador que reemplaza a las cookies de terceros
-    // para federación de identidad. Chrome ya la exige para GIS, y sin esto
-    // el diálogo no aparece en versiones recientes.
-    use_fedcm_for_prompt: true,
+    // para federación de identidad, y que en Android Chrome presenta el
+    // selector de cuentas como un bottom sheet del sistema en vez de un
+    // diálogo con chrome propio de Google.
+    //
+    // Los DOS flags viven acá, en IdConfiguration — no en las opciones de
+    // renderButton, que es donde estaba use_fedcm_for_button antes: ahí
+    // Google lo ignora en silencio (GsiButtonConfiguration solo acepta
+    // type/theme/size/text/shape/logo_alignment/width/locale/
+    // click_listener/state) y el botón seguía abriendo el diálogo clásico.
+    use_fedcm_for_button: true,
+    use_fedcm_for_prompt: true, // deprecado, se mantiene por compatibilidad
+    // color_scheme: que el diálogo nativo acompañe el tema de la página en
+    // vez de salir siempre claro sobre el fondo oscuro de la landing.
+    color_scheme: colorScheme,
     auto_select: false,
     cancel_on_tap_outside: true,
-  });
+    });
+  }
+
   // One Tap: el diálogo con la cuenta ya detectada. Es el camino de login
   // más corto (un toque, sin ventana intermedia) y por eso se deja activo.
   // No se puede estilar ni posicionar — con FedCM lo dibuja el navegador,
@@ -186,7 +214,10 @@ export async function renderBotonGoogle(contenedor, { onLogin, onError, onOrigen
   // De paso sirve de sonda: renderButton NO avisa si el dominio falta en
   // "Authorized JavaScript origins" (dibuja el botón igual y falla recién al
   // tocarlo), mientras que prompt() sí reporta el motivo.
-  if (mostrarOneTap) {
+  // Solo con oneTapDisparado en false: la landing monta dos botones, y sin
+  // este guard el prompt salía dos veces por carga.
+  if (mostrarOneTap && !oneTapDisparado) {
+    oneTapDisparado = true;
     try {
       gis.prompt((notification) => {
         const motivo = notification?.getNotDisplayedReason?.();
@@ -205,14 +236,13 @@ export async function renderBotonGoogle(contenedor, { onLogin, onError, onOrigen
     shape: 'pill',
     logo_alignment: 'center',
     width,
-    // Sin esto (default: false) el botón sigue abriendo el diálogo clásico
-    // de Google con su propio header ("Acceso: cuentas de Google") en vez
-    // del selector nativo del navegador — en Android Chrome, un bottom
-    // sheet real del sistema. use_fedcm_for_prompt solo cubre el One Tap;
-    // el botón necesita este flag aparte para el mismo salto a FedCM.
-    use_fedcm_for_button: true,
   });
-  return () => { try { gis.cancel(); } catch { /* ya desmontado */ } };
+  // Sin cleanup: cancel() no es "desmontar el botón", es "el usuario eligió
+  // otro método de login, sacá el One Tap de la pantalla". Llamarlo en cada
+  // cleanup de React cancelaba el flujo de Google ante cualquier re-render y
+  // rompía el comportamiento nativo. El botón se va solo cuando React quita
+  // su contenedor del DOM.
+  return () => {};
 }
 
 export { getRedirectResult, signOut, onAuthStateChanged };

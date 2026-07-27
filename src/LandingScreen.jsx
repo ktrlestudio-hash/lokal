@@ -90,6 +90,9 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
       // casi negro (#040a14), así que un botón negro relleno se funde con él
       // y se ve el marco del iframe recortado. outline_dark trae borde propio.
       theme: isDark ? 'outline_dark' : 'outline',
+      // color_scheme del IdConfiguration: hace que el diálogo nativo salga
+      // en oscuro cuando la landing lo está, en vez de blanco a pleno.
+      colorScheme: isDark ? 'dark' : 'light',
       // 320px: el máximo que admite GIS es 400, pero por encima de ~330 el
       // botón se estira y el logo queda flotando lejos del texto.
       width: 320,
