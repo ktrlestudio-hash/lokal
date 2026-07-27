@@ -147,18 +147,30 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
           — gisListo jamás llegaba a ponerse en true. Bug circular: el ref
           necesitaba el estado que el propio efecto debía setear. */}
       <div className="inline-flex flex-col gap-2" style={{ display: gisListo ? 'inline-flex' : 'none' }}>
-        {/* Cápsula de marca: el p-1 deja ver un hilo de borde y fondo
-            alrededor del botón, que es lo que lo ata al resto de la
-            landing sin tocar el control en sí (inestilable: lo dibuja
-            Google en su propio iframe). */}
+        {/* Cápsula de marca: UNA sola capa de recorte, sin padding entre el
+            borde y el visor del botón. Medido con Playwright sobre el botón
+            real: el iframe que inyecta GIS se dibuja 340x44 con un
+            margin:-2px -10px propio, esquinas cuadradas y fondo blanco
+            propio (siempre blanco, sea cual sea el tema).
+
+            Un intento anterior tenía DOS overflow-hidden anidados con un
+            p-1 (4px) en el de afuera para "dejar ver un hilo de borde" — ese
+            padding es justo el hueco por donde el blanco del iframe asomaba
+            arriba y abajo del botón: el visor interno recortaba bien, pero
+            el padding entre visor y cápsula quedaba vacío/con fondo propio
+            de la cápsula, así que si el iframe se filtraba un poco por el
+            borde del visor (subpíxel de redondeo), no había una segunda
+            capa que lo recorte de nuevo.
+
+            Ahora la cápsula ES el único recorte, mide el ancho final exacto
+            (320) y el iframe se centra adentro con su tamaño real (340,
+            offset -10). Sin padding intermedio, sin hueco donde el blanco
+            se filtre. */}
         <div
-          // overflow-hidden en la propia cápsula (no en el div interno): el
-          // botón "Continuar como X" trae su fondo blanco propio y, si
-          // sobresalía aunque sea 1-2px del radio del div interno, ese
-          // blanco quedaba visible en las puntas dentro del padding (p-1)
-          // en vez de quedar recortado por la cápsula entera.
-          className="inline-flex p-1 rounded-[1.15rem] overflow-hidden"
+          className="rounded-[1.15rem] overflow-hidden flex items-center justify-center"
           style={{
+            width: 320,
+            height: 44,
             background: isDark
               ? 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.16), rgb(var(--brand, 0 184 217) / 0.04))'
               : 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.12), rgb(var(--brand, 0 184 217) / 0.03))',
@@ -166,25 +178,14 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
             boxShadow: '0 6px 22px -10px rgb(var(--brand, 0 184 217) / 0.55)',
           }}
         >
-          {/* Medido con Playwright sobre el botón real: el iframe que inyecta
-              GIS se dibuja 340x44 con un margin:-2px -10px propio (esquinas
-              cuadradas, fondo blanco propio), aunque se le pida width:320.
-              Compensar ese margen con padding no alcanza: las esquinas
-              cuadradas del iframe igual asoman contra el radio de la
-              cápsula, sobre todo en dark, donde el fondo blanco del botón
-              contrasta fuerte.
-
-              La solución es un visor de 320px exactos con overflow-hidden:
-              deja pasar el botón centrado y recorta limpio cualquier borde
-              que el iframe saque por fuera, sin ese halo blanco en dark.
-
-              color-scheme sigue al tema real: forzarlo a light hacía que en
+          {/* color-scheme sigue al tema real: forzarlo a light hacía que en
               modo oscuro el iframe se dibujara blanco contra el fondo casi
-              negro de la landing. */}
-          <div className="rounded-2xl overflow-hidden" style={{ width: 320, height: 44 }}>
-            <div ref={slotRef} className="flex items-center justify-center"
-              style={{ colorScheme: isDark ? 'dark' : 'light', width: 340, height: 44, marginLeft: -10 }} />
-          </div>
+              negro de la landing (el iframe en sí SIEMPRE tiene fondo
+              blanco donde no hay botón — por eso hace falta el recorte de
+              arriba, esto solo evita que el CONTENIDO del botón salga claro
+              en dark). */}
+          <div ref={slotRef} className="flex items-center justify-center shrink-0"
+            style={{ colorScheme: isDark ? 'dark' : 'light', width: 340, height: 44, marginLeft: -10 }} />
         </div>
         <span className="text-[11px] font-semibold text-center" style={{ color: 'var(--text-secondary, #999)' }}>
           Gratis para empezar · sin tarjeta
