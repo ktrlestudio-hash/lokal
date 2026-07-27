@@ -150,9 +150,15 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
         >
           {/* color-scheme sigue al tema real: forzarlo a light hacía que en
               modo oscuro el iframe se dibujara blanco contra el fondo casi
-              negro de la landing. */}
-          <div ref={slotRef} className="rounded-2xl"
-            style={{ colorScheme: isDark ? 'dark' : 'light' }} />
+              negro de la landing.
+
+              minHeight reserva el alto del botón: GIS dibuja primero el
+              genérico "Continuar con Google" y, tras consultar la sesión,
+              lo reemplaza por el personalizado "Continuar como X", que es
+              más alto. Sin el hueco reservado ese cambio empujaba todo lo
+              de abajo. El alto es el del botón size:'large' personalizado. */}
+          <div ref={slotRef} className="rounded-2xl flex items-center justify-center"
+            style={{ colorScheme: isDark ? 'dark' : 'light', minHeight: 44 }} />
         </div>
         <span className="text-[11px] font-semibold text-center" style={{ color: 'var(--text-secondary, #999)' }}>
           Gratis para empezar · sin tarjeta

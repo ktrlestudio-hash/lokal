@@ -216,7 +216,8 @@ export async function renderBotonGoogle(contenedor, { onLogin, onError, onOrigen
   // tocarlo), mientras que prompt() sí reporta el motivo.
   // Solo con oneTapDisparado en false: la landing monta dos botones, y sin
   // este guard el prompt salía dos veces por carga.
-  if (mostrarOneTap && !oneTapDisparado) {
+  const dispararOneTap = () => {
+    if (!mostrarOneTap || oneTapDisparado) return;
     oneTapDisparado = true;
     try {
       gis.prompt((notification) => {
@@ -226,7 +227,7 @@ export async function renderBotonGoogle(contenedor, { onLogin, onError, onOrigen
         }
       });
     } catch { /* el botón sigue siendo el camino principal */ }
-  }
+  };
 
   gis.renderButton(contenedor, {
     type: 'standard',
@@ -237,6 +238,12 @@ export async function renderBotonGoogle(contenedor, { onLogin, onError, onOrigen
     logo_alignment: 'center',
     width,
   });
+
+  // El One Tap va DESPUÉS del botón y con un respiro: los dos consultan el
+  // estado de sesión, y lanzarlos juntos hacía que compitieran — de ahí el
+  // elemento que asomaba y desaparecía debajo del botón mientras éste
+  // todavía se estaba personalizando.
+  setTimeout(dispararOneTap, 900);
   // Sin cleanup: cancel() no es "desmontar el botón", es "el usuario eligió
   // otro método de login, sacá el One Tap de la pantalla". Llamarlo en cada
   // cleanup de React cancelaba el flujo de Google ante cualquier re-render y
