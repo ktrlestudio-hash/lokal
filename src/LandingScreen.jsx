@@ -292,7 +292,15 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
   // Si GIS no está disponible (falta el Client ID, el script no cargó, el
   // dominio no está autorizado), cae al botón propio con signInWithPopup:
   // el login nunca queda sin camino.
-  const CtaGoogle = ({ full = true }) => {
+  // Punto medio entre "nativo" e "integrado": el botón de adentro es el real
+  // de Google (no se puede estilar — lo dibuja en un iframe propio), pero va
+  // montado dentro de una cápsula de LOKAL que sí lleva nuestro radio, borde
+  // y glow de marca. Así el bloque pertenece a la landing aunque el control
+  // siga siendo el de Google, que es lo que le da confianza al usuario.
+  //
+  // El tema del botón se elige por modo para que contraste con el fondo real
+  // de la landing (ver el comentario en renderBotonGoogle, más abajo).
+  const CtaGoogle = ({ full = true, centrar = false }) => {
     const slotRef = useRef(null);
     const [gisListo, setGisListo] = useState(false);
 
@@ -301,7 +309,13 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
       let limpiar;
       let vivo = true;
       renderBotonGoogle(slotRef.current, {
-        theme: isDark ? 'filled_black' : 'outline',
+        // outline_dark, no filled_black: el fondo de la landing en dark ya es
+        // casi negro (#040a14), así que un botón negro relleno se funde con
+        // él y desaparece. outline_dark trae borde propio y se lee sobre
+        // fondos oscuros, que es justo el caso.
+        theme: isDark ? 'outline_dark' : 'outline',
+        // 320px: el máximo que admite GIS es 400, pero por encima de ~330 el
+        // botón se estira y el logo queda flotando lejos del texto.
         width: 320,
         onLogin: () => irAlPanel(),
         onError: (err) => setError(err?.message || 'No se pudo iniciar sesión'),
@@ -322,9 +336,33 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
     }, [isDark]);
 
     return (
-      <div className={full ? 'w-full sm:w-auto' : ''}>
-        <div ref={slotRef} className={`${gisListo ? 'flex' : 'hidden'} justify-center lg:justify-start`} />
-        {!gisListo && (
+      <div className={`${full ? 'w-full sm:w-auto' : ''} ${centrar ? 'flex flex-col items-center' : ''}`}>
+        {gisListo ? (
+          <div className="inline-flex flex-col gap-2">
+            {/* Cápsula de marca: p-1 deja ver un hilo de borde y fondo
+                alrededor del botón de Google, que es lo que lo ata
+                visualmente al resto de la landing. */}
+            <div
+              className="inline-flex p-1 rounded-[1.15rem] transition-shadow"
+              style={{
+                background: isDark
+                  ? 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.16), rgb(var(--brand, 0 184 217) / 0.04))'
+                  : 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.12), rgb(var(--brand, 0 184 217) / 0.03))',
+                border: '1px solid rgb(var(--brand, 0 184 217) / 0.22)',
+                boxShadow: '0 6px 22px -10px rgb(var(--brand, 0 184 217) / 0.55)',
+              }}
+            >
+              {/* color-scheme sigue al tema real: forzarlo a light hacía que
+                  en modo oscuro el iframe de Google se dibujara blanco
+                  brillante contra el fondo casi negro de la landing. */}
+              <div ref={slotRef} className="overflow-hidden rounded-2xl"
+                style={{ colorScheme: isDark ? 'dark' : 'light' }} />
+            </div>
+            <span className="text-[11px] font-semibold text-center" style={{ color: 'var(--text-secondary, #999)' }}>
+              Gratis para empezar · sin tarjeta
+            </span>
+          </div>
+        ) : (
           <button
             onClick={handleGoogle}
             disabled={loading}

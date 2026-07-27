@@ -144,6 +144,53 @@ export async function loginConIdToken(idToken) {
 // El botón lo dibuja Google dentro de un iframe propio: no se puede estilar
 // desde nuestro CSS (por eso los parámetros de apariencia van acá, no en
 // clases). `width` en píxeles porque GIS ignora anchos porcentuales.
+// Login desde un botón PROPIO (con la estética de la app) que dispara el
+// diálogo nativo de Google. Es el punto medio entre renderButton (nativo
+// pero inestilable, dibujado en un iframe de Google) y signInWithPopup
+// (estilable pero con la ventana intermedia del authDomain de Firebase).
+//
+// Devuelve true si el diálogo se mostró y false si Google no pudo mostrarlo
+// — sin sesión en el navegador, One Tap silenciado tras varios descartes,
+// origen no autorizado. En ese caso el llamador debe caer al popup: es un
+// resultado esperado y frecuente, no un error.
+export async function loginNativoGoogle({ onLogin, onError } = {}) {
+  const gis = await cargarGIS();
+  gis.initialize({
+    client_id: GIS_CLIENT_ID,
+    callback: async (response) => {
+      try {
+        const user = await loginConIdToken(response.credential);
+        onLogin?.(user);
+      } catch (err) {
+        onError?.(err);
+      }
+    },
+    use_fedcm_for_prompt: true,
+    auto_select: false,
+    cancel_on_tap_outside: true,
+  });
+
+  return new Promise((resolve) => {
+    let resuelto = false;
+    const zanjar = (v) => { if (!resuelto) { resuelto = true; resolve(v); } };
+    try {
+      gis.prompt((notification) => {
+        // El diálogo no llegó a mostrarse (origen inválido, sin sesión,
+        // silenciado por descartes previos) → que el llamador use el popup.
+        if (notification?.isNotDisplayed?.()) return zanjar(false);
+        // Se mostró y el usuario lo cerró sin elegir cuenta: es una decisión
+        // suya, no una falla — no corresponde abrirle un popup encima.
+        if (notification?.isSkippedMoment?.()) return zanjar(true);
+      });
+      // FedCM no siempre invoca el callback de notificación; si en 2,5s no
+      // hubo señal, se asume que no se mostró y se libera el fallback.
+      setTimeout(() => zanjar(false), 2500);
+    } catch {
+      zanjar(false);
+    }
+  });
+}
+
 export async function renderBotonGoogle(contenedor, { onLogin, onError, onOrigenRechazado, theme = 'outline', width = 320 } = {}) {
   const gis = await cargarGIS();
   gis.initialize({
