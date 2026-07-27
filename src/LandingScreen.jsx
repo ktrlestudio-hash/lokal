@@ -63,6 +63,84 @@ function FadeUp({ children, delay = 0, className = '' }) {
   );
 }
 
+// Botón de Google. Vive FUERA de LandingScreen a propósito: declarado
+// adentro, React lo trata como un tipo de componente nuevo en cada render
+// del padre y desmonta/remonta el iframe de Google en cada cambio de estado
+// (por ejemplo al scrollear). Eso hacía que el botón alternara entre mostrar
+// el correo y "Continuar con Google", y que la página pegara un salto cuando
+// el iframe cambiaba de alto al reconstruirse.
+function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }) {
+  const slotRef = useRef(null);
+  const [gisListo, setGisListo] = useState(false);
+
+  useEffect(() => {
+    if (!gisDisponible() || !slotRef.current) return;
+    let limpiar;
+    let vivo = true;
+    renderBotonGoogle(slotRef.current, {
+      // outline_dark, no filled_black: el fondo de la landing en dark ya es
+      // casi negro (#040a14), así que un botón negro relleno se funde con él
+      // y se ve el marco del iframe recortado. outline_dark trae borde propio.
+      theme: isDark ? 'outline_dark' : 'outline',
+      // 320px: el máximo que admite GIS es 400, pero por encima de ~330 el
+      // botón se estira y el logo queda flotando lejos del texto.
+      width: 320,
+      onLogin,
+      onError,
+    })
+      .then((fn) => {
+        if (!vivo) { fn?.(); return; }
+        limpiar = fn;
+        setGisListo(true);
+      })
+      .catch(() => { /* queda el fallback visible */ });
+    return () => { vivo = false; limpiar?.(); };
+    // isDark: Google no reestila un botón ya montado, hay que volver a
+    // pedirlo para que acompañe el cambio de tema.
+  }, [isDark, onLogin, onError]);
+
+  return (
+    <div className={full ? 'w-full sm:w-auto' : ''}>
+      {gisListo ? (
+        <div className="inline-flex flex-col gap-2">
+          {/* Cápsula de marca: el p-1 deja ver un hilo de borde y fondo
+              alrededor del botón, que es lo que lo ata al resto de la
+              landing sin tocar el control en sí (inestilable: lo dibuja
+              Google en su propio iframe). */}
+          <div
+            className="inline-flex p-1 rounded-[1.15rem]"
+            style={{
+              background: isDark
+                ? 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.16), rgb(var(--brand, 0 184 217) / 0.04))'
+                : 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.12), rgb(var(--brand, 0 184 217) / 0.03))',
+              border: '1px solid rgb(var(--brand, 0 184 217) / 0.22)',
+              boxShadow: '0 6px 22px -10px rgb(var(--brand, 0 184 217) / 0.55)',
+            }}
+          >
+            {/* color-scheme sigue al tema real: forzarlo a light hacía que en
+                modo oscuro el iframe se dibujara blanco contra el fondo casi
+                negro de la landing. */}
+            <div ref={slotRef} className="overflow-hidden rounded-2xl"
+              style={{ colorScheme: isDark ? 'dark' : 'light' }} />
+          </div>
+          <span className="text-[11px] font-semibold text-center" style={{ color: 'var(--text-secondary, #999)' }}>
+            Gratis para empezar · sin tarjeta
+          </span>
+        </div>
+      ) : (
+        <button
+          onClick={onPopup}
+          disabled={loading}
+          className={`${full ? 'w-full sm:w-auto' : ''} inline-flex items-center justify-center gap-3 bg-ink dark:bg-white hover:bg-ink/90 dark:hover:bg-white/90 text-white dark:text-[#18181b] font-bold py-3.5 px-7 rounded-2xl transition-all shadow-lg hover:shadow-xl disabled:opacity-60 active:scale-[0.98]`}
+        >
+          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <GoogleIcon size={20} />}
+          Creá tu tienda gratis
+        </button>
+      )}
+    </div>
+  );
+}
+
 const PASOS = [
   { icon: Store,   titulo: 'Creá tu tienda',      desc: 'Entrás con Google y cargás nombre, foto y contacto. Sin instalar nada.' },
   { icon: Tag,     titulo: 'Publicá tus ofertas', desc: 'Subís una foto, ponés precio y vencimiento. Aparece al instante.' },
@@ -249,9 +327,29 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
 
   // Un solo listener para dos cosas que dependen del scroll: el fondo del
   // header sticky y la aparición del botón "volver arriba".
+  //
+  // El trabajo se agenda en un rAF y se compara contra el valor anterior
+  // antes de tocar el estado: el evento de scroll dispara decenas de veces
+  // por segundo, y llamar a setState en cada uno hacía re-render durante
+  // todo el gesto — en mobile eso compite con el compositor y se ve como
+  // franjas de contenido repetido mientras se desplaza.
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 320);
-    onScroll();
+    let pendiente = false;
+    let ultimo = null;
+    const evaluar = () => {
+      pendiente = false;
+      const ahora = window.scrollY > 320;
+      if (ahora !== ultimo) {
+        ultimo = ahora;
+        setScrolled(ahora);
+      }
+    };
+    const onScroll = () => {
+      if (pendiente) return;
+      pendiente = true;
+      requestAnimationFrame(evaluar);
+    };
+    evaluar();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
@@ -289,92 +387,16 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
   // un iframe propio, así que no se puede estilar con nuestro CSS — de ahí
   // que la apariencia se configure por parámetros en renderBotonGoogle.
   //
-  // Si GIS no está disponible (falta el Client ID, el script no cargó, el
-  // dominio no está autorizado), cae al botón propio con signInWithPopup:
-  // el login nunca queda sin camino.
-  // Punto medio entre "nativo" e "integrado": el botón de adentro es el real
-  // de Google (no se puede estilar — lo dibuja en un iframe propio), pero va
-  // montado dentro de una cápsula de LOKAL que sí lleva nuestro radio, borde
-  // y glow de marca. Así el bloque pertenece a la landing aunque el control
-  // siga siendo el de Google, que es lo que le da confianza al usuario.
-  //
-  // El tema del botón se elige por modo para que contraste con el fondo real
-  // de la landing (ver el comentario en renderBotonGoogle, más abajo).
-  const CtaGoogle = ({ full = true, centrar = false }) => {
-    const slotRef = useRef(null);
-    const [gisListo, setGisListo] = useState(false);
-
-    useEffect(() => {
-      if (!gisDisponible() || !slotRef.current) return;
-      let limpiar;
-      let vivo = true;
-      renderBotonGoogle(slotRef.current, {
-        // outline_dark, no filled_black: el fondo de la landing en dark ya es
-        // casi negro (#040a14), así que un botón negro relleno se funde con
-        // él y desaparece. outline_dark trae borde propio y se lee sobre
-        // fondos oscuros, que es justo el caso.
-        theme: isDark ? 'outline_dark' : 'outline',
-        // 320px: el máximo que admite GIS es 400, pero por encima de ~330 el
-        // botón se estira y el logo queda flotando lejos del texto.
-        width: 320,
-        onLogin: () => irAlPanel(),
-        onError: (err) => setError(err?.message || 'No se pudo iniciar sesión'),
-        // El dominio no está autorizado en el cliente OAuth: el botón de GIS
-        // fallaría con "Acceso bloqueado" al tocarlo. Se esconde y queda el
-        // botón propio (popup), que no depende de esa lista de orígenes.
-        onOrigenRechazado: () => { if (vivo) setGisListo(false); },
-      })
-        .then((fn) => {
-          if (!vivo) { fn?.(); return; }
-          limpiar = fn;
-          setGisListo(true);
-        })
-        .catch(() => { /* queda el fallback visible */ });
-      return () => { vivo = false; limpiar?.(); };
-      // isDark: Google no reestila el botón ya montado, hay que re-renderizarlo
-      // para que acompañe el cambio de tema.
-    }, [isDark]);
-
-    return (
-      <div className={`${full ? 'w-full sm:w-auto' : ''} ${centrar ? 'flex flex-col items-center' : ''}`}>
-        {gisListo ? (
-          <div className="inline-flex flex-col gap-2">
-            {/* Cápsula de marca: p-1 deja ver un hilo de borde y fondo
-                alrededor del botón de Google, que es lo que lo ata
-                visualmente al resto de la landing. */}
-            <div
-              className="inline-flex p-1 rounded-[1.15rem] transition-shadow"
-              style={{
-                background: isDark
-                  ? 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.16), rgb(var(--brand, 0 184 217) / 0.04))'
-                  : 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.12), rgb(var(--brand, 0 184 217) / 0.03))',
-                border: '1px solid rgb(var(--brand, 0 184 217) / 0.22)',
-                boxShadow: '0 6px 22px -10px rgb(var(--brand, 0 184 217) / 0.55)',
-              }}
-            >
-              {/* color-scheme sigue al tema real: forzarlo a light hacía que
-                  en modo oscuro el iframe de Google se dibujara blanco
-                  brillante contra el fondo casi negro de la landing. */}
-              <div ref={slotRef} className="overflow-hidden rounded-2xl"
-                style={{ colorScheme: isDark ? 'dark' : 'light' }} />
-            </div>
-            <span className="text-[11px] font-semibold text-center" style={{ color: 'var(--text-secondary, #999)' }}>
-              Gratis para empezar · sin tarjeta
-            </span>
-          </div>
-        ) : (
-          <button
-            onClick={handleGoogle}
-            disabled={loading}
-            className={`${full ? 'w-full sm:w-auto' : ''} inline-flex items-center justify-center gap-3 bg-ink dark:bg-white hover:bg-ink/90 dark:hover:bg-white/90 text-white dark:text-[#18181b] font-bold py-3.5 px-7 rounded-2xl transition-all shadow-lg hover:shadow-xl disabled:opacity-60 active:scale-[0.98]`}
-          >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <GoogleIcon size={20} />}
-            Creá tu tienda gratis
-          </button>
-        )}
-      </div>
-    );
-  };
+  const CtaGoogle = (props) => (
+    <BotonGoogle
+      {...props}
+      isDark={isDark}
+      loading={loading}
+      onPopup={handleGoogle}
+      onLogin={irAlPanel}
+      onError={(err) => setError(err?.message || 'No se pudo iniciar sesión')}
+    />
+  );
 
   return (
     <div className="relative min-h-screen overflow-x-hidden"
