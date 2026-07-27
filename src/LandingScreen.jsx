@@ -271,10 +271,27 @@ function PasosCarrusel() {
 
   // El índice se deriva del scroll real, no de un estado que "cree" dónde
   // está: así el swipe manual y las flechas nunca se desincronizan.
+  //
+  // El cálculo va en un rAF con guarda de cambio real (mismo patrón que el
+  // listener del header) — sin esto, cada evento de scroll horizontal
+  // llamaba setIdx sin throttle. Con un scroll horizontal ANIDADO dentro de
+  // una página que scrollea vertical, un swipe rápido en diagonal hace que
+  // el navegador reciba eventos de ambos ejes casi a la vez: sin el rAF, los
+  // re-renders de este carrusel competían por el hilo principal justo
+  // cuando el navegador tenía que decidir qué contenedor mover, y ahí
+  // aparecía el frame con la sección duplicada / el scroll de la página
+  // trabado un instante.
+  const rafPendiente = useRef(false);
   const onScroll = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    setIdx(Math.round(el.scrollLeft / el.clientWidth));
+    if (rafPendiente.current) return;
+    rafPendiente.current = true;
+    requestAnimationFrame(() => {
+      rafPendiente.current = false;
+      const el = scrollRef.current;
+      if (!el) return;
+      const nuevo = Math.round(el.scrollLeft / el.clientWidth);
+      setIdx((prev) => (prev === nuevo ? prev : nuevo));
+    });
   };
 
   const irA = (i) => {
@@ -291,7 +308,11 @@ function PasosCarrusel() {
           ref={scrollRef}
           onScroll={onScroll}
           className="flex overflow-x-auto snap-x snap-mandatory no-scrollbar -mx-5 px-5"
-          style={{ scrollbarWidth: 'none' }}
+          // overscrollBehaviorX: contain evita que un swipe horizontal
+          // "se escape" hacia el scroll vertical de la página (y viceversa)
+          // cuando el gesto no es perfectamente horizontal — que es el caso
+          // típico de un dedo moviéndose rápido.
+          style={{ scrollbarWidth: 'none', overscrollBehaviorX: 'contain' }}
         >
           {PASOS.map(({ icon: Icon, titulo, desc }, i) => (
             <div key={titulo} className="snap-center shrink-0 w-full pr-3">
