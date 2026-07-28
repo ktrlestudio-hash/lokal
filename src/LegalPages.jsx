@@ -21,17 +21,25 @@ function LegalLayout({ title, subtitle, icon: Icon, children, onBack, actualizad
   return (
     <div className="lok-app-surface min-h-screen text-ink"
       style={{ background: 'rgb(var(--surface-dim, 245 245 245))' }}>
-      {/* Navbar */}
-      <nav className="sticky top-0 z-50 flex items-center justify-between px-6 py-4 bg-surface-card/85 backdrop-blur border-b border-slate-100 dark:border-white/8">
-        <button
-          onClick={onBack}
-          className="lok-tap flex items-center gap-2 text-ink-dim hover:text-brand transition-colors text-sm font-medium"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Volver
-        </button>
-        <LogoFull size={20} />
-        <div className="w-16" /> {/* spacer */}
+      {/* Navbar — mismo alto y márgenes que el header de la landing (h-16,
+          max-w-5xl, px-5/lg:px-8) en vez de un px-6 py-4 propio, y el botón
+          de retroceso es el cuadrado estándar de la app (.ui-icon-btn, el
+          mismo de PageHeader y las screens de detalle) en lugar de un
+          "← Volver" de texto suelto que no existe en ninguna otra pantalla. */}
+      <nav className="sticky top-0 z-50 bg-surface-card/85 backdrop-blur border-b border-slate-100 dark:border-white/8">
+        <div className="max-w-5xl mx-auto px-5 lg:px-8 h-16 flex items-center justify-between gap-3">
+          <button
+            onClick={onBack}
+            aria-label="Volver"
+            className="lok-tap ui-icon-btn hover:bg-surface-card-2 dark:hover:bg-white/8 text-ink-dim shrink-0"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <LogoFull size={22} />
+          {/* Espaciador del mismo ancho que el botón, para que el logo quede
+              centrado óptico y no corrido hacia la derecha. */}
+          <div className="w-10 shrink-0" aria-hidden="true" />
+        </div>
       </nav>
 
       {/* Hero del documento */}
@@ -56,8 +64,14 @@ function LegalLayout({ title, subtitle, icon: Icon, children, onBack, actualizad
           fila), con el copyright sumado. Antes era una pila centrada con el
           copyright arriba, la firma en el medio y los links al final, sin
           jerarquía clara y sin parecerse al resto del sitio. */}
-      <footer style={{ borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.12)' }}>
-        <div className="max-w-5xl mx-auto px-5 lg:px-8 py-8 flex flex-col sm:flex-row items-center justify-between gap-5">
+      <footer className="relative overflow-hidden"
+        style={{ borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.10)' }}>
+        {/* Mismo glow superior que el footer de la landing: separa mejor que
+            una línea sola y usa el recurso que ya define el lenguaje de la
+            página (ver la card de precio). */}
+        <div className="absolute inset-x-0 top-0 h-32 pointer-events-none"
+          style={{ background: 'radial-gradient(ellipse 70% 100% at 50% 0%, rgb(var(--brand, 0 184 217) / 0.12), transparent)' }} />
+        <div className="relative max-w-5xl mx-auto px-5 lg:px-8 py-8 flex flex-col sm:flex-row items-center justify-between gap-5">
           <div className="flex flex-col items-center sm:items-start gap-1.5">
             <LogoFull size={22} />
             <p className="text-[10px]" style={{ color: 'var(--text-secondary, #999)' }}>

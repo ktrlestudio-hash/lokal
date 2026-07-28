@@ -796,8 +796,16 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
       </main>
 
       {/* ── Footer ── */}
-      <footer className="relative z-10 mt-6" style={{ borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.12)' }}>
-        <div className="max-w-5xl mx-auto px-5 lg:px-8 py-8 flex flex-col sm:flex-row items-center justify-between gap-5">
+      {/* El glow desde el borde superior separa el footer mejor que la línea
+          de 1px que había antes: es el mismo recurso de la card de precio,
+          así que el corte se lee como parte del lenguaje de la página y no
+          como un divisor genérico. La línea queda, pero muy tenue, sólo para
+          rematar el borde del degradado. */}
+      <footer className="relative z-10 mt-6 overflow-hidden"
+        style={{ borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.10)' }}>
+        <div className="absolute inset-x-0 top-0 h-32 pointer-events-none"
+          style={{ background: 'radial-gradient(ellipse 70% 100% at 50% 0%, rgb(var(--brand, 0 184 217) / 0.12), transparent)' }} />
+        <div className="relative max-w-5xl mx-auto px-5 lg:px-8 py-8 flex flex-col sm:flex-row items-center justify-between gap-5">
           <LogoFull size={22} />
           <nav className="flex items-center gap-5 text-xs font-semibold" style={{ color: 'var(--text-secondary, #999)' }}>
             <a href="/terminos-y-condiciones" className="hover:text-brand transition-colors">Términos</a>
