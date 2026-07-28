@@ -474,6 +474,10 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
   const [error, setError] = useState(null);
   const [faqOpen, setFaqOpen] = useState(null);
   const [scrolled, setScrolled] = useState(false);
+  // Cuánto del footer ya entró en pantalla: es lo que el botón flotante
+  // tiene que levantarse para no taparlo (ver el efecto de scroll).
+  const [topeFooter, setTopeFooter] = useState(0);
+  const footerRef = useRef(null);
 
   // Un solo listener para dos cosas que dependen del scroll: el fondo del
   // header sticky y la aparición del botón "volver arriba".
@@ -486,12 +490,27 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
   useEffect(() => {
     let pendiente = false;
     let ultimo = null;
+    let ultimoTope = null;
     const evaluar = () => {
       pendiente = false;
       const ahora = window.scrollY > 320;
       if (ahora !== ultimo) {
         ultimo = ahora;
         setScrolled(ahora);
+      }
+      // El botón flotante se apoya sobre el footer en vez de taparlo:
+      // mientras el footer no entró en pantalla su tope es el borde
+      // inferior del viewport (offset 0); cuando entra, se levanta lo
+      // mismo que el footer ya subió. Al volver a scrollear hacia arriba
+      // baja solo, porque el cálculo es la posición real del footer.
+      const f = footerRef.current;
+      if (f) {
+        const invadido = window.innerHeight - f.getBoundingClientRect().top;
+        const tope = Math.max(0, invadido);
+        if (tope !== ultimoTope) {
+          ultimoTope = tope;
+          setTopeFooter(tope);
+        }
       }
     };
     const onScroll = () => {
@@ -501,7 +520,11 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
     };
     evaluar();
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    window.addEventListener('resize', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
   }, []);
 
   // Navegación al panel SIN recargar la página: onIrAlPanel usa pushState +
@@ -801,7 +824,7 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
           así que el corte se lee como parte del lenguaje de la página y no
           como un divisor genérico. La línea queda, pero muy tenue, sólo para
           rematar el borde del degradado. */}
-      <footer className="relative z-10 mt-6 overflow-hidden"
+      <footer ref={footerRef} className="relative z-10 mt-6 overflow-hidden"
         style={{ borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.10)' }}>
         <div className="absolute inset-x-0 top-0 h-32 pointer-events-none"
           style={{ background: 'radial-gradient(ellipse 70% 100% at 50% 0%, rgb(var(--brand, 0 184 217) / 0.12), transparent)' }} />
@@ -851,8 +874,16 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
       <button
         onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
         aria-label="Volver arriba"
-        className={`lok-tap fixed bottom-5 right-5 z-40 w-11 h-11 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${scrolled ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-3 pointer-events-none'}`}
-        style={{ background: 'var(--brand-hex, #00B8D9)', color: '#fff' }}
+        className={`lok-tap fixed right-5 z-40 w-11 h-11 rounded-full flex items-center justify-center shadow-lg transition-opacity duration-300 ${scrolled ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        style={{
+          background: 'var(--brand-hex, #00B8D9)',
+          color: '#fff',
+          // 20px del borde inferior, más lo que el footer haya subido: así
+          // se apoya sobre el footer en vez de taparlo, y vuelve solo al
+          // borde cuando se scrollea hacia arriba. Sin transición en bottom
+          // (seguiría al scroll con retraso); la que queda es la de opacidad.
+          bottom: 20 + topeFooter,
+        }}
       >
         <ArrowUp className="w-5 h-5" strokeWidth={2.5} />
       </button>

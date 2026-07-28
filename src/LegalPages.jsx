@@ -1,6 +1,14 @@
-﻿import React, { useEffect } from 'react';
-import { ArrowLeft, Store, Shield, FileText, ShoppingBag } from 'lucide-react';
+﻿import React, { useEffect, useState } from 'react';
+import { ArrowLeft, Store, Shield, FileText, ShoppingBag, ChevronDown } from 'lucide-react';
 import { LogoFull, KtrlMark } from './Brand';
+
+// Mismo tratamiento de card que la landing (CARD_TINTED en LandingScreen):
+// una pizca de turquesa de marca en fondo y borde. Los tokens globales son
+// gris neutro a propósito (index.css §4) y acá dejaban las cards apagadas.
+const CARD_TINTED = {
+  background: 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.055), rgb(var(--brand, 0 184 217) / 0.015))',
+  borderColor: 'rgb(var(--brand, 0 184 217) / 0.14)',
+};
 
 // ─── LegalLayout — wrapper reutilizable para todas las páginas legales ────────
 // actualizado: la fecha estaba escrita a mano en el layout, así que las
@@ -54,9 +62,12 @@ function LegalLayout({ title, subtitle, icon: Icon, children, onBack, actualizad
         {actualizado && <p className="text-ink-dim text-xs mt-4">Última actualización: {actualizado}</p>}
       </div>
 
-      {/* Contenido — lok-selectable: es texto para leer y citar, así que
-          acá sí conviene poder seleccionarlo y copiarlo. */}
-      <div className="lok-selectable max-w-3xl mx-auto px-6 py-14 space-y-10">
+      {/* Contenido — space-y-3 en vez de space-y-10: ahora son cards de
+          acordeón pegadas entre sí como el FAQ, no bloques sueltos de texto
+          que necesitaban aire para separarse. La selección de texto se
+          habilita adentro de cada sección (ver Section), no acá: los
+          títulos son controles y no deberían seleccionarse al tocarlos. */}
+      <div className="max-w-3xl mx-auto px-6 py-12 space-y-3">
         {children}
       </div>
 
@@ -106,21 +117,58 @@ function LegalLayout({ title, subtitle, icon: Icon, children, onBack, actualizad
 let navigateLegal = () => {};
 
 // ─── Sección de contenido ─────────────────────────────────────────────────────
-function Section({ title, children }) {
+// Cada sección es un acordeón, igual que las preguntas frecuentes de la
+// landing: un documento legal es una lista de temas que se consultan de a
+// uno, no un texto que se lee de corrido. Colapsadas, los títulos funcionan
+// como índice y se ve la estructura completa de un vistazo, en vez de una
+// pared de texto de varias pantallas de alto.
+//
+// abiertaPorDefecto: la primera de cada documento arranca abierta, para que
+// no parezca que la página no cargó.
+function Section({ title, children, abiertaPorDefecto = false }) {
+  const [abierta, setAbierta] = useState(abiertaPorDefecto);
   return (
-    <section>
-      <h2 className="text-xl font-black mb-4 text-ink border-b border-slate-100 dark:border-white/8 pb-3">{title}</h2>
-      <div className="space-y-3 text-ink-dim text-sm leading-relaxed">
-        {children}
+    <section className="rounded-2xl border overflow-hidden" style={CARD_TINTED}>
+      <button
+        onClick={() => setAbierta((v) => !v)}
+        aria-expanded={abierta}
+        // rounded propio: sin él el fondo de :active del navegador se pinta
+        // recto y asoma fuera de las esquinas de la card (mismo detalle que
+        // ya se corrigió en el acordeón de la landing).
+        className="lok-tap w-full flex items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-brand/5 rounded-2xl"
+      >
+        <h2 className="text-base sm:text-lg font-black text-ink">{title}</h2>
+        <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${abierta ? 'rotate-180 text-brand' : 'text-ink-dim'}`} />
+      </button>
+      {/* grid-rows 0fr→1fr: anima el alto real sin medir con JS ni fijar un
+          max-height inventado. */}
+      <div className="grid transition-all duration-300 ease-out motion-reduce:transition-none"
+        style={{ gridTemplateRows: abierta ? '1fr' : '0fr' }}>
+        <div className="overflow-hidden">
+          <div className="lok-selectable px-5 pb-5 pt-4 space-y-3 text-ink-dim text-sm leading-relaxed"
+            style={{ borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.12)' }}>
+            {children}
+          </div>
+        </div>
       </div>
     </section>
   );
 }
 
+// Destacado — mismo recurso que la card de precio de la landing: glow desde
+// el borde superior sobre fondo teñido, en vez de un bloque plano. Es lo
+// primero que se lee de cada documento, así que conviene que se distinga de
+// las secciones colapsables sin gritar.
 function Highlight({ children }) {
   return (
-    <div className="bg-primary/8 border border-primary/20 rounded-2xl px-5 py-4 text-primary-light dark:text-primary text-sm leading-relaxed">
-      {children}
+    <div className="lok-selectable relative overflow-hidden rounded-2xl border px-5 py-4 text-sm leading-relaxed"
+      style={{
+        background: 'linear-gradient(165deg, rgb(var(--brand, 0 184 217) / 0.10), rgb(var(--brand, 0 184 217) / 0.025))',
+        borderColor: 'rgb(var(--brand, 0 184 217) / 0.20)',
+      }}>
+      <div className="absolute inset-x-0 top-0 h-20 pointer-events-none"
+        style={{ background: 'radial-gradient(ellipse 70% 100% at 50% 0%, rgb(var(--brand, 0 184 217) / 0.14), transparent)' }} />
+      <div className="relative text-ink">{children}</div>
     </div>
   );
 }
@@ -162,7 +210,7 @@ function TerminosPage({ onBack }) {
         <strong>Lo más importante primero:</strong> Lokal es una plataforma de intermediación digital. No somos vendedores, no intervenimos en las transacciones y no garantizamos resultados comerciales. Conectamos personas que buscan con comercios que venden — el resto lo resuelven entre ellos.
       </Highlight>
 
-      <Section title="1. Qué es Lokal">
+      <Section title="1. Qué es Lokal" abiertaPorDefecto>
         <p>
           Lokal es un servicio digital que te permite explorar el catálogo de comercios de comida locales y hacer tu pedido, ya sea a través de la plataforma o por WhatsApp con el comercio. Actuamos exclusivamente como intermediador: facilitamos el contacto pero no somos parte de ningún acuerdo comercial entre usuarios y comercios.
         </p>
@@ -260,7 +308,7 @@ function PrivacidadPage({ onBack }) {
         Lokal cumple con la Ley 25.326 de Protección de Datos Personales de la República Argentina. Nunca vendemos tus datos. Solo los usamos para que la plataforma funcione mejor para vos.
       </Highlight>
 
-      <Section title="1. Qué datos recolectamos">
+      <Section title="1. Qué datos recolectamos" abiertaPorDefecto>
         <p><strong className="text-ink">Datos de cuenta (vía Google):</strong> nombre, dirección de email y foto de perfil. No almacenamos contraseñas.</p>
         <p><strong className="text-ink">Datos de uso:</strong> pedidos que realizás, historial de interacciones dentro de la plataforma.</p>
         <p><strong className="text-ink">Datos técnicos:</strong> dirección IP, tipo de dispositivo y navegador, para seguridad y funcionamiento del servicio.</p>
@@ -362,7 +410,7 @@ function ComerciosPage({ onBack }) {
         Al registrar tu comercio en Lokal aceptás estas condiciones específicas, que complementan los Términos y Condiciones generales. El punto clave: vos sos responsable de lo que publicás y ofrecés.
       </Highlight>
 
-      <Section title="1. Tu rol en la plataforma">
+      <Section title="1. Tu rol en la plataforma" abiertaPorDefecto>
         <p>
           Como comercio registrado en Lokal, sos un participante independiente. Lokal te da visibilidad y te permite recibir pedidos de clientes, pero <strong className="text-ink">no somos tu empleador, franquiciante ni socio comercial</strong>. Las condiciones de cada venta o acuerdo son responsabilidad tuya.
         </p>
