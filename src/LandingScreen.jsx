@@ -9,15 +9,13 @@
 // link directo de una tienda (/:slug). El único que se registra es el
 // DUEÑO del negocio, así que todo apunta a "creá tu tienda".
 import React, { useState, useRef, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import {
   Loader2, AlertCircle, Sun, Moon, Check, ChevronDown, Store, Tag,
   MessageSquare, Share2, Instagram, BarChart3, Sparkles, ArrowUp,
-  ChevronLeft, ChevronRight, X,
+  ChevronLeft, ChevronRight, ArrowUpRight,
 } from 'lucide-react';
 import { signInWithGoogle, renderBotonGoogle, gisDisponible } from './firebase';
 import { LogoFull, KtrlMark } from './Brand';
-import TiendaPublica from './TiendaPublica';
 import { TIENDA_SLUG_FIJA } from './config/constants';
 import { API_BASE } from './config/flags';
 
@@ -312,17 +310,17 @@ const FAQ = [
 // deja ver la portada, el perfil y las primeras publicaciones sin ocupar
 // toda la pantalla. Expandida ocupa el viewport completo, con la tienda
 // entera scrolleable y todo interactivo.
-function TiendaPreview() {
-  const [expandida, setExpandida] = useState(false);
+function TiendaPreview({ onVer }) {
   const cajaRef = useRef(null);
   // Datos reales de la tienda de ejemplo para la card del hero: su portada,
   // su nombre y sus publicaciones con las fotos de verdad.
   //
-  // La card NO monta TiendaPublica recortada: ese componente está hecho para
-  // ocupar la pantalla (splash, scroll y header propios) y dentro de un
-  // contenedor de 340px no llega a dibujarse. Acá se leen los mismos datos y
-  // se arma la muestra; la tienda real, entera y navegable, se abre al tocar
-  // el botón.
+  // La card NO monta TiendaPublica: ese componente se dibuja con 100dvh y
+  // gestiona su propio scroll — está hecho para SER la página, no para
+  // anidarse. Recortado en un contenedor de 340px no llega a dibujarse, y
+  // dentro de un modal su contenido queda fuera de vista. Acá se leen los
+  // mismos datos y se arma la muestra; el botón lleva a la tienda de verdad,
+  // en su propia URL y con el "atrás" del navegador para volver.
   const [tienda, setTienda] = useState(null);
 
   useEffect(() => {
@@ -343,25 +341,7 @@ function TiendaPreview() {
     return () => { vivo = false; };
   }, []);
 
-  // Con la vista completa abierta se bloquea el scroll del fondo: si no, al
-  // llegar al final de la tienda sigue scrolleando la landing detrás.
-  useEffect(() => {
-    if (!expandida) return;
-    const previo = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = previo; };
-  }, [expandida]);
-
-  useEffect(() => {
-    if (!expandida) return;
-    const onKey = (e) => { if (e.key === 'Escape') setExpandida(false); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [expandida]);
-
   return (
-    <>
-      {/* ── Colapsada ── */}
       <div ref={cajaRef} className="relative rounded-3xl overflow-hidden border shadow-lg"
         style={{ borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)', background: 'rgb(var(--surface-dim, 245 245 245))' }}>
         {/* Muestra con los datos reales: portada, nombre y dos
@@ -413,53 +393,21 @@ function TiendaPreview() {
         <div className="absolute inset-x-0 bottom-0 h-28 pointer-events-none"
           style={{ background: 'linear-gradient(to top, rgb(var(--surface-dim, 245 245 245)) 32%, transparent)' }} />
 
+        {/* Lleva a la tienda de ejemplo real, en su propia URL. Es
+            navegación interna de la SPA (pushState, ver onVerEjemplo en
+            Root): no abre pestaña ni recarga la página, y el "atrás" del
+            navegador vuelve a la landing. */}
         <button
-          onClick={() => setExpandida(true)}
+          onClick={onVer}
           className="lok-tap absolute inset-x-0 bottom-0 pt-10 pb-4 flex items-end justify-center"
         >
           <span className="inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-full shadow-md"
             style={{ background: 'var(--brand-hex, #00B8D9)', color: '#fff' }}>
             Ver la tienda completa
-            <ChevronDown className="w-3.5 h-3.5" />
+            <ArrowUpRight className="w-3.5 h-3.5" />
           </span>
         </button>
       </div>
-
-      {/* ── Expandida: la tienda real, completa e interactiva ──
-          Va por portal al body: este componente vive dentro de un FadeUp,
-          que aplica transform, y un ancestro con transform hace que
-          position:fixed se ancle a él y no al viewport. */}
-      {expandida && createPortal(
-        <div className="fixed inset-0 z-[6000] flex flex-col"
-          style={{ background: 'rgb(var(--surface-dim, 245 245 245))' }}>
-          <div className="flex items-center justify-between gap-3 px-4 h-14 shrink-0 border-b"
-            style={{
-              background: 'var(--surface-solid, #fff)',
-              borderColor: 'rgb(var(--brand, 0 184 217) / 0.12)',
-            }}>
-            <span className="text-xs font-bold px-2.5 py-1 rounded-full"
-              style={{ background: 'rgb(var(--brand, 0 184 217) / 0.12)', color: 'var(--brand-hex, #00B8D9)' }}>
-              Ejemplo
-            </span>
-            <p className="text-sm font-black truncate">Así se ve tu tienda</p>
-            <button onClick={() => setExpandida(false)} aria-label="Cerrar ejemplo"
-              className="lok-tap ui-icon-btn hover:bg-surface-card-2 dark:hover:bg-white/8 text-ink-dim shrink-0">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto overscroll-contain">
-            {/* firebaseUser={null} explícito, NO omitido: TiendaPublica trata
-              undefined como "Firebase todavía no resolvió la sesión" y se
-              queda esperando sin pedir los datos nunca. Acá la tienda se
-              muestra siempre como visitante anónimo, así que null es el
-              valor correcto. */}
-          <TiendaPublica slug={TIENDA_SLUG_FIJA} firebaseUser={null} />
-          </div>
-        </div>,
-        document.body
-      )}
-    </>
   );
 }
 
@@ -585,7 +533,7 @@ function PasosCarrusel() {
   );
 }
 
-export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
+export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerEjemplo }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [faqOpen, setFaqOpen] = useState(null);
@@ -808,7 +756,7 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
               empujarlo fuera de pantalla y sin ocupar todo el alto como el
               teléfono de 248px que había antes. */}
           <FadeUp delay={200}>
-            <TiendaPreview />
+            <TiendaPreview onVer={onVerEjemplo} />
           </FadeUp>
         </div>
       </section>

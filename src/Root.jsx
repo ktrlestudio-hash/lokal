@@ -24,6 +24,7 @@ const RegistroTienda = lazy(() => import('./RegistroTienda'));
 const AdminPanel     = lazy(() => import('./AdminPanel'));
 import { apiFetch } from './api.js';
 import { ADMIN_EMAILS } from './config/flags';
+import { TIENDA_SLUG_FIJA } from './config/constants';
 import { SplashScreenFull, InlineLoader } from './LokalLoader.jsx';
 
 const API_BASE = '/.netlify/functions';
@@ -418,6 +419,11 @@ export default function Root() {
         // landing al login no debe recargar la página entera (pantalla en
         // blanco + splash de nuevo). Mismo mecanismo que el resto de la app.
         onIrAlPanel={() => { window.history.pushState({}, '', '/admin'); forceUrlRecheck(); }}
+        // "Ver la tienda completa": misma navegación interna, a la tienda de
+        // ejemplo real. No abre pestaña ni recarga — cambia la URL y Root
+        // renderiza TiendaPublica, que es cómo se ve de verdad. El "atrás"
+        // del navegador vuelve a la landing.
+        onVerEjemplo={() => { window.history.pushState({}, '', `/${TIENDA_SLUG_FIJA}`); forceUrlRecheck(); }}
       />
     );
   }
