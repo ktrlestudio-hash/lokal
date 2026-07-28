@@ -54,8 +54,11 @@ export default function AdminLogin({ isDark, toggleTheme, onVolver }) {
     }
   };
 
+  // Columna, no centrado absoluto: así el footer se ancla abajo del viewport
+  // (footer real, no un pie pegado a la card) y la card queda centrada en el
+  // espacio que sobra.
   return (
-    <div className="lok-app-surface relative min-h-screen flex items-center justify-center px-6 overflow-hidden" style={{ background: isDark ? '#040a14' : 'var(--surface-solid, #fff)' }}>
+    <div className="lok-app-surface relative min-h-screen flex flex-col px-6 overflow-hidden" style={{ background: isDark ? '#040a14' : 'var(--surface-solid, #fff)' }}>
       {/* Ambiente de luz de marca — mismo lenguaje que el splash de carga
           (AdminLoader): glow radial superior que pulsa + reflejo inferior
           tenue. Usa el color de marca (--brand) en vez del turquesa fijo del
@@ -73,7 +76,10 @@ export default function AdminLogin({ isDark, toggleTheme, onVolver }) {
         background: 'radial-gradient(ellipse 60% 50% at 50% 100%, rgb(var(--brand, 0 184 217) / 0.06), transparent)',
       }} />
 
-      <div className="relative w-full max-w-sm">
+      {/* flex-1 + centrado: la card se centra en el alto que queda libre
+          entre el borde superior y el footer anclado abajo. */}
+      <div className="relative flex-1 w-full flex items-center justify-center">
+      <div className="w-full max-w-sm">
         {/* Mismo tratamiento que las cards de la landing (CARD_TINTED en
             LandingScreen.jsx): una pizca de turquesa de marca en el fondo y
             en el borde, en vez de gris neutro. Los tokens globales son
@@ -183,17 +189,33 @@ export default function AdminLogin({ isDark, toggleTheme, onVolver }) {
           </p>
         </div>
 
-        {/* Footer — solo créditos KTRL, centrado (toggle de tema se movió
-            a la esquina de la card, logo LOKAL y link "¿Tenés un negocio?"
-            sacados por redundantes/no aplicables acá). */}
+        {/* KTRL queda pegado a la card, no en el footer: es la firma de
+            autoría del producto, y acá el "producto" es la card de acceso.
+            En el footer de abajo van los legales, que son del sitio. */}
         <div className="mt-6 flex items-center justify-center">
           <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-ink-dim/50 hover:text-ink-dim/80 transition-colors">
+            className="lok-tap inline-flex items-center gap-1.5 text-ink-dim/50 hover:text-ink-dim/80 transition-colors">
             <span className="text-[10px] font-semibold">Creado por</span>
             <KtrlMark style={{ height: 11, color: 'currentColor' }} />
           </a>
         </div>
       </div>
+      </div>
+
+      {/* Footer real, anclado abajo del viewport — sin logos (el de LOKAL ya
+          está en la card y el de KTRL justo arriba), sólo las dos filas que
+          faltaban: legales y copyright. Los legales tienen que estar a mano
+          porque al entrar se aceptan los términos. */}
+      <footer className="relative z-10 shrink-0 py-6 flex flex-col items-center gap-2">
+        <nav className="flex items-center gap-4 text-[11px] font-semibold" style={{ color: 'var(--text-secondary, #999)' }}>
+          <a href="/terminos-y-condiciones" className="lok-tap hover:text-brand transition-colors">Términos</a>
+          <a href="/politica-de-privacidad" className="lok-tap hover:text-brand transition-colors">Privacidad</a>
+          <a href="/condiciones-para-comercios" className="lok-tap hover:text-brand transition-colors">Comercios</a>
+        </nav>
+        <p className="text-[10px]" style={{ color: 'var(--text-secondary, #999)' }}>
+          © {new Date().getFullYear()} LOKAL. Todos los derechos reservados.
+        </p>
+      </footer>
     </div>
   );
 }

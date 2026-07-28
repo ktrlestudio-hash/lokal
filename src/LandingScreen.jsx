@@ -805,18 +805,44 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
         style={{ borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.10)' }}>
         <div className="absolute inset-x-0 top-0 h-32 pointer-events-none"
           style={{ background: 'radial-gradient(ellipse 70% 100% at 50% 0%, rgb(var(--brand, 0 184 217) / 0.12), transparent)' }} />
-        <div className="relative max-w-5xl mx-auto px-5 lg:px-8 py-8 flex flex-col sm:flex-row items-center justify-between gap-5">
-          <LogoFull size={22} />
-          <nav className="flex items-center gap-5 text-xs font-semibold" style={{ color: 'var(--text-secondary, #999)' }}>
-            <a href="/terminos-y-condiciones" className="hover:text-brand transition-colors">Términos</a>
-            <a href="/politica-de-privacidad" className="hover:text-brand transition-colors">Privacidad</a>
-            <a href="/condiciones-para-comercios" className="hover:text-brand transition-colors">Comercios</a>
-          </nav>
-          <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-ink-dim/50 hover:text-ink-dim/80 transition-colors">
-            <span className="text-[10px] font-semibold">Creado por</span>
-            <KtrlMark style={{ height: 11, color: 'currentColor' }} />
-          </a>
+        {/* Mobile: tres filas centradas — (1) los dos logos enfrentados como
+            en el footer de tienda, (2) el copyright, (3) los legales.
+            Desktop: esas mismas tres piezas en una fila, con los legales al
+            centro y cada logo en su extremo.
+
+            El grid de 3 columnas (1fr auto 1fr) en vez de space-between hace
+            que los legales queden centrados respecto al footer entero, sin
+            depender de que ambos logos midan lo mismo — el mismo criterio
+            que el footer de tienda. */}
+        <div className="relative max-w-5xl mx-auto px-5 lg:px-8 py-8">
+          {/* Fila 1 (mobile) / columnas laterales (desktop) */}
+          <div className="grid grid-cols-2 sm:grid-cols-[1fr_auto_1fr] items-center gap-y-5 gap-x-4">
+            <div className="justify-self-start">
+              <LogoFull size={22} />
+            </div>
+
+            {/* Legales — fila 3 en mobile (order-last + col-span-2), columna
+                central en desktop. */}
+            <nav className="order-last col-span-2 sm:order-none sm:col-span-1 flex items-center justify-center gap-5 text-xs font-semibold"
+              style={{ color: 'var(--text-secondary, #999)' }}>
+              <a href="/terminos-y-condiciones" className="lok-tap hover:text-brand transition-colors">Términos</a>
+              <a href="/politica-de-privacidad" className="lok-tap hover:text-brand transition-colors">Privacidad</a>
+              <a href="/condiciones-para-comercios" className="lok-tap hover:text-brand transition-colors">Comercios</a>
+            </nav>
+
+            <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
+              className="lok-tap justify-self-end inline-flex items-center gap-1.5 text-ink-dim/50 hover:text-ink-dim/80 transition-colors">
+              <span className="text-[10px] font-semibold">Creado por</span>
+              <KtrlMark style={{ height: 11, color: 'currentColor' }} />
+            </a>
+
+            {/* Copyright — fila 2 en mobile (entre logos y legales); en
+                desktop se corre abajo, centrado bajo las tres columnas. */}
+            <p className="col-span-2 sm:col-span-3 text-center text-[10px] order-1 sm:order-none"
+              style={{ color: 'var(--text-secondary, #999)' }}>
+              © {new Date().getFullYear()} LOKAL. Todos los derechos reservados.
+            </p>
+          </div>
         </div>
       </footer>
 

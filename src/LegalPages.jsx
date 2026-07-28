@@ -60,34 +60,42 @@ function LegalLayout({ title, subtitle, icon: Icon, children, onBack, actualizad
         {children}
       </div>
 
-      {/* Footer — mismo que el de la landing (logo · links · firma en una
-          fila), con el copyright sumado. Antes era una pila centrada con el
-          copyright arriba, la firma en el medio y los links al final, sin
-          jerarquía clara y sin parecerse al resto del sitio. */}
+      {/* Footer — idéntico al de la landing. Mobile: tres filas centradas
+          (los dos logos enfrentados como en el footer de tienda, el
+          copyright, y los legales). Desktop: las mismas piezas en una fila,
+          legales al centro y cada logo en su extremo. El grid 1fr auto 1fr
+          centra los legales respecto al footer entero sin depender de que
+          ambos logos midan lo mismo. */}
       <footer className="relative overflow-hidden"
         style={{ borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.10)' }}>
-        {/* Mismo glow superior que el footer de la landing: separa mejor que
-            una línea sola y usa el recurso que ya define el lenguaje de la
-            página (ver la card de precio). */}
+        {/* Glow superior: separa mejor que una línea sola y usa el recurso
+            que ya define el lenguaje de la página (ver la card de precio). */}
         <div className="absolute inset-x-0 top-0 h-32 pointer-events-none"
           style={{ background: 'radial-gradient(ellipse 70% 100% at 50% 0%, rgb(var(--brand, 0 184 217) / 0.12), transparent)' }} />
-        <div className="relative max-w-5xl mx-auto px-5 lg:px-8 py-8 flex flex-col sm:flex-row items-center justify-between gap-5">
-          <div className="flex flex-col items-center sm:items-start gap-1.5">
-            <LogoFull size={22} />
-            <p className="text-[10px]" style={{ color: 'var(--text-secondary, #999)' }}>
+        <div className="relative max-w-5xl mx-auto px-5 lg:px-8 py-8">
+          <div className="grid grid-cols-2 sm:grid-cols-[1fr_auto_1fr] items-center gap-y-5 gap-x-4">
+            <div className="justify-self-start">
+              <LogoFull size={22} />
+            </div>
+
+            <nav className="order-last col-span-2 sm:order-none sm:col-span-1 flex items-center justify-center gap-5 text-xs font-semibold"
+              style={{ color: 'var(--text-secondary, #999)' }}>
+              <button onClick={() => navigateLegal('terminos')} className="lok-tap hover:text-brand transition-colors">Términos</button>
+              <button onClick={() => navigateLegal('privacidad')} className="lok-tap hover:text-brand transition-colors">Privacidad</button>
+              <button onClick={() => navigateLegal('comercios')} className="lok-tap hover:text-brand transition-colors">Comercios</button>
+            </nav>
+
+            <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
+              className="lok-tap justify-self-end inline-flex items-center gap-1.5 text-ink-dim/50 hover:text-ink-dim/80 transition-colors">
+              <span className="text-[10px] font-semibold">Creado por</span>
+              <KtrlMark style={{ height: 11, color: 'currentColor' }} />
+            </a>
+
+            <p className="col-span-2 sm:col-span-3 text-center text-[10px] order-1 sm:order-none"
+              style={{ color: 'var(--text-secondary, #999)' }}>
               © {new Date().getFullYear()} LOKAL. Todos los derechos reservados.
             </p>
           </div>
-          <nav className="flex items-center gap-5 text-xs font-semibold" style={{ color: 'var(--text-secondary, #999)' }}>
-            <button onClick={() => navigateLegal('terminos')} className="lok-tap hover:text-brand transition-colors">Términos</button>
-            <button onClick={() => navigateLegal('privacidad')} className="lok-tap hover:text-brand transition-colors">Privacidad</button>
-            <button onClick={() => navigateLegal('comercios')} className="lok-tap hover:text-brand transition-colors">Comercios</button>
-          </nav>
-          <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
-            className="lok-tap inline-flex items-center gap-1.5 text-ink-dim/50 hover:text-ink-dim/80 transition-colors">
-            <span className="text-[10px] font-semibold">Creado por</span>
-            <KtrlMark style={{ height: 11, color: 'currentColor' }} />
-          </a>
         </div>
       </footer>
     </div>
