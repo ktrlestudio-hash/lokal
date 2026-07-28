@@ -169,14 +169,41 @@ function Section({ title, children, abiertaPorDefecto = false }) {
         <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${abierta ? 'rotate-180 text-brand' : 'text-ink-dim'}`} />
       </button>
       {/* grid-rows 0fr→1fr: anima el alto real sin medir con JS ni fijar un
-          max-height inventado. */}
-      <div className="grid transition-all duration-300 ease-out motion-reduce:transition-none"
+          max-height inventado.
+
+          transition SÓLO en grid-template-rows, no transition-all: con "all"
+          el navegador vigila todas las propiedades de una caja que además
+          recorta con overflow-hidden, y termina recomponiendo el bloque
+          entero en cada frame del scroll — de ahí el texto fantasma. Se nota
+          sobre todo en la sección 1, que arranca abierta y es la más larga.
+
+          contain:paint aísla el repintado a esta caja: lo de adentro no
+          puede pintar fuera, así que el navegador no necesita reevaluar el
+          resto del documento cuando esto cambia. */}
+      <div className="grid motion-reduce:transition-none"
         onTransitionEnd={() => setAnimando(false)}
         style={{
           gridTemplateRows: abierta ? '1fr' : '0fr',
+          transition: 'grid-template-rows 300ms ease-out',
           willChange: animando ? 'grid-template-rows' : 'auto',
+          contain: 'paint',
         }}>
-        <div className="overflow-hidden" style={{ transform: 'translateZ(0)' }}>
+        {/* visibility:hidden al cerrar — el fantasma aparecía justamente con
+            la sección COLAPSADA y se iba al abrirla: con grid-rows en 0fr el
+            contenido mide cero pero sigue siendo visible para el motor de
+            pintado, así que Chrome lo seguía dibujando y lo arrastraba al
+            scrollear. visibility lo saca del pintado sin sacarlo del layout,
+            así que la animación de alto sigue funcionando igual.
+
+            El delay al abrir es 0 (tiene que verse mientras crece) y al
+            cerrar espera los 300ms de la animación, para no cortar el texto
+            de golpe apenas se toca. */}
+        <div className="overflow-hidden"
+          style={{
+            transform: 'translateZ(0)',
+            visibility: abierta ? 'visible' : 'hidden',
+            transition: abierta ? 'visibility 0s' : 'visibility 0s linear 300ms',
+          }}>
           <div className="lok-selectable px-5 pb-5 pt-4 space-y-3 text-ink-dim text-sm leading-relaxed"
             style={{ borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.12)' }}>
             {children}

@@ -753,10 +753,26 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
                     <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${abierto ? 'rotate-180 text-brand' : 'text-ink-dim'}`} />
                   </button>
                   {/* grid-rows 0fr→1fr: transición de alto real sin medir el
-                      contenido con JS ni fijar un max-height inventado. */}
-                  <div className="grid transition-all duration-300 ease-out motion-reduce:transition-none"
-                    style={{ gridTemplateRows: abierto ? '1fr' : '0fr' }}>
-                    <div className="overflow-hidden">
+                      contenido con JS ni fijar un max-height inventado.
+
+                      Mismo tratamiento que las secciones de LegalPages: la
+                      transición va SÓLO en grid-template-rows (con "all" el
+                      navegador vigila toda la caja, que además recorta) y el
+                      contenido pasa a visibility:hidden al cerrar. Con
+                      grid-rows en 0fr el texto mide cero pero el motor de
+                      pintado lo sigue dibujando, y al scrollear lo arrastra
+                      como texto fantasma. */}
+                  <div className="grid motion-reduce:transition-none"
+                    style={{
+                      gridTemplateRows: abierto ? '1fr' : '0fr',
+                      transition: 'grid-template-rows 300ms ease-out',
+                      contain: 'paint',
+                    }}>
+                    <div className="overflow-hidden"
+                      style={{
+                        visibility: abierto ? 'visible' : 'hidden',
+                        transition: abierto ? 'visibility 0s' : 'visibility 0s linear 300ms',
+                      }}>
                       <p className="px-5 pb-4 text-sm leading-relaxed pt-4"
                         style={{ color: 'var(--text-secondary, #999)', borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.12)' }}>
                         {item.a}
