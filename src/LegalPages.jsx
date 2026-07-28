@@ -3,57 +3,77 @@ import { ArrowLeft, Store, Shield, FileText, ShoppingBag } from 'lucide-react';
 import { LogoFull, KtrlMark } from './Brand';
 
 // ─── LegalLayout — wrapper reutilizable para todas las páginas legales ────────
-function LegalLayout({ title, subtitle, icon: Icon, iconBg, children, onBack }) {
+// actualizado: la fecha estaba escrita a mano en el layout, así que las
+// tres páginas decían lo mismo aunque se editara sólo una. Ahora la declara
+// cada documento; si no la pasa, no se muestra la línea.
+function LegalLayout({ title, subtitle, icon: Icon, children, onBack, actualizado }) {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
+  // lok-app-surface: mismo tratamiento táctil que landing y login (sin
+  // selección de texto ni menú contextual en los controles); el texto legal
+  // sí se puede seleccionar, ver .lok-selectable más abajo.
+  //
+  // El fondo va por token y no con la clase sa-page-bg: esa vive dentro de
+  // un <style> de StoreApp.jsx, que no se monta en estas páginas — el fondo
+  // quedaba oscuro en modo claro y el título salía negro sobre negro.
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white">
+    <div className="lok-app-surface min-h-screen text-ink"
+      style={{ background: 'rgb(var(--surface-dim, 245 245 245))' }}>
       {/* Navbar */}
-      <nav className="sticky top-0 z-50 flex items-center justify-between px-6 py-4 bg-[#0a0a0a]/90 backdrop-blur border-b border-white/5">
+      <nav className="sticky top-0 z-50 flex items-center justify-between px-6 py-4 bg-surface-card/85 backdrop-blur border-b border-slate-100 dark:border-white/8">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 text-ink-dim hover:text-white transition-colors text-sm font-medium"
+          className="lok-tap flex items-center gap-2 text-ink-dim hover:text-brand transition-colors text-sm font-medium"
         >
           <ArrowLeft className="w-4 h-4" />
           Volver
         </button>
-        <LogoFull size={20} light />
+        <LogoFull size={20} />
         <div className="w-16" /> {/* spacer */}
       </nav>
 
       {/* Hero del documento */}
-      <div className="border-b border-white/5 px-6 py-14 text-center bg-[radial-gradient(ellipse_60%_40%_at_50%_0%,rgba(0,184,217,0.08),transparent)]">
-        <div className={`w-14 h-14 ${iconBg || 'bg-brand/20'} rounded-2xl flex items-center justify-center mx-auto mb-5`}>
-          {Icon && <Icon className="w-7 h-7 text-brand" />}
+      <div className="border-b border-slate-100 dark:border-white/8 px-6 py-14 text-center"
+        style={{ background: 'radial-gradient(ellipse 60% 40% at 50% 0%, rgb(var(--brand, 0 184 217) / 0.09), transparent)' }}>
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5"
+          style={{ background: 'rgb(var(--brand, 0 184 217) / 0.14)' }}>
+          {Icon && <Icon className="w-7 h-7" style={{ color: 'var(--brand-hex, #00B8D9)' }} />}
         </div>
         <h1 className="text-3xl sm:text-4xl font-black mb-3">{title}</h1>
         {subtitle && <p className="text-ink-dim text-base max-w-xl mx-auto">{subtitle}</p>}
-        <p className="text-ink-dim text-xs mt-4">Última actualización: abril 2026</p>
+        {actualizado && <p className="text-ink-dim text-xs mt-4">Última actualización: {actualizado}</p>}
       </div>
 
-      {/* Contenido */}
-      <div className="max-w-3xl mx-auto px-6 py-14 space-y-10">
+      {/* Contenido — lok-selectable: es texto para leer y citar, así que
+          acá sí conviene poder seleccionarlo y copiarlo. */}
+      <div className="lok-selectable max-w-3xl mx-auto px-6 py-14 space-y-10">
         {children}
       </div>
 
-      {/* Footer legal */}
-      <footer className="border-t border-white/5 px-6 py-8 text-center">
-        <div className="flex items-center justify-center mb-3">
-          <LogoFull size={18} light />
-        </div>
-        <p className="text-ink-dim text-xs mb-2">© 2026 Lokal. Todos los derechos reservados.</p>
-        <div className="flex items-center justify-center gap-1.5 mt-3 opacity-30">
-          <span className="text-[10px] text-ink-dim">por</span>
-          <KtrlMark className="h-2.5 text-ink-dim" />
-        </div>
-        <div className="flex items-center justify-center gap-4 text-xs text-ink-dim">
-          <button onClick={() => navigateLegal('terminos')} className="hover:text-ink-dim transition-colors">Términos</button>
-          <span>·</span>
-          <button onClick={() => navigateLegal('privacidad')} className="hover:text-ink-dim transition-colors">Privacidad</button>
-          <span>·</span>
-          <button onClick={() => navigateLegal('comercios')} className="hover:text-ink-dim transition-colors">Para comercios</button>
+      {/* Footer — mismo que el de la landing (logo · links · firma en una
+          fila), con el copyright sumado. Antes era una pila centrada con el
+          copyright arriba, la firma en el medio y los links al final, sin
+          jerarquía clara y sin parecerse al resto del sitio. */}
+      <footer style={{ borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.12)' }}>
+        <div className="max-w-5xl mx-auto px-5 lg:px-8 py-8 flex flex-col sm:flex-row items-center justify-between gap-5">
+          <div className="flex flex-col items-center sm:items-start gap-1.5">
+            <LogoFull size={22} />
+            <p className="text-[10px]" style={{ color: 'var(--text-secondary, #999)' }}>
+              © {new Date().getFullYear()} LOKAL. Todos los derechos reservados.
+            </p>
+          </div>
+          <nav className="flex items-center gap-5 text-xs font-semibold" style={{ color: 'var(--text-secondary, #999)' }}>
+            <button onClick={() => navigateLegal('terminos')} className="lok-tap hover:text-brand transition-colors">Términos</button>
+            <button onClick={() => navigateLegal('privacidad')} className="lok-tap hover:text-brand transition-colors">Privacidad</button>
+            <button onClick={() => navigateLegal('comercios')} className="lok-tap hover:text-brand transition-colors">Comercios</button>
+          </nav>
+          <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
+            className="lok-tap inline-flex items-center gap-1.5 text-ink-dim/50 hover:text-ink-dim/80 transition-colors">
+            <span className="text-[10px] font-semibold">Creado por</span>
+            <KtrlMark style={{ height: 11, color: 'currentColor' }} />
+          </a>
         </div>
       </footer>
     </div>
@@ -67,7 +87,7 @@ let navigateLegal = () => {};
 function Section({ title, children }) {
   return (
     <section>
-      <h2 className="text-xl font-black mb-4 text-white border-b border-white/8 pb-3">{title}</h2>
+      <h2 className="text-xl font-black mb-4 text-ink border-b border-slate-100 dark:border-white/8 pb-3">{title}</h2>
       <div className="space-y-3 text-ink-dim text-sm leading-relaxed">
         {children}
       </div>
@@ -113,6 +133,7 @@ function TerminosPage({ onBack }) {
       title="Términos y Condiciones"
       subtitle="Lo que necesitás saber antes de usar Lokal. Sin letra chica."
       icon={FileText}
+      actualizado="abril 2026"
       onBack={onBack}
     >
       <Highlight>
@@ -138,8 +159,8 @@ function TerminosPage({ onBack }) {
       </Section>
 
       <Section title="3. Qué podés hacer en Lokal">
-        <p><strong className="text-white">Como usuario:</strong> explorar el catálogo de comercios, armar tu pedido, consultar el historial de tus pedidos anteriores y comunicarte con comercios a través de la plataforma.</p>
-        <p><strong className="text-white">Como comercio:</strong> recibir pedidos de clientes, gestionar tu catálogo y perfil público, y medir tu alcance mediante estadísticas básicas.</p>
+        <p><strong className="text-ink">Como usuario:</strong> explorar el catálogo de comercios, armar tu pedido, consultar el historial de tus pedidos anteriores y comunicarte con comercios a través de la plataforma.</p>
+        <p><strong className="text-ink">Como comercio:</strong> recibir pedidos de clientes, gestionar tu catálogo y perfil público, y medir tu alcance mediante estadísticas básicas.</p>
       </Section>
 
       <Section title="4. Lo que está prohibido">
@@ -194,7 +215,7 @@ function TerminosPage({ onBack }) {
           Estos términos se rigen por las leyes de la República Argentina. Para cualquier disputa, las partes se someten a la jurisdicción de los tribunales ordinarios competentes.
         </p>
         <p>
-          Si tenés dudas o consultas, escribinos a <strong className="text-white">hola@lokal.com.ar</strong>.
+          Si tenés dudas o consultas, escribinos a <strong className="text-ink">hola@lokal.com.ar</strong>.
         </p>
       </Section>
     </LegalLayout>
@@ -210,6 +231,7 @@ function PrivacidadPage({ onBack }) {
       title="Política de Privacidad"
       subtitle="Tus datos son tuyos. Te explicamos qué usamos y para qué."
       icon={Shield}
+      actualizado="abril 2026"
       onBack={onBack}
     >
       <Highlight>
@@ -217,12 +239,12 @@ function PrivacidadPage({ onBack }) {
       </Highlight>
 
       <Section title="1. Qué datos recolectamos">
-        <p><strong className="text-white">Datos de cuenta (vía Google):</strong> nombre, dirección de email y foto de perfil. No almacenamos contraseñas.</p>
-        <p><strong className="text-white">Datos de uso:</strong> pedidos que realizás, historial de interacciones dentro de la plataforma.</p>
-        <p><strong className="text-white">Datos técnicos:</strong> dirección IP, tipo de dispositivo y navegador, para seguridad y funcionamiento del servicio.</p>
-        <p><strong className="text-white">Preferencias locales:</strong> guardamos en tu dispositivo datos como tema visual, vista elegida del mapa y ubicaciones guardadas para mejorar tu experiencia. Esa información no se comparte automáticamente con terceros.</p>
-        <p><strong className="text-white">Ubicación:</strong> si usás funciones de mapa o geolocalización, pedimos permiso al navegador y usamos esa información para mostrarte comercios o resultados cercanos.</p>
-        <p><strong className="text-white">Imágenes y archivos:</strong> fotos o videos que subís voluntariamente a tu perfil o pedidos.</p>
+        <p><strong className="text-ink">Datos de cuenta (vía Google):</strong> nombre, dirección de email y foto de perfil. No almacenamos contraseñas.</p>
+        <p><strong className="text-ink">Datos de uso:</strong> pedidos que realizás, historial de interacciones dentro de la plataforma.</p>
+        <p><strong className="text-ink">Datos técnicos:</strong> dirección IP, tipo de dispositivo y navegador, para seguridad y funcionamiento del servicio.</p>
+        <p><strong className="text-ink">Preferencias locales:</strong> guardamos en tu dispositivo datos como tema visual, vista elegida del mapa y ubicaciones guardadas para mejorar tu experiencia. Esa información no se comparte automáticamente con terceros.</p>
+        <p><strong className="text-ink">Ubicación:</strong> si usás funciones de mapa o geolocalización, pedimos permiso al navegador y usamos esa información para mostrarte comercios o resultados cercanos.</p>
+        <p><strong className="text-ink">Imágenes y archivos:</strong> fotos o videos que subís voluntariamente a tu perfil o pedidos.</p>
       </Section>
 
       <Section title="2. Para qué usamos tus datos">
@@ -234,7 +256,7 @@ function PrivacidadPage({ onBack }) {
           'Detectar y prevenir usos fraudulentos o abusivos.',
         ]} />
         <p className="mt-3">
-          <strong className="text-white">No usamos tus datos para:</strong> publicidad de terceros, venta a otras empresas, ni perfilado comercial.
+          <strong className="text-ink">No usamos tus datos para:</strong> publicidad de terceros, venta a otras empresas, ni perfilado comercial.
         </p>
       </Section>
 
@@ -258,10 +280,10 @@ function PrivacidadPage({ onBack }) {
           'Oponerte al tratamiento de tus datos en ciertos casos.',
         ]} />
         <p className="mt-3">
-          Para ejercer cualquiera de estos derechos, escribinos a <strong className="text-white">hola@lokal.com.ar</strong> con el asunto "Datos personales". Respondemos en un plazo máximo de 10 días hábiles.
+          Para ejercer cualquiera de estos derechos, escribinos a <strong className="text-ink">hola@lokal.com.ar</strong> con el asunto "Datos personales". Respondemos en un plazo máximo de 10 días hábiles.
         </p>
         <p>
-          El organismo de control en Argentina es la <strong className="text-white">Agencia de Acceso a la Información Pública (AAIP)</strong>, ante quien podés presentar una denuncia si considerás que tus derechos no fueron respetados.
+          El organismo de control en Argentina es la <strong className="text-ink">Agencia de Acceso a la Información Pública (AAIP)</strong>, ante quien podés presentar una denuncia si considerás que tus derechos no fueron respetados.
         </p>
       </Section>
 
@@ -291,8 +313,8 @@ function PrivacidadPage({ onBack }) {
 
       <Section title="8. Contacto">
         <p>
-          Responsable del tratamiento de datos: <strong className="text-white">Lokal</strong><br />
-          Correo de contacto: <strong className="text-white">hola@lokal.com.ar</strong>
+          Responsable del tratamiento de datos: <strong className="text-ink">Lokal</strong><br />
+          Correo de contacto: <strong className="text-ink">hola@lokal.com.ar</strong>
         </p>
         <p>
           Si operás pagos con una integración activa, Mercado Pago actúa como proveedor independiente de servicios de pago y procesa los datos estrictamente necesarios para cobrar la suscripción correspondiente.
@@ -311,7 +333,7 @@ function ComerciosPage({ onBack }) {
       title="Condiciones para Comercios"
       subtitle="Todo lo que necesitás saber como tienda registrada en Lokal."
       icon={ShoppingBag}
-      iconBg="bg-violet-500/20"
+      actualizado="abril 2026"
       onBack={onBack}
     >
       <Highlight>
@@ -320,7 +342,7 @@ function ComerciosPage({ onBack }) {
 
       <Section title="1. Tu rol en la plataforma">
         <p>
-          Como comercio registrado en Lokal, sos un participante independiente. Lokal te da visibilidad y te permite recibir pedidos de clientes, pero <strong className="text-white">no somos tu empleador, franquiciante ni socio comercial</strong>. Las condiciones de cada venta o acuerdo son responsabilidad tuya.
+          Como comercio registrado en Lokal, sos un participante independiente. Lokal te da visibilidad y te permite recibir pedidos de clientes, pero <strong className="text-ink">no somos tu empleador, franquiciante ni socio comercial</strong>. Las condiciones de cada venta o acuerdo son responsabilidad tuya.
         </p>
         <Warning>
           Lokal no garantiza ventas, clientes o conversiones. La plataforma es una herramienta de contacto — los resultados dependen de la propuesta de valor de tu negocio.
@@ -405,7 +427,7 @@ function ComerciosPage({ onBack }) {
           Esta sección complementa los Términos y Condiciones generales. En caso de contradicción, prevalece la interpretación más protectora para los usuarios finales y la plataforma.
         </p>
         <p>
-          Consultas o reclamos de comercios: <strong className="text-white">tiendas@lokal.com.ar</strong>
+          Consultas o reclamos de comercios: <strong className="text-ink">tiendas@lokal.com.ar</strong>
         </p>
       </Section>
     </LegalLayout>
