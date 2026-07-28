@@ -88,35 +88,40 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
   const wa = (tienda.whatsapp || '').replace(/\D/g, '');
   const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
 
-  // Navegación entre ofertas hermanas — MISMO mecanismo que el carrusel de
-  // fotos del hero de tienda (commerce-modern.jsx, .cm-hero-photo): TODAS
-  // las fotos montadas apiladas en la misma posición, y solo cambia
-  // `opacity` con un `transition: opacity .4s ease`. Nada de mover un track
-  // ni de recalcular layout: la opacidad es una propiedad compositable, el
-  // navegador la resuelve en GPU sin reflow, por eso ese carrusel se siente
-  // fluido y no parpadea. Un intento previo con track deslizante daba
-  // exactamente los problemas contrarios (fotos vecinas pegadas al borde,
-  // parpadeo al soltar por el remount de React al cambiar de oferta).
+  // Carrusel deslizante entre ofertas hermanas — MISMO patrón que el
+  // .nov-track de DISTRIBUIDORA QR 2.0 (referencia de diseño del
+  // ecosistema, public/index.html):
   //
-  // El swipe solo DECIDE a qué foto ir (como las flechas del hero), no
-  // arrastra nada. touchStartRef guarda el punto de origen; swipeAxisRef
-  // fija el eje DOMINANTE recién en el primer movimiento con desplazamiento
-  // apreciable (>8px) — si el primer gesto real es más vertical que
-  // horizontal, se cede el control al scroll nativo del navegador para el
-  // resto del gesto (mismo criterio que el touchmove de mvsupermercado).
+  //   .nov-track { display:flex; transition: transform .35s cubic-bezier(.4,0,.2,1); touch-action:pan-y }
+  //   .nov-slide { min-width:100% }
+  //   track.style.transform = 'translateX(-' + (idx*100) + '%)'
+  //
+  // La clave está en que el track NO lleva width propio: se estira solo por
+  // el flex y cada slide vale min-width:100% del contenedor, así el
+  // translateX en % se resuelve limpio (un intento previo con width:300%
+  // rompía justamente eso — el % del transform se calcula contra el ancho
+  // del PROPIO elemento, así que movía 3 slots de más y las fotos
+  // desaparecían de pantalla).
+  //
+  // Acá se suma el arrastre en vivo: mientras el dedo se mueve, el track lo
+  // sigue en px (sin transition), y al soltar vuelve la transition para que
+  // termine el recorrido — las fotos vecinas se ven entrando/saliendo de
+  // verdad, no un fundido.
   const touchStartRef = useRef(null);
   const swipeAxisRef = useRef(null);
+  const pistaRef = useRef(null);
+  const [arrastreX, setArrastreX] = useState(0);   // px que el dedo lleva movidos
+  const [arrastrando, setArrastrando] = useState(false); // sin transition mientras dura
   const SWIPE_THRESHOLD = 60; // px para disparar cambio de oferta al soltar
 
-  // Índice LOCAL de la oferta visible — igual que photoIdx en el hero de
-  // tienda. Cambiarlo hace el crossfade al instante, sin remontar nada; la
-  // URL se sincroniza aparte (ver efecto más abajo) para no acoplar la
-  // animación a la navegación.
+  // Índice LOCAL de la oferta visible. Cambiarlo mueve el track al instante,
+  // sin remontar nada; la URL se sincroniza aparte (ver efecto más abajo)
+  // para no acoplar la animación a la navegación.
   const idxInicial = Math.max(0, ofertasHermanas.findIndex((o) => o.id === oferta.id));
   const [idxVisible, setIdxVisible] = useState(idxInicial);
 
   // Si la oferta llega cambiada desde afuera (link directo, botón atrás del
-  // navegador), el índice local se realinea sin animación extra.
+  // navegador), el índice local se realinea.
   useEffect(() => { setIdxVisible(idxInicial); }, [oferta.id]);
 
   const ofertaVisible = ofertasHermanas[idxVisible] || oferta;
@@ -128,8 +133,9 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
   const imgVisible = ofertaVisible.imageUrl || ofertaVisible.thumbUrl;
   const zoomOferta = usePhotoSwipe(imgVisible ? [imgVisible] : []);
 
-  // La URL sigue al índice, no al revés: el crossfade ya ocurrió cuando esto
-  // corre. Se salta el primer render (la URL ya es la correcta al montar).
+  // La URL sigue al índice, no al revés: el deslizamiento ya ocurrió cuando
+  // esto corre. Se salta el primer render (la URL ya es la correcta al
+  // montar).
   const primerRenderRef = useRef(true);
   useEffect(() => {
     if (primerRenderRef.current) { primerRenderRef.current = false; return; }
@@ -137,36 +143,82 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
     onNavegarAOferta?.(ofertaVisible);
   }, [idxVisible]);
 
+  // Navegación LINEAL, sin loop — mismo criterio que las flechas del hero de
+  // tienda (la primera no va a la última). Con loop, el track tendría que
+  // saltar de un extremo al otro y ahí sí se vería un corte.
   const irA = (delta) => {
     if (!swipeNav) return;
-    const total = ofertasHermanas.length;
-    setIdxVisible((i) => (i + delta + total) % total);
+    setIdxVisible((i) => Math.min(ofertasHermanas.length - 1, Math.max(0, i + delta)));
   };
 
-  const onTouchStart = (e) => {
-    if (!swipeNav) return;
-    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    swipeAxisRef.current = null;
-  };
-  const onTouchMove = (e) => {
-    if (!swipeNav || !touchStartRef.current) return;
-    const dx = e.touches[0].clientX - touchStartRef.current.x;
-    const dy = e.touches[0].clientY - touchStartRef.current.y;
-    if (swipeAxisRef.current === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
-      swipeAxisRef.current = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
-    }
-    // Eje horizontal confirmado: no dejar que el navegador scrollee la
-    // página en diagonal mientras se decide el swipe.
-    if (swipeAxisRef.current === 'x') e.preventDefault();
-  };
-  const onTouchEnd = (e) => {
-    if (swipeAxisRef.current === 'x' && touchStartRef.current) {
-      const dx = (e.changedTouches?.[0]?.clientX ?? touchStartRef.current.x) - touchStartRef.current.x;
-      if (Math.abs(dx) > SWIPE_THRESHOLD) irA(dx < 0 ? 1 : -1);
-    }
-    touchStartRef.current = null;
-    swipeAxisRef.current = null;
-  };
+  // Los listeners van a mano con { passive: false }, NO por props onTouch* de
+  // React: React los registra como PASIVOS, y en un listener pasivo el
+  // preventDefault() se ignora (el navegador avisa "Unable to preventDefault
+  // inside passive event listener invocation"). Sin ese preventDefault, el
+  // arrastre horizontal lo toma Chrome como gesto nativo de "atrás": la
+  // oferta cambiaba bien y acto seguido un popstate devolvía a la tienda.
+  const mainRef = useRef(null);
+  // Los handlers leen estado (idxVisible, ofertasHermanas) que cambia entre
+  // renders — con un ref siempre apuntando a la versión actual, el efecto
+  // que registra los listeners no necesita volver a correr en cada cambio.
+  const gestoRef = useRef();
+  gestoRef.current = { idxVisible, total: ofertasHermanas.length, irA, swipeNav };
+
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return undefined;
+
+    const alEmpezar = (e) => {
+      if (!gestoRef.current.swipeNav) return;
+      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      swipeAxisRef.current = null;
+    };
+    const alMover = (e) => {
+      const g = gestoRef.current;
+      if (!g.swipeNav || !touchStartRef.current) return;
+      const dx = e.touches[0].clientX - touchStartRef.current.x;
+      const dy = e.touches[0].clientY - touchStartRef.current.y;
+      if (swipeAxisRef.current === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+        swipeAxisRef.current = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+        if (swipeAxisRef.current === 'x') setArrastrando(true);
+      }
+      if (swipeAxisRef.current === 'x') {
+        // Eje horizontal confirmado: frena tanto el scroll en diagonal como
+        // el gesto de navegación hacia atrás del navegador.
+        e.preventDefault();
+        // Resistencia en los extremos: sin loop, tirar más allá de la
+        // primera o la última solo cede un tercio, señal física de "no hay
+        // más" (mismo criterio que el rebote de las listas nativas).
+        const enExtremo = (dx > 0 && g.idxVisible === 0) || (dx < 0 && g.idxVisible === g.total - 1);
+        setArrastreX(enExtremo ? dx / 3 : dx);
+      }
+    };
+    const alSoltar = (e) => {
+      const g = gestoRef.current;
+      if (swipeAxisRef.current === 'x' && touchStartRef.current) {
+        const dx = (e.changedTouches?.[0]?.clientX ?? touchStartRef.current.x) - touchStartRef.current.x;
+        if (Math.abs(dx) > SWIPE_THRESHOLD) g.irA(dx < 0 ? 1 : -1);
+      }
+      // Soltar: se apaga el modo arrastre (vuelve la transition) y el offset
+      // en px se limpia — el track termina el recorrido hasta el slide que
+      // corresponda por índice.
+      setArrastrando(false);
+      setArrastreX(0);
+      touchStartRef.current = null;
+      swipeAxisRef.current = null;
+    };
+
+    el.addEventListener('touchstart', alEmpezar, { passive: true });
+    el.addEventListener('touchmove', alMover, { passive: false });
+    el.addEventListener('touchend', alSoltar, { passive: true });
+    el.addEventListener('touchcancel', alSoltar, { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', alEmpezar);
+      el.removeEventListener('touchmove', alMover);
+      el.removeEventListener('touchend', alSoltar);
+      el.removeEventListener('touchcancel', alSoltar);
+    };
+  }, []);
 
   // Pageview de la oferta — llegó por un link directo (WhatsApp/FB/etc), es
   // la señal más fuerte de interés: alguien vio ESTA oferta puntual, no solo
@@ -268,38 +320,57 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
               entre ofertas de la tienda (solo si swipeNav existe, ver más
               arriba) ── */}
           <main
-            onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px 24px', maxWidth: 900, margin: '0 auto', width: '100%', touchAction: swipeNav ? 'pan-y' : 'auto' }}>
+            ref={mainRef}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px 24px', maxWidth: 900, margin: '0 auto', width: '100%', touchAction: swipeNav ? 'pan-y' : 'auto', overscrollBehaviorX: 'contain' }}>
             <div style={{ textAlign: 'center', width: '100%' }}>
-              <div style={{ display: 'inline-block', maxWidth: 640, width: '100%' }}>
+              {/* display:block (no inline-block): con inline-block el ancho
+                  es shrink-to-fit, o sea lo decide el contenido — los slides
+                  del track a min-width:100% inflaban a este padre y el 100%
+                  terminaba midiendo contra una caja gigante en vez de contra
+                  los 640px reales. Con block + margin auto el ancho queda
+                  acotado de verdad y el track calcula bien. */}
+              <div style={{ display: 'block', maxWidth: 640, width: '100%', margin: '0 auto' }}>
                 <style>{`
-                  .oi-oferta-img { cursor: zoom-in; transition: opacity .4s ease, transform .18s cubic-bezier(0.34,1.56,0.64,1), box-shadow .18s ease; }
-                  @media (hover: hover) { .oi-oferta-img:hover { transform: scale(1.01); } }
-                  .oi-oferta-img:active { transform: scale(0.98); box-shadow: 0 10px 30px rgba(0,0,0,.28) !important; }
+                  /* Track deslizante — copia literal del .nov-track de
+                     DISTRIBUIDORA QR 2.0: flex SIN width propio (se estira
+                     por el flex), slides a min-width:100%, y el movimiento
+                     por translateX en %. La transition se apaga con la clase
+                     .oi-arrastrando mientras el dedo está abajo, para que el
+                     track siga al dedo 1:1 en vez de ir con retardo. */
+                  .oi-pista { display: flex; align-items: flex-start; width: 100%; transition: transform .35s cubic-bezier(.4,0,.2,1); will-change: transform; }
+                  .oi-pista.oi-arrastrando { transition: none; }
+                  /* flex: 0 0 100% (no min-width): con width:100% en la pista,
+                     el flex-basis se resuelve contra el ancho REAL del
+                     contenedor, así cada slide mide exactamente un ancho de
+                     pantalla. Con min-width:100% el porcentaje se resolvía
+                     contra el contenido acumulado del flex y cada slide salía
+                     al doble, descolocando todo el track. */
+                  .oi-slide { flex: 0 0 100%; max-width: 100%; }
+                  /* aspect-ratio fijo: las ofertas se suben en 1:1.414 (A4),
+                     pero si alguna viniera con otra proporción el track
+                     entero cambiaría de alto al deslizar. Con la caja fija y
+                     object-fit:cover, la altura no se mueve nunca. */
+                  .oi-oferta-img { cursor: zoom-in; display: block; width: 100%; aspect-ratio: 1 / 1.414; object-fit: cover; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
                 `}</style>
-                {/* Fotos apiladas con crossfade — EXACTAMENTE el mecanismo de
-                    .cm-hero-photo en el hero de tienda: todas montadas en la
-                    misma posición (absolute inset 0), y solo cambia opacity
-                    con transition .4s. pointerEvents en las no visibles
-                    apagado, si no el click puede aterrizar en una foto
-                    invisible superpuesta (mismo bug real que documenta el
-                    hero). El contenedor lleva aspectRatio propio para tener
-                    altura estable: sin eso, apilar fotos absolutas colapsaría
-                    la caja a cero. */}
-                <div style={{ position: 'relative', width: '100%', aspectRatio: '1 / 1.414', borderRadius: 16, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,.35)' }}>
-                  {(swipeNav ? ofertasHermanas : [oferta]).map((o, i) => {
-                    const visible = swipeNav ? i === idxVisible : true;
-                    const src = o.imageUrl || o.thumbUrl;
-                    return (
-                      <img key={o.id} src={src} alt={visible ? o.nombre : ''} aria-hidden={!visible}
-                        onClick={(e) => { if (!visible) return; trackClick(tienda.id, 'zoom', { origen: 'oferta', productoId: o.id }); zoomOferta.abrir(0, e); }}
-                        className="oi-oferta-img"
-                        style={{
-                          position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block',
-                          opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none',
-                        }} />
-                    );
-                  })}
+                {/* overflow-x hidden recorta las fotos vecinas al borde del
+                    contenedor: se las ve entrar y salir por los costados,
+                    como en el carrusel de referencia. El padding lateral de
+                    cada slide es el "espacio adecuado" entre fotos (van
+                    pegadas si no, porque cada una vale 100% justo). */}
+                <div style={{ overflowX: 'hidden', marginInline: -8 }}>
+                  <div
+                    ref={pistaRef}
+                    className={`oi-pista${arrastrando ? ' oi-arrastrando' : ''}`}
+                    style={{ transform: `translateX(calc(${-idxVisible * 100}% + ${arrastreX}px))` }}>
+                    {(swipeNav ? ofertasHermanas : [oferta]).map((o, i) => (
+                      <div key={o.id} className="oi-slide" style={{ paddingInline: 8 }}>
+                        <img src={o.imageUrl || o.thumbUrl} alt={o.nombre}
+                          draggable="false"
+                          onClick={(e) => { if (arrastrando || i !== idxVisible) return; trackClick(tienda.id, 'zoom', { origen: 'oferta', productoId: o.id }); zoomOferta.abrir(0, e); }}
+                          className="oi-oferta-img" />
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div style={{ textAlign: 'center', fontSize: '1.1rem', fontWeight: 800, margin: '14px 0 2px', color: txt }}>{ofertaVisible.nombre}</div>
                 {/* Puntitos indicadores — mismo lenguaje visual que los dots
