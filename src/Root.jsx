@@ -152,6 +152,11 @@ export default function Root() {
       // Al salir de la ruta de oferta (atrás), soltar la copia en memoria —
       // así una futura visita por link externo no reusa datos viejos.
       if (!nextOferta) setOfertaEnMemoria(null);
+      // El resto de las rutas (raíz/landing, /:slug de tienda, /admin) se
+      // resuelven leyendo location.pathname en el render, no desde estado:
+      // sin este recheck, volver con el botón "atrás" cambiaba la URL pero
+      // dejaba la pantalla anterior montada.
+      forceUrlRecheck();
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
