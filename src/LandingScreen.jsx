@@ -612,28 +612,21 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
         <div className="max-w-5xl mx-auto px-5 lg:px-8 h-16 flex items-center justify-between">
           <LogoFull size={26} />
           <div className="flex items-center gap-2">
-            {/* Los dos llevan fondo y borde propios EN REPOSO, no sólo en
-                hover: sin contorno se leían como texto suelto sobre el
-                fondo, no como controles. Mismo lenguaje que la cápsula del
-                botón de Google y las cards (turquesa a baja opacidad), sólo
-                que más tenue por ser secundarios. */}
-            <button
-              onClick={toggleTheme}
-              aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-              className="lok-tap lok-chip-btn w-10 h-10 rounded-full flex items-center justify-center text-ink-dim hover:text-brand"
-              style={{
-                // Borde sólo en dark: sobre el fondo casi negro el relleno
-                // al 7% no alcanza a definir la forma. En light el fondo ya
-                // se ve solo y el borde sumaba ruido.
-                background: `rgb(var(--brand, 0 184 217) / ${isDark ? 0.09 : 0.08})`,
-                border: isDark ? '1px solid rgb(var(--brand, 0 184 217) / 0.18)' : '1px solid transparent',
-              }}
-            >
-              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
-            {/* <button>, no <a>: un ancla arrastra el subrayado del navegador
-                al activarse y además navegaba con recarga completa. Acá es
-                una acción de la SPA, así que el elemento correcto es button. */}
+            {/* El toggle de tema NO va acá: ya vive en el footer, y en el
+                header competía con "Entrar", que es la única acción que
+                importa arriba. El tema no es una decisión que alguien toma
+                al llegar, es un ajuste que busca cuando le molesta — y para
+                eso el footer alcanza.
+
+                "Entrar" lleva fondo y borde propios EN REPOSO, no sólo en
+                hover: sin contorno se leía como texto suelto sobre el fondo,
+                no como un control. Mismo lenguaje que la cápsula del botón
+                de Google y las cards (turquesa a baja opacidad), sólo que
+                más tenue por ser secundario.
+
+                <button>, no <a>: un ancla arrastra el subrayado del
+                navegador al activarse y además navegaba con recarga
+                completa. Acá es una acción de la SPA. */}
             <button
               onClick={irAlPanel}
               className="lok-tap lok-chip-btn text-sm font-bold px-4 py-2 rounded-xl no-underline hover:text-brand text-ink-dim"
@@ -852,7 +845,7 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
             <button
               onClick={toggleTheme}
               aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-              className="lok-tap lok-chip-btn justify-self-center w-[30px] h-[30px] rounded-[10px] inline-flex items-center justify-center text-ink-dim hover:text-brand"
+              className="lok-tap lok-chip-btn justify-self-center w-[30px] h-[30px] rounded-[10px] inline-flex items-center justify-center text-ink hover:text-brand"
               style={{
                 background: `rgb(var(--brand, 0 184 217) / ${isDark ? 0.09 : 0.08})`,
                 border: isDark ? '1px solid rgb(var(--brand, 0 184 217) / 0.18)' : '1px solid transparent',

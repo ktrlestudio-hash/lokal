@@ -246,7 +246,10 @@ export function PaywallModal({ onClose, onPagar, onTransferencia, vencioEl, reno
       price: `$${PRECIO_MENSUAL.toLocaleString()}`,
       sub: 'ARS / mes',
       description: '+1 mes de regalo al renovar',
-      features: ['Recibí pedidos', 'Feed completo', 'Badge verificada'],
+      // "Recibí pedidos / Feed completo / Badge verificada" era copy de
+      // LOKAL global (marketplace con carrito y feed). LINKS no tiene nada
+      // de eso: lo que da la suscripción es que la página siga publicada.
+      features: ['Tu página publicada', 'Publicaciones sin límite', 'Estadísticas de visitas'],
     },
     {
       id: 'anual',
@@ -284,7 +287,7 @@ export function PaywallModal({ onClose, onPagar, onTransferencia, vencioEl, reno
             <h2 className="font-black text-xl text-white mb-1">Suscripción vencida</h2>
             <p className="text-ink-dim text-sm leading-relaxed">
               {vencioEl ? `Tu plan venció el ${vencioEl}. ` : 'Tu plan ha vencido. '}
-              Renovalo para seguir recibiendo pedidos.
+              Renovalo para volver a publicar tu página. No se borró nada.
             </p>
           </PHeader>
 

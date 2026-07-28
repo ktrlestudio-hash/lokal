@@ -6027,7 +6027,9 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           }
         }
       },
-      { icon: Package, color: 'bg-surface-card-2 dark:bg-white/8 text-ink-dim', title: 'Búsqueda laboral', desc: 'Próximamente disponible', locked: true, action: () => {} },
+      // "Búsqueda laboral — Próximamente disponible" se saca: era una card
+      // bloqueada que no hacía nada y ocupaba la mitad del sheet. Cuando el
+      // módulo exista se vuelve a sumar acá.
     ];
     return (
       <div className="lg:hidden fixed inset-0 z-[4000] flex flex-col justify-end" onClick={closeCreateSheet}>
@@ -6101,7 +6103,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           <div className="bg-rose-500 text-white px-4 py-2.5 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm">
               <Lock className="w-4 h-4 shrink-0" />
-              <span className="font-semibold">Tu suscripción venció. Renoválo para seguir recibiendo pedidos.</span>
+              <span className="font-semibold">Tu suscripción venció y tu página no está publicada. Renovala para volver a publicarla.</span>
             </div>
             <button
               onClick={() => setShowPaywall(true)}

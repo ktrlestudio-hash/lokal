@@ -43,7 +43,9 @@ function LegalLayout({ title, subtitle, icon: Icon, children, onBack, actualizad
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <LogoFull size={22} />
+          {/* 26, igual que el header de la landing: eran 22 y el logo se
+              veía más chico al navegar de una pantalla a la otra. */}
+          <LogoFull size={26} />
           {/* Espaciador del mismo ancho que el botón, para que el logo quede
               centrado óptico y no corrido hacia la derecha. */}
           <div className="w-10 shrink-0" aria-hidden="true" />
@@ -95,7 +97,7 @@ function LegalLayout({ title, subtitle, icon: Icon, children, onBack, actualizad
             <button
               onClick={temaLegal.toggleTheme}
               aria-label={temaLegal.isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-              className="lok-tap lok-chip-btn justify-self-center w-[30px] h-[30px] rounded-[10px] inline-flex items-center justify-center text-ink-dim hover:text-brand"
+              className="lok-tap lok-chip-btn justify-self-center w-[30px] h-[30px] rounded-[10px] inline-flex items-center justify-center text-ink hover:text-brand"
               style={{
                 background: `rgb(var(--brand, 0 184 217) / ${temaLegal.isDark ? 0.09 : 0.08})`,
                 border: temaLegal.isDark ? '1px solid rgb(var(--brand, 0 184 217) / 0.18)' : '1px solid transparent',
