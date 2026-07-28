@@ -17,6 +17,9 @@ import {
 } from 'lucide-react';
 import { signInWithGoogle, renderBotonGoogle, gisDisponible } from './firebase';
 import { LogoFull, KtrlMark } from './Brand';
+import TiendaPublica from './TiendaPublica';
+import { TIENDA_SLUG_FIJA } from './config/constants';
+import { API_BASE } from './config/flags';
 
 const GoogleIcon = ({ size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24">
@@ -292,61 +295,56 @@ const FAQ = [
   { q: '¿Puedo darla de baja?', a: 'Cuando quieras, desde tu panel. No hay permanencia ni penalidad: tu tienda deja de estar publicada y listo.' },
 ];
 
-// Fotos de muestra como SVG en data: — sin peticiones de red ni dependencia
-// de un servicio externo. Son degradados de marca, no fotos falsas de
-// stock: se lee como "acá va tu foto" y no como una promesa de contenido.
-const fotoMock = (a, b) => `data:image/svg+xml,${encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 141"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="100" height="141" fill="url(#g)"/></svg>`
-)}`;
-
-const OFERTAS_MOCK = [
-  { id: 'm1', nombre: 'Promo de la semana', fecha: '31/07', foto: fotoMock('#0ea5b7', '#0b7f95') },
-  { id: 'm2', nombre: 'Combo 2x1',          fecha: null,    foto: fotoMock('#f0a04b', '#d97634') },
-  { id: 'm3', nombre: 'Envío sin cargo',    fecha: '02/08', foto: fotoMock('#7c9cc4', '#5b7ba8') },
-  { id: 'm4', nombre: 'Nuevo ingreso',      fecha: null,    foto: fotoMock('#8fb98a', '#5f9268') },
-];
-
-// Card de oferta calcada de la real (OfertaCard en la tienda pública):
-// proporción 1/1.414 y badge de fecha flotante sobre la foto.
-function CardOfertaMock({ oferta }) {
-  return (
-    // min-w-0: sin esto la card no se deja achicar por debajo del ancho de
-    // su contenido y se desborda de la celda del grid, pisando lo de al lado.
-    <div className="min-w-0 rounded-2xl overflow-hidden border border-slate-200/60 dark:border-white/10 bg-surface-card">
-      {/* w-full + aspectRatio: el alto sale del ancho real de la celda. Con
-          aspectRatio solo, el contenedor no tenía ancho de referencia y la
-          imagen se dibujaba a su tamaño intrínseco. */}
-      <div className="relative w-full" style={{ aspectRatio: '1 / 1.414' }}>
-        <img src={oferta.foto} alt=""
-          className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
-        {oferta.fecha && (
-          <span className="absolute top-2 right-2 flex items-center gap-1 text-white text-[10px] font-bold px-2 py-[3px] rounded-full"
-            style={{ background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)' }}>
-            {oferta.fecha}
-          </span>
-        )}
-      </div>
-      <p className="px-2 py-2 text-[11px] font-bold text-center truncate">{oferta.nombre}</p>
-    </div>
-  );
-}
-
-// Vista previa de una tienda real, no un dibujo de un teléfono.
+// Vista previa de la tienda REAL, no una reinterpretación.
 //
-// El mockup anterior era un teléfono de 248px que en mobile ocupaba casi
-// todo el alto sin dejar ver nada más — invasivo justo donde hay menos
-// espacio. Este se ajusta al ancho disponible, igual que se vería la tienda
-// de verdad, y colapsado muestra sólo el hero y dos ofertas: lo suficiente
-// para entender qué es, sin comerse la pantalla.
+// Antes acá había un mockup dibujado a mano: primero un teléfono de 248px
+// con emojis, después una versión "minimalista" con degradados de colores en
+// lugar de fotos. Las dos tenían el mismo problema de fondo — mostraban una
+// idea de tienda, no la tienda. Alguien que evalúa el producto necesita ver
+// lo que va a tener, con fotos de verdad, portada, perfil y publicaciones.
 //
-// Tocarlo lo abre a pantalla completa, con más ofertas y el detalle de una
-// publicación. Es la idea de la vieja tienda mock de la raíz, pero como algo
-// que el visitante decide mirar en vez de algo que se le impone.
+// TiendaPublica es el MISMO componente que sirve /:slug en público, así que
+// lo que se ve acá es literalmente el producto funcionando, con los datos de
+// la tienda de ejemplo (TIENDA_SLUG_FIJA, que es la que la raíz servía antes
+// de que existiera esta landing).
+//
+// Colapsada se recorta a una altura fija y se le pone un degradado abajo:
+// deja ver la portada, el perfil y las primeras publicaciones sin ocupar
+// toda la pantalla. Expandida ocupa el viewport completo, con la tienda
+// entera scrolleable y todo interactivo.
 function TiendaPreview() {
   const [expandida, setExpandida] = useState(false);
+  const cajaRef = useRef(null);
+  // Datos reales de la tienda de ejemplo para la card del hero: su portada,
+  // su nombre y sus publicaciones con las fotos de verdad.
+  //
+  // La card NO monta TiendaPublica recortada: ese componente está hecho para
+  // ocupar la pantalla (splash, scroll y header propios) y dentro de un
+  // contenedor de 340px no llega a dibujarse. Acá se leen los mismos datos y
+  // se arma la muestra; la tienda real, entera y navegable, se abre al tocar
+  // el botón.
+  const [tienda, setTienda] = useState(null);
 
-  // Con la vista completa abierta se bloquea el scroll del fondo: si no,
-  // al llegar al final de la tienda sigue scrolleando la landing detrás.
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const [tRes, oRes] = await Promise.all([
+          fetch(`${API_BASE}/tiendas-crud?slug=${TIENDA_SLUG_FIJA}`),
+          fetch(`${API_BASE}/ofertas?slug=${TIENDA_SLUG_FIJA}`),
+        ]);
+        if (!vivo || !tRes.ok) return;
+        const t = await tRes.json();
+        const ofertas = oRes.ok ? await oRes.json() : [];
+        if (!vivo) return;
+        setTienda({ ...t, ofertas: (Array.isArray(ofertas) ? ofertas : []).filter(o => o.activa !== false).slice(0, 2) });
+      } catch { /* sin datos se muestra el esqueleto, no rompe la landing */ }
+    })();
+    return () => { vivo = false; };
+  }, []);
+
+  // Con la vista completa abierta se bloquea el scroll del fondo: si no, al
+  // llegar al final de la tienda sigue scrolleando la landing detrás.
   useEffect(() => {
     if (!expandida) return;
     const previo = document.body.style.overflow;
@@ -354,7 +352,6 @@ function TiendaPreview() {
     return () => { document.body.style.overflow = previo; };
   }, [expandida]);
 
-  // Escape para cerrar, como cualquier modal del sistema.
   useEffect(() => {
     if (!expandida) return;
     const onKey = (e) => { if (e.key === 'Escape') setExpandida(false); };
@@ -362,44 +359,57 @@ function TiendaPreview() {
     return () => window.removeEventListener('keydown', onKey);
   }, [expandida]);
 
-  const Cabecera = ({ compacta = false }) => (
-    <div className="relative">
-      {/* Banner del hero */}
-      <div style={{
-        height: compacta ? 76 : 104,
-        background: 'linear-gradient(135deg, rgb(var(--brand, 0 184 217) / 0.9), rgb(var(--brand, 0 184 217) / 0.45))',
-      }} />
-      <div className="px-4 pb-3 flex items-end gap-3" style={{ marginTop: compacta ? -22 : -28 }}>
-        <div className="rounded-2xl bg-surface-card border-2 border-surface-card shadow-lg flex items-center justify-center shrink-0"
-          style={{ width: compacta ? 48 : 60, height: compacta ? 48 : 60 }}>
-          <Store className={compacta ? 'w-5 h-5' : 'w-6 h-6'} style={{ color: 'var(--brand-hex, #00B8D9)' }} />
-        </div>
-        <div className="min-w-0 pb-0.5">
-          <p className={`font-black leading-tight truncate ${compacta ? 'text-sm' : 'text-base'}`}>Tu negocio</p>
-          <p className="text-[11px] text-ink-dim truncate">Abierto ahora · Centro</p>
-        </div>
-      </div>
-    </div>
-  );
-
   return (
     <>
-      {/* ── Colapsada: hero + 2 ofertas, con degradado de corte abajo ── */}
-      <div className="relative rounded-3xl overflow-hidden border shadow-lg"
-        style={{ borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)', background: 'var(--surface-solid, #fff)' }}>
-        <Cabecera compacta />
-        <div className="px-3 pb-3 grid grid-cols-2 gap-3">
-          {OFERTAS_MOCK.slice(0, 2).map(o => <CardOfertaMock key={o.id} oferta={o} />)}
+      {/* ── Colapsada ── */}
+      <div ref={cajaRef} className="relative rounded-3xl overflow-hidden border shadow-lg"
+        style={{ borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)', background: 'rgb(var(--surface-dim, 245 245 245))' }}>
+        {/* Muestra con los datos reales: portada, nombre y dos
+            publicaciones con sus fotos. pointer-events:none porque no se
+            navega desde acá — el clic lo toma el botón de abajo. */}
+        <div style={{ height: 340, overflow: 'hidden', pointerEvents: 'none' }}>
+          {/* Portada */}
+          <div className="relative" style={{ height: 108, background: 'rgb(var(--brand, 0 184 217) / 0.18)' }}>
+            {tienda?.galeria?.[0] && (
+              <img src={tienda.galeria[0]} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+            )}
+          </div>
+
+          {/* Identidad */}
+          <div className="px-4 flex items-end gap-3" style={{ marginTop: -26 }}>
+            <div className="w-14 h-14 rounded-2xl border-2 shadow-lg overflow-hidden shrink-0 flex items-center justify-center"
+              style={{ borderColor: 'var(--surface-solid, #fff)', background: 'var(--surface-solid, #fff)' }}>
+              {tienda?.foto
+                ? <img src={tienda.foto} alt="" className="w-full h-full object-cover" />
+                : <Store className="w-6 h-6" style={{ color: 'var(--brand-hex, #00B8D9)' }} />}
+            </div>
+            <div className="min-w-0 pb-1">
+              <p className="font-black text-sm leading-tight truncate">{tienda?.nombre || 'Tu negocio'}</p>
+              <p className="text-[11px] text-ink-dim truncate">{tienda?.ciudad || 'Tu ciudad'}</p>
+            </div>
+          </div>
+
+          {/* Publicaciones reales */}
+          <div className="px-4 pt-3 grid grid-cols-2 gap-3">
+            {(tienda?.ofertas?.length ? tienda.ofertas : [null, null]).map((o, i) => (
+              <div key={o?.id || i} className="min-w-0 rounded-2xl overflow-hidden border border-slate-200/60 dark:border-white/10 bg-surface-card">
+                <div className="relative w-full" style={{ aspectRatio: '1 / 1.414', background: 'rgb(var(--brand, 0 184 217) / 0.07)' }}>
+                  {(o?.thumbUrl || o?.imageUrl) && (
+                    <img src={o.thumbUrl || o.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+                  )}
+                </div>
+                {o?.nombre && <p className="px-2 py-1.5 text-[11px] font-bold text-center truncate">{o.nombre}</p>}
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* El degradado hace de "hay más abajo" sin recortar de golpe. Vive
-            fuera del flujo, así que no afecta la altura de la card. */}
-        <div className="absolute inset-x-0 bottom-0 h-24 pointer-events-none"
-          style={{ background: 'linear-gradient(to top, var(--surface-solid, #fff) 30%, transparent)' }} />
+        <div className="absolute inset-x-0 bottom-0 h-28 pointer-events-none"
+          style={{ background: 'linear-gradient(to top, rgb(var(--surface-dim, 245 245 245)) 32%, transparent)' }} />
 
         <button
           onClick={() => setExpandida(true)}
-          className="lok-tap absolute inset-x-0 bottom-0 pt-8 pb-4 flex items-end justify-center"
+          className="lok-tap absolute inset-x-0 bottom-0 pt-10 pb-4 flex items-end justify-center"
         >
           <span className="inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-full shadow-md"
             style={{ background: 'var(--brand-hex, #00B8D9)', color: '#fff' }}>
@@ -409,22 +419,16 @@ function TiendaPreview() {
         </button>
       </div>
 
-      {/* ── Expandida: pantalla completa, scrolleable ──
-          Va por portal al <body>: este componente vive dentro de un FadeUp,
-          que aplica transform, y un ancestro con transform crea un contexto
-          de posicionamiento propio — position:fixed se ancla a ÉL y no al
-          viewport. Sin el portal el modal quedaba recortado dentro del hero,
-          dejando ver la landing arriba y abajo. */}
+      {/* ── Expandida: la tienda real, completa e interactiva ──
+          Va por portal al body: este componente vive dentro de un FadeUp,
+          que aplica transform, y un ancestro con transform hace que
+          position:fixed se ancle a él y no al viewport. */}
       {expandida && createPortal(
-        // rgb(...) alrededor del token: --surface-dim guarda componentes
-        // sueltos ("245 245 245"), no un color. Usarlo pelado daba un valor
-        // inválido, el fondo quedaba transparente y se veía la landing por
-        // detrás — parecía que las cards del modal se superponían.
-        <div className="lok-app-surface fixed inset-0 z-[6000] flex flex-col"
+        <div className="fixed inset-0 z-[6000] flex flex-col"
           style={{ background: 'rgb(var(--surface-dim, 245 245 245))' }}>
-          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 h-14 shrink-0 border-b backdrop-blur"
+          <div className="flex items-center justify-between gap-3 px-4 h-14 shrink-0 border-b"
             style={{
-              background: 'rgb(var(--surface-solid-rgb, 255 255 255) / 0.85)',
+              background: 'var(--surface-solid, #fff)',
               borderColor: 'rgb(var(--brand, 0 184 217) / 0.12)',
             }}>
             <span className="text-xs font-bold px-2.5 py-1 rounded-full"
@@ -439,37 +443,12 @@ function TiendaPreview() {
           </div>
 
           <div className="flex-1 overflow-y-auto overscroll-contain">
-            <div className="max-w-lg mx-auto pb-8">
-              <div className="bg-surface-card">
-                <Cabecera />
-                <div className="px-4 pb-4 flex flex-wrap gap-2">
-                  {['Ofertas', 'Contacto', 'Horarios', 'Cómo llegar'].map(t => (
-                    <span key={t} className="text-[11px] font-semibold px-3 py-1.5 rounded-full"
-                      style={{ background: 'rgb(var(--brand, 0 184 217) / 0.10)', color: 'var(--brand-hex, #00B8D9)' }}>
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="px-4 pt-5">
-                <p className="text-xs font-black uppercase tracking-wider mb-3" style={{ color: 'var(--text-secondary, #999)' }}>
-                  Publicaciones
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  {OFERTAS_MOCK.map(o => <CardOfertaMock key={o.id} oferta={o} />)}
-                </div>
-              </div>
-
-              <div className="px-4 pt-6">
-                <div className="rounded-2xl border p-4 text-center" style={CARD_TINTED}>
-                  <p className="text-sm font-bold mb-1">Esto es un ejemplo</p>
-                  <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary, #999)' }}>
-                    Tu tienda va a tener tus fotos, tus datos y tu color de marca.
-                  </p>
-                </div>
-              </div>
-            </div>
+            {/* firebaseUser={null} explícito, NO omitido: TiendaPublica trata
+              undefined como "Firebase todavía no resolvió la sesión" y se
+              queda esperando sin pedir los datos nunca. Acá la tienda se
+              muestra siempre como visitante anónimo, así que null es el
+              valor correcto. */}
+          <TiendaPublica slug={TIENDA_SLUG_FIJA} firebaseUser={null} />
           </div>
         </div>,
         document.body
