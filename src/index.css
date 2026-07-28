@@ -277,6 +277,19 @@ html, body, #root {
   overflow-x: hidden;
 }
 
+/* Barra de scroll oculta en toda la app: el contenido sigue scrolleando
+   igual (no es overflow:hidden), sólo deja de dibujarse la barra. En
+   escritorio Firefox/Chrome ya la muestran fina y sobrepuesta, pero en
+   mobile aparecía sobre el contenido durante el gesto. */
+html, body {
+  scrollbar-width: none;      /* Firefox */
+  -ms-overflow-style: none;   /* IE/Edge viejo */
+}
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;              /* Chrome/Safari/Edge */
+}
+
 body {
   /* Poppins para títulos y marca, Inter para UI y texto corrido */
   font-family: 'Poppins', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
