@@ -9,10 +9,11 @@
 // link directo de una tienda (/:slug). El único que se registra es el
 // DUEÑO del negocio, así que todo apunta a "creá tu tienda".
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Loader2, AlertCircle, Sun, Moon, Check, ChevronDown, Store, Tag,
   MessageSquare, Share2, Instagram, BarChart3, Sparkles, ArrowUp,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, X,
 } from 'lucide-react';
 import { signInWithGoogle, renderBotonGoogle, gisDisponible } from './firebase';
 import { LogoFull, KtrlMark } from './Brand';
@@ -291,75 +292,189 @@ const FAQ = [
   { q: '¿Puedo darla de baja?', a: 'Cuando quieras, desde tu panel. No hay permanencia ni penalidad: tu tienda deja de estar publicada y listo.' },
 ];
 
-// Mockup del panel real (no una foto): réplica en miniatura del admin de
-// ofertas — grilla de cards con su badge de vencimiento y la fila de
-// acciones. Sirve para que el dueño reconozca la herramienta antes de
-// registrarse.
-// escala: en mobile el teléfono va al 78% y con menos alto, para que quepa
-// DEBAJO del botón sin empujarlo fuera de pantalla. Antes tenía
-// "hidden lg:block" y directamente no se veía en celular — justo donde
-// entra la mayoría, el hero no mostraba nada del producto.
-function PanelMockup({ escala = 1 }) {
-  // Nombres genéricos a propósito: el producto no es sólo gastronomía, y
-  // "Muzzarella grande / Combo doble" lo encasillaba en comida.
-  const OFERTAS = [
-    { nombre: 'Promo de la semana', fecha: '31/07' },
-    { nombre: 'Combo 2x1',          fecha: null    },
-    { nombre: 'Envío sin cargo',    fecha: '02/08' },
-    { nombre: 'Nuevo ingreso',      fecha: null    },
-  ];
+// Fotos de muestra como SVG en data: — sin peticiones de red ni dependencia
+// de un servicio externo. Son degradados de marca, no fotos falsas de
+// stock: se lee como "acá va tu foto" y no como una promesa de contenido.
+const fotoMock = (a, b) => `data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 141"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="100" height="141" fill="url(#g)"/></svg>`
+)}`;
+
+const OFERTAS_MOCK = [
+  { id: 'm1', nombre: 'Promo de la semana', fecha: '31/07', foto: fotoMock('#0ea5b7', '#0b7f95') },
+  { id: 'm2', nombre: 'Combo 2x1',          fecha: null,    foto: fotoMock('#f0a04b', '#d97634') },
+  { id: 'm3', nombre: 'Envío sin cargo',    fecha: '02/08', foto: fotoMock('#7c9cc4', '#5b7ba8') },
+  { id: 'm4', nombre: 'Nuevo ingreso',      fecha: null,    foto: fotoMock('#8fb98a', '#5f9268') },
+];
+
+// Card de oferta calcada de la real (OfertaCard en la tienda pública):
+// proporción 1/1.414 y badge de fecha flotante sobre la foto.
+function CardOfertaMock({ oferta }) {
   return (
-    <div className="relative w-[248px] mx-auto select-none"
-      style={{ transform: `scale(${escala})`, transformOrigin: 'top center' }}
-      aria-hidden="true">
-      <div className="absolute inset-0 rounded-full blur-[56px] scale-105 -z-0"
-        style={{ background: 'rgb(var(--brand, 0 184 217) / 0.22)' }} />
-      <div className="relative z-10 rounded-[2.6rem] p-2.5 shadow-2xl border border-white/10"
-        style={{ background: '#0F172A' }}>
-        <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-14 h-4 rounded-full bg-black z-20" />
-        <div className="rounded-[2.2rem] overflow-hidden bg-white" style={{ height: 452 }}>
-          {/* Header calcado del real (StorePageHeader con icon={Tag}) */}
-          <div className="px-4 pt-7 pb-3 border-b border-slate-100 flex items-center gap-2.5">
-            <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
-              style={{ background: 'rgb(var(--brand, 0 184 217) / 0.12)' }}>
-              <Tag className="w-4 h-4" style={{ color: 'var(--brand-hex, #00B8D9)' }} strokeWidth={2.5} />
-            </span>
-            <div>
-              <p className="text-[12px] font-black text-slate-900 leading-none">Ofertas</p>
-              <p className="text-[9px] text-slate-400 mt-1">4 publicaciones</p>
-            </div>
-          </div>
-          {/* Grilla calcada de OfertaCard: proporción 1/1.414 (la real, era
-              1/1.1), badge de fecha flotante sobre la foto y fila de 3
-              acciones abajo. Sin emojis: eran un dibujo que no se parecía a
-              una publicación real. El lugar de la foto va con un degradado
-              neutro, que es lo que se ve mientras una imagen carga. */}
-          <div className="p-3 grid grid-cols-2 gap-2.5">
-            {OFERTAS.map((o) => (
-              <div key={o.nombre} className="rounded-2xl border border-slate-100 overflow-hidden bg-white">
-                <div className="relative" style={{
-                  aspectRatio: '1 / 1.414',
-                  background: 'linear-gradient(150deg, #eef2f5, #e2e8ee)',
-                }}>
-                  {o.fecha && (
-                    <span className="absolute top-1.5 right-1.5 text-[7px] font-bold text-white px-1.5 py-[3px] rounded-full"
-                      style={{ background: 'rgba(0,0,0,.55)' }}>
-                      {o.fecha}
-                    </span>
-                  )}
-                </div>
-                <div className="p-1.5">
-                  <p className="text-[8px] font-bold text-slate-700 text-center truncate">{o.nombre}</p>
-                  <div className="grid grid-cols-3 gap-1 mt-1.5">
-                    {[0, 1, 2].map(i => <span key={i} className="h-3.5 rounded bg-slate-100" />)}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+    // min-w-0: sin esto la card no se deja achicar por debajo del ancho de
+    // su contenido y se desborda de la celda del grid, pisando lo de al lado.
+    <div className="min-w-0 rounded-2xl overflow-hidden border border-slate-200/60 dark:border-white/10 bg-surface-card">
+      {/* w-full + aspectRatio: el alto sale del ancho real de la celda. Con
+          aspectRatio solo, el contenedor no tenía ancho de referencia y la
+          imagen se dibujaba a su tamaño intrínseco. */}
+      <div className="relative w-full" style={{ aspectRatio: '1 / 1.414' }}>
+        <img src={oferta.foto} alt=""
+          className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+        {oferta.fecha && (
+          <span className="absolute top-2 right-2 flex items-center gap-1 text-white text-[10px] font-bold px-2 py-[3px] rounded-full"
+            style={{ background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)' }}>
+            {oferta.fecha}
+          </span>
+        )}
+      </div>
+      <p className="px-2 py-2 text-[11px] font-bold text-center truncate">{oferta.nombre}</p>
+    </div>
+  );
+}
+
+// Vista previa de una tienda real, no un dibujo de un teléfono.
+//
+// El mockup anterior era un teléfono de 248px que en mobile ocupaba casi
+// todo el alto sin dejar ver nada más — invasivo justo donde hay menos
+// espacio. Este se ajusta al ancho disponible, igual que se vería la tienda
+// de verdad, y colapsado muestra sólo el hero y dos ofertas: lo suficiente
+// para entender qué es, sin comerse la pantalla.
+//
+// Tocarlo lo abre a pantalla completa, con más ofertas y el detalle de una
+// publicación. Es la idea de la vieja tienda mock de la raíz, pero como algo
+// que el visitante decide mirar en vez de algo que se le impone.
+function TiendaPreview() {
+  const [expandida, setExpandida] = useState(false);
+
+  // Con la vista completa abierta se bloquea el scroll del fondo: si no,
+  // al llegar al final de la tienda sigue scrolleando la landing detrás.
+  useEffect(() => {
+    if (!expandida) return;
+    const previo = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previo; };
+  }, [expandida]);
+
+  // Escape para cerrar, como cualquier modal del sistema.
+  useEffect(() => {
+    if (!expandida) return;
+    const onKey = (e) => { if (e.key === 'Escape') setExpandida(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [expandida]);
+
+  const Cabecera = ({ compacta = false }) => (
+    <div className="relative">
+      {/* Banner del hero */}
+      <div style={{
+        height: compacta ? 76 : 104,
+        background: 'linear-gradient(135deg, rgb(var(--brand, 0 184 217) / 0.9), rgb(var(--brand, 0 184 217) / 0.45))',
+      }} />
+      <div className="px-4 pb-3 flex items-end gap-3" style={{ marginTop: compacta ? -22 : -28 }}>
+        <div className="rounded-2xl bg-surface-card border-2 border-surface-card shadow-lg flex items-center justify-center shrink-0"
+          style={{ width: compacta ? 48 : 60, height: compacta ? 48 : 60 }}>
+          <Store className={compacta ? 'w-5 h-5' : 'w-6 h-6'} style={{ color: 'var(--brand-hex, #00B8D9)' }} />
+        </div>
+        <div className="min-w-0 pb-0.5">
+          <p className={`font-black leading-tight truncate ${compacta ? 'text-sm' : 'text-base'}`}>Tu negocio</p>
+          <p className="text-[11px] text-ink-dim truncate">Abierto ahora · Centro</p>
         </div>
       </div>
     </div>
+  );
+
+  return (
+    <>
+      {/* ── Colapsada: hero + 2 ofertas, con degradado de corte abajo ── */}
+      <div className="relative rounded-3xl overflow-hidden border shadow-lg"
+        style={{ borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)', background: 'var(--surface-solid, #fff)' }}>
+        <Cabecera compacta />
+        <div className="px-3 pb-3 grid grid-cols-2 gap-3">
+          {OFERTAS_MOCK.slice(0, 2).map(o => <CardOfertaMock key={o.id} oferta={o} />)}
+        </div>
+
+        {/* El degradado hace de "hay más abajo" sin recortar de golpe. Vive
+            fuera del flujo, así que no afecta la altura de la card. */}
+        <div className="absolute inset-x-0 bottom-0 h-24 pointer-events-none"
+          style={{ background: 'linear-gradient(to top, var(--surface-solid, #fff) 30%, transparent)' }} />
+
+        <button
+          onClick={() => setExpandida(true)}
+          className="lok-tap absolute inset-x-0 bottom-0 pt-8 pb-4 flex items-end justify-center"
+        >
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-full shadow-md"
+            style={{ background: 'var(--brand-hex, #00B8D9)', color: '#fff' }}>
+            Ver la tienda completa
+            <ChevronDown className="w-3.5 h-3.5" />
+          </span>
+        </button>
+      </div>
+
+      {/* ── Expandida: pantalla completa, scrolleable ──
+          Va por portal al <body>: este componente vive dentro de un FadeUp,
+          que aplica transform, y un ancestro con transform crea un contexto
+          de posicionamiento propio — position:fixed se ancla a ÉL y no al
+          viewport. Sin el portal el modal quedaba recortado dentro del hero,
+          dejando ver la landing arriba y abajo. */}
+      {expandida && createPortal(
+        // rgb(...) alrededor del token: --surface-dim guarda componentes
+        // sueltos ("245 245 245"), no un color. Usarlo pelado daba un valor
+        // inválido, el fondo quedaba transparente y se veía la landing por
+        // detrás — parecía que las cards del modal se superponían.
+        <div className="lok-app-surface fixed inset-0 z-[6000] flex flex-col"
+          style={{ background: 'rgb(var(--surface-dim, 245 245 245))' }}>
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 h-14 shrink-0 border-b backdrop-blur"
+            style={{
+              background: 'rgb(var(--surface-solid-rgb, 255 255 255) / 0.85)',
+              borderColor: 'rgb(var(--brand, 0 184 217) / 0.12)',
+            }}>
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full"
+              style={{ background: 'rgb(var(--brand, 0 184 217) / 0.12)', color: 'var(--brand-hex, #00B8D9)' }}>
+              Ejemplo
+            </span>
+            <p className="text-sm font-black truncate">Así se ve tu tienda</p>
+            <button onClick={() => setExpandida(false)} aria-label="Cerrar ejemplo"
+              className="lok-tap ui-icon-btn hover:bg-surface-card-2 dark:hover:bg-white/8 text-ink-dim shrink-0">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto overscroll-contain">
+            <div className="max-w-lg mx-auto pb-8">
+              <div className="bg-surface-card">
+                <Cabecera />
+                <div className="px-4 pb-4 flex flex-wrap gap-2">
+                  {['Ofertas', 'Contacto', 'Horarios', 'Cómo llegar'].map(t => (
+                    <span key={t} className="text-[11px] font-semibold px-3 py-1.5 rounded-full"
+                      style={{ background: 'rgb(var(--brand, 0 184 217) / 0.10)', color: 'var(--brand-hex, #00B8D9)' }}>
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="px-4 pt-5">
+                <p className="text-xs font-black uppercase tracking-wider mb-3" style={{ color: 'var(--text-secondary, #999)' }}>
+                  Publicaciones
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {OFERTAS_MOCK.map(o => <CardOfertaMock key={o.id} oferta={o} />)}
+                </div>
+              </div>
+
+              <div className="px-4 pt-6">
+                <div className="rounded-2xl border p-4 text-center" style={CARD_TINTED}>
+                  <p className="text-sm font-bold mb-1">Esto es un ejemplo</p>
+                  <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary, #999)' }}>
+                    Tu tienda va a tener tus fotos, tus datos y tu color de marca.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
   );
 }
 
@@ -702,21 +817,13 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
               </p>
             </FadeUp>
           </div>
-          {/* Desktop: al lado del texto, tamaño completo. */}
-          <FadeUp delay={200} className="hidden lg:block">
-            <PanelMockup />
-          </FadeUp>
-          {/* Mobile: DEBAJO del CTA y al 78%, no al lado. Antes tenía
-              "hidden lg:block" y no se veía en celular, que es por donde
-              entra la mayoría: el hero no mostraba nada del producto.
-              Ponerlo arriba del botón empujaría la acción principal fuera
-              de pantalla, así que va después, como refuerzo de lo que se
-              acaba de prometer. El alto se reserva ya escalado porque
-              scale() no afecta el layout. */}
-          <FadeUp delay={200} className="lg:hidden overflow-hidden" >
-            <div style={{ height: 470 * 0.78 }}>
-              <PanelMockup escala={0.78} />
-            </div>
+          {/* Una sola vista para los dos tamaños: se ajusta al ancho que
+              tenga disponible, igual que la tienda real. En desktop es la
+              columna de al lado; en mobile queda debajo del CTA, sin
+              empujarlo fuera de pantalla y sin ocupar todo el alto como el
+              teléfono de 248px que había antes. */}
+          <FadeUp delay={200}>
+            <TiendaPreview />
           </FadeUp>
         </div>
       </section>
