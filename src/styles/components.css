@@ -518,6 +518,32 @@
   -webkit-touch-callout: none;      /* iOS: sin menú al mantener apretado */
   -webkit-tap-highlight-color: transparent; /* Android: sin flash gris */
 }
+/* Los <a> con href abren el menú del navegador ("abrir en pestaña nueva",
+   "copiar dirección") al mantenerlos apretados, y -webkit-touch-callout no
+   siempre alcanza: hay que declararlo también sobre el contenido y matar el
+   arrastre del enlace, que es lo que dispara ese menú en varios Android. */
+a.lok-tap,
+a.lok-tap * {
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
+/* Legales del footer: mismo chip que los controles del header, para que se
+   lean como botones y no como texto subrayado. */
+.lok-link-btn {
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: rgb(var(--brand, 0 184 217) / 0.07);
+  transition: background-color 160ms ease, color 160ms ease, transform 120ms ease;
+}
+@media (hover: hover) {
+  .lok-link-btn:hover { background: rgb(var(--brand, 0 184 217) / 0.16); }
+}
+.lok-link-btn:active {
+  background: rgb(var(--brand, 0 184 217) / 0.22);
+  transform: scale(0.96);
+}
 
 /* Controles secundarios del header de la landing (tema, "Entrar"). El fondo
    y el borde de reposo van inline en el JSX; el hover vive acá porque una

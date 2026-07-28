@@ -258,6 +258,8 @@ export default function Root() {
         page={legalPage}
         onNavigate={openLegal}
         onBack={closeLegal}
+        isDark={isDark}
+        toggleTheme={toggleTheme}
       />
     );
   }

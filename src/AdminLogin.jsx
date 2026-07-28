@@ -208,9 +208,9 @@ export default function AdminLogin({ isDark, toggleTheme, onVolver }) {
           porque al entrar se aceptan los términos. */}
       <footer className="relative z-10 shrink-0 py-6 flex flex-col items-center gap-2">
         <nav className="flex items-center gap-4 text-[11px] font-semibold" style={{ color: 'var(--text-secondary, #999)' }}>
-          <a href="/terminos-y-condiciones" className="lok-tap hover:text-brand transition-colors">Términos</a>
-          <a href="/politica-de-privacidad" className="lok-tap hover:text-brand transition-colors">Privacidad</a>
-          <a href="/condiciones-para-comercios" className="lok-tap hover:text-brand transition-colors">Comercios</a>
+          <a href="/terminos-y-condiciones" className="lok-tap lok-link-btn hover:text-brand">Términos</a>
+          <a href="/politica-de-privacidad" className="lok-tap lok-link-btn hover:text-brand">Privacidad</a>
+          <a href="/condiciones-para-comercios" className="lok-tap lok-link-btn hover:text-brand">Comercios</a>
         </nav>
         <p className="text-[10px]" style={{ color: 'var(--text-secondary, #999)' }}>
           © {new Date().getFullYear()} LOKAL. Todos los derechos reservados.

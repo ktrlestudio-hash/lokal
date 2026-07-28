@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Store, Shield, FileText, ShoppingBag, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Store, Shield, FileText, ShoppingBag, ChevronDown, Sun, Moon } from 'lucide-react';
 import { LogoFull, KtrlMark } from './Brand';
 
 // Mismo tratamiento de card que la landing (CARD_TINTED en LandingScreen):
@@ -84,29 +84,45 @@ function LegalLayout({ title, subtitle, icon: Icon, children, onBack, actualizad
         <div className="absolute inset-x-0 top-0 h-32 pointer-events-none"
           style={{ background: 'radial-gradient(ellipse 70% 100% at 50% 0%, rgb(var(--brand, 0 184 217) / 0.12), transparent)' }} />
         <div className="relative max-w-5xl mx-auto px-5 lg:px-8 py-8">
-          <div className="grid grid-cols-2 sm:grid-cols-[1fr_auto_1fr] items-center gap-y-5 gap-x-4">
+          {/* Fila de logos: LOKAL · toggle de tema · KTRL, igual que el
+              footer de la landing y el de tienda. El grid 1fr auto 1fr deja
+              el toggle centrado sin importar cuánto midan los logos. */}
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-4">
             <div className="justify-self-start">
               <LogoFull size={22} />
             </div>
 
-            <nav className="order-last col-span-2 sm:order-none sm:col-span-1 flex items-center justify-center gap-5 text-xs font-semibold"
-              style={{ color: 'var(--text-secondary, #999)' }}>
-              <button onClick={() => navigateLegal('terminos')} className="lok-tap hover:text-brand transition-colors">Términos</button>
-              <button onClick={() => navigateLegal('privacidad')} className="lok-tap hover:text-brand transition-colors">Privacidad</button>
-              <button onClick={() => navigateLegal('comercios')} className="lok-tap hover:text-brand transition-colors">Comercios</button>
-            </nav>
+            <button
+              onClick={temaLegal.toggleTheme}
+              aria-label={temaLegal.isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+              className="lok-tap lok-chip-btn justify-self-center w-[30px] h-[30px] rounded-[10px] inline-flex items-center justify-center text-ink-dim hover:text-brand"
+              style={{
+                background: `rgb(var(--brand, 0 184 217) / ${temaLegal.isDark ? 0.09 : 0.08})`,
+                border: temaLegal.isDark ? '1px solid rgb(var(--brand, 0 184 217) / 0.18)' : '1px solid transparent',
+              }}
+            >
+              {temaLegal.isDark ? <Sun className="w-[15px] h-[15px]" /> : <Moon className="w-[15px] h-[15px]" />}
+            </button>
 
+            {/* KTRL con el mismo color que el logo LOKAL, no al 50%: son las
+                dos marcas de la misma fila. */}
             <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
-              className="lok-tap justify-self-end inline-flex items-center gap-1.5 text-ink-dim/50 hover:text-ink-dim/80 transition-colors">
+              className="lok-tap justify-self-end inline-flex items-center gap-1.5 text-ink-dim hover:text-brand transition-colors">
               <span className="text-[10px] font-semibold">Creado por</span>
               <KtrlMark style={{ height: 11, color: 'currentColor' }} />
             </a>
-
-            <p className="col-span-2 sm:col-span-3 text-center text-[10px] order-1 sm:order-none"
-              style={{ color: 'var(--text-secondary, #999)' }}>
-              © {new Date().getFullYear()} LOKAL. Todos los derechos reservados.
-            </p>
           </div>
+
+          <p className="mt-5 text-center text-[10px]" style={{ color: 'var(--text-secondary, #999)' }}>
+            © {new Date().getFullYear()} LOKAL. Todos los derechos reservados.
+          </p>
+
+          <nav className="mt-4 flex items-center justify-center gap-5 text-xs font-semibold"
+            style={{ color: 'var(--text-secondary, #999)' }}>
+            <button onClick={() => navigateLegal('terminos')} className="lok-tap lok-link-btn hover:text-brand">Términos</button>
+            <button onClick={() => navigateLegal('privacidad')} className="lok-tap lok-link-btn hover:text-brand">Privacidad</button>
+            <button onClick={() => navigateLegal('comercios')} className="lok-tap lok-link-btn hover:text-brand">Comercios</button>
+          </nav>
         </div>
       </footer>
     </div>
@@ -115,6 +131,9 @@ function LegalLayout({ title, subtitle, icon: Icon, children, onBack, actualizad
 
 // Función global para navegar entre páginas legales (se pisa desde el componente padre)
 let navigateLegal = () => {};
+// Tema — lo mismo que navigateLegal: lo escribe LegalPageView en cada render
+// y lo lee el footer, sin pasar props por las tres páginas intermedias.
+const temaLegal = { isDark: false, toggleTheme: () => {} };
 
 // ─── Sección de contenido ─────────────────────────────────────────────────────
 // Cada sección es un acordeón, igual que las preguntas frecuentes de la
@@ -507,9 +526,13 @@ function ComerciosPage({ onBack }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL — renderiza la página legal correcta
 // ═══════════════════════════════════════════════════════════════════════════════
-export default function LegalPageView({ page, onNavigate, onBack }) {
-  // Expone la función de navegación entre páginas legales al LegalLayout
+export default function LegalPageView({ page, onNavigate, onBack, isDark, toggleTheme }) {
+  // Expone la navegación y el tema al LegalLayout, que está tres niveles más
+  // abajo. Mismo mecanismo que ya usaba navigateLegal, para no enhebrar las
+  // mismas props por las tres páginas del documento.
   navigateLegal = onNavigate;
+  temaLegal.isDark = isDark;
+  temaLegal.toggleTheme = toggleTheme;
 
   if (page === 'terminos')   return <TerminosPage   onBack={onBack} />;
   if (page === 'privacidad') return <PrivacidadPage onBack={onBack} />;

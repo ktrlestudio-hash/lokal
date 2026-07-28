@@ -839,33 +839,50 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
             que el footer de tienda. */}
         <div className="relative max-w-5xl mx-auto px-5 lg:px-8 py-8">
           {/* Fila 1 (mobile) / columnas laterales (desktop) */}
-          <div className="grid grid-cols-2 sm:grid-cols-[1fr_auto_1fr] items-center gap-y-5 gap-x-4">
+          {/* Fila de logos: LOKAL · toggle de tema · KTRL. El grid de 3
+              columnas (1fr auto 1fr) deja el toggle VERDADERAMENTE centrado
+              sin importar cuánto midan los logos a los costados — mismo
+              criterio que el footer de tienda, donde con space-between el
+              centro dependía de que ambos lados pesaran igual. */}
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-4">
             <div className="justify-self-start">
               <LogoFull size={22} />
             </div>
 
-            {/* Legales — fila 3 en mobile (order-last + col-span-2), columna
-                central en desktop. */}
-            <nav className="order-last col-span-2 sm:order-none sm:col-span-1 flex items-center justify-center gap-5 text-xs font-semibold"
-              style={{ color: 'var(--text-secondary, #999)' }}>
-              <a href="/terminos-y-condiciones" className="lok-tap hover:text-brand transition-colors">Términos</a>
-              <a href="/politica-de-privacidad" className="lok-tap hover:text-brand transition-colors">Privacidad</a>
-              <a href="/condiciones-para-comercios" className="lok-tap hover:text-brand transition-colors">Comercios</a>
-            </nav>
+            <button
+              onClick={toggleTheme}
+              aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+              className="lok-tap lok-chip-btn justify-self-center w-[30px] h-[30px] rounded-[10px] inline-flex items-center justify-center text-ink-dim hover:text-brand"
+              style={{
+                background: `rgb(var(--brand, 0 184 217) / ${isDark ? 0.09 : 0.08})`,
+                border: isDark ? '1px solid rgb(var(--brand, 0 184 217) / 0.18)' : '1px solid transparent',
+              }}
+            >
+              {isDark ? <Sun className="w-[15px] h-[15px]" /> : <Moon className="w-[15px] h-[15px]" />}
+            </button>
 
+            {/* KTRL con el mismo color que el logo LOKAL (text-ink-dim), no
+                al 50% como antes: son las dos marcas de la misma fila y una
+                se veía notoriamente más apagada que la otra. */}
             <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
-              className="lok-tap justify-self-end inline-flex items-center gap-1.5 text-ink-dim/50 hover:text-ink-dim/80 transition-colors">
+              className="lok-tap justify-self-end inline-flex items-center gap-1.5 text-ink-dim hover:text-brand transition-colors">
               <span className="text-[10px] font-semibold">Creado por</span>
               <KtrlMark style={{ height: 11, color: 'currentColor' }} />
             </a>
-
-            {/* Copyright — fila 2 en mobile (entre logos y legales); en
-                desktop se corre abajo, centrado bajo las tres columnas. */}
-            <p className="col-span-2 sm:col-span-3 text-center text-[10px] order-1 sm:order-none"
-              style={{ color: 'var(--text-secondary, #999)' }}>
-              © {new Date().getFullYear()} LOKAL. Todos los derechos reservados.
-            </p>
           </div>
+
+          {/* Copyright */}
+          <p className="mt-5 text-center text-[10px]" style={{ color: 'var(--text-secondary, #999)' }}>
+            © {new Date().getFullYear()} LOKAL. Todos los derechos reservados.
+          </p>
+
+          {/* Legales */}
+          <nav className="mt-4 flex items-center justify-center gap-5 text-xs font-semibold"
+            style={{ color: 'var(--text-secondary, #999)' }}>
+            <a href="/terminos-y-condiciones" className="lok-tap lok-link-btn hover:text-brand">Términos</a>
+            <a href="/politica-de-privacidad" className="lok-tap lok-link-btn hover:text-brand">Privacidad</a>
+            <a href="/condiciones-para-comercios" className="lok-tap lok-link-btn hover:text-brand">Comercios</a>
+          </nav>
         </div>
       </footer>
 
