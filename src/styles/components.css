@@ -487,3 +487,21 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* BOTÓN DE GOOGLE CAMUFLADO (landing)                                        */
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* El botón real de Google va encima con opacity:0 para que su texto no
+   parpadee entre genérico y personalizado (ver LandingScreen.jsx). Ese
+   iframe se queda con el puntero y, al ser otro documento, ni :hover ni
+   :active llegan nunca al contenedor — verificado: con reglas CSS el
+   feedback no se disparaba. Por eso el hover/press se resuelven en JS por
+   posición del puntero (ver BotonGoogle) y acá sólo queda lo que CSS sí
+   puede hacer. */
+.lok-gbtn {
+  /* El iframe no propaga cursor:pointer al pasarle por encima. */
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lok-gbtn { transition: none !important; transform: none !important; }
+}

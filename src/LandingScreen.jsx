@@ -94,7 +94,34 @@ function FadeUp({ children, delay = 0, className = '' }) {
 const BTN_W = 260;
 function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }) {
   const slotRef = useRef(null);
+  const marcoRef = useRef(null);
   const [gisListo, setGisListo] = useState(false);
+  // Sólo press: el hover es indetectable con el iframe encima (ver abajo).
+  const [apretado, setApretado] = useState(false);
+
+  // El iframe de Google se traga TODOS los eventos de puntero (probado:
+  // pointer*/mouse* no llegan al marco ni en fase de captura, ni a
+  // document; y al ser otro origen tampoco se puede mirar adentro). O sea
+  // que el hover es imposible de detectar.
+  //
+  // Pero al presionarlo, el iframe toma el foco, y ESO sí se ve desde acá:
+  // window dispara 'blur' con document.activeElement === el iframe. Es
+  // justo el gesto que importa en mobile, así que alcanza para que el
+  // botón visible reaccione al tocarlo en vez de sentirse muerto.
+  useEffect(() => {
+    const alPerderFoco = () => {
+      const dentro = slotRef.current?.contains(document.activeElement);
+      if (document.activeElement?.tagName === 'IFRAME' && dentro) {
+        setApretado(true);
+        // No hay un evento de "soltó": el foco se queda en el iframe
+        // mientras se abre el sheet. Se suelta solo, con la duración de un
+        // press normal.
+        setTimeout(() => setApretado(false), 220);
+      }
+    };
+    window.addEventListener('blur', alPerderFoco);
+    return () => window.removeEventListener('blur', alPerderFoco);
+  }, []);
 
   // Los callbacks viajan por ref, NO por dependencias: el padre los crea
   // inline, así que son funciones nuevas en cada render. Como dependencias
@@ -178,8 +205,13 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
             recomienda ni la prohíbe), así que depende de que su iframe siga
             siendo clickeable por encima. Si algún día dejara de funcionar,
             onPopup sigue como respaldo en el mismo botón. */}
+        {/* El feedback (hover/press) lo maneja el efecto de arriba por
+            posición del puntero, no :hover/:active de CSS: el iframe de
+            Google está encima capturando el puntero y, al ser otro
+            documento, esos estados nunca llegan a este contenedor. */}
         <div
-          className="relative"
+          ref={marcoRef}
+          className="relative lok-gbtn"
           style={{
             width: BTN_W + 2,
             height: 42,
@@ -188,7 +220,11 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
               ? 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.16), rgb(var(--brand, 0 184 217) / 0.04))'
               : 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.12), rgb(var(--brand, 0 184 217) / 0.03))',
             border: '1px solid rgb(var(--brand, 0 184 217) / 0.22)',
-            boxShadow: '0 6px 22px -10px rgb(var(--brand, 0 184 217) / 0.55)',
+            boxShadow: apretado
+              ? '0 3px 12px -6px rgb(var(--brand, 0 184 217) / 0.8)'
+              : '0 6px 22px -10px rgb(var(--brand, 0 184 217) / 0.55)',
+            transform: apretado ? 'scale(0.975)' : 'scale(1)',
+            transition: 'transform 120ms ease, box-shadow 200ms ease',
           }}
         >
           {/* Lo que el usuario ve: nuestro botón, con el pill, el logo
@@ -204,6 +240,8 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
               borderRadius: 20,
               background: isDark ? '#fff' : '#131314',
               color: isDark ? '#1f1f1f' : '#e3e3e3',
+              filter: apretado ? 'brightness(0.92)' : 'none',
+              transition: 'filter 160ms ease',
             }}
           >
             {loading ? <Loader2 className="w-[18px] h-[18px] animate-spin" /> : <GoogleIcon size={18} />}
