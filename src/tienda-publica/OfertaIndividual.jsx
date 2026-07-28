@@ -103,18 +103,38 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
   // vertical que horizontal, se cede el control al scroll nativo del
   // navegador para el resto del gesto (mismo criterio que el touchmove de
   // mvsupermercado: threshold de 8px antes de decidir "esto es un swipe").
+  //
+  // Carrusel REAL (no crossfade): se arma un track de 3 fotos —
+  // anterior/actual/siguiente, la MISMA disposición de siempre en LOKAL —
+  // y el dedo mueve el track entero. Antes, soltar el gesto llamaba
+  // directo a onNavegarAOferta, que remonta este componente con otra
+  // oferta: la foto vieja desaparecía y la nueva aparecía ya quieta, sin
+  // continuidad visual (el "salto" que reportó el usuario). Ahora la
+  // navegación real (cambiar la URL) se dispara recién CUANDO la animación
+  // de salida termina — mientras tanto todo es local a este componente.
   const touchStartRef = useRef(null);
   const swipeAxisRef = useRef(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
+  const [asentando, setAsentando] = useState(null); // null | 'siguiente' | 'anterior' | 'centro' (rebote)
+  const anchoRef = useRef(0); // ancho del contenedor del track (NO el de <main>, que trae padding propio)
+  const contenedorRef = useRef(null);
   const SWIPE_THRESHOLD = 60; // px para disparar cambio de oferta al soltar
 
+  const fotoAnterior = swipeNav ? (ofertasHermanas[(ofertasHermanas.findIndex(o => o.id === oferta.id) - 1 + ofertasHermanas.length) % ofertasHermanas.length]) : null;
+  const fotoSiguiente = swipeNav ? (ofertasHermanas[(ofertasHermanas.findIndex(o => o.id === oferta.id) + 1) % ofertasHermanas.length]) : null;
+
+  useLayoutEffect(() => {
+    if (contenedorRef.current) anchoRef.current = contenedorRef.current.offsetWidth;
+  }, [swipeNav]);
+
   const onTouchStart = (e) => {
-    if (!swipeNav) return;
+    if (!swipeNav || asentando) return;
     touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     swipeAxisRef.current = null;
   };
   const onTouchMove = (e) => {
-    if (!swipeNav || !touchStartRef.current) return;
+    if (!swipeNav || !touchStartRef.current || asentando) return;
+    anchoRef.current = contenedorRef.current?.offsetWidth || anchoRef.current;
     const dx = e.touches[0].clientX - touchStartRef.current.x;
     const dy = e.touches[0].clientY - touchStartRef.current.y;
     if (swipeAxisRef.current === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
@@ -127,11 +147,22 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
   };
   const onTouchEnd = () => {
     if (swipeAxisRef.current === 'x' && Math.abs(swipeOffset) > SWIPE_THRESHOLD) {
-      if (swipeOffset < 0) swipeNav.siguiente(); else swipeNav.anterior();
+      setAsentando(swipeOffset < 0 ? 'siguiente' : 'anterior');
+    } else if (swipeAxisRef.current === 'x' && swipeOffset !== 0) {
+      setAsentando('centro'); // no llegó al umbral: rebota de vuelta al centro
     }
-    setSwipeOffset(0);
     touchStartRef.current = null;
     swipeAxisRef.current = null;
+  };
+  // Al terminar la transición CSS del track: si fue un cambio real de
+  // oferta, recién ahí se dispara la navegación (cambia URL+memoria en
+  // Root.jsx, este componente se remonta ya con el track quieto en el
+  // centro). Si fue rebote, solo se limpia el estado local.
+  const onTrackTransitionEnd = () => {
+    if (asentando === 'siguiente') swipeNav.siguiente();
+    else if (asentando === 'anterior') swipeNav.anterior();
+    setAsentando(null);
+    setSwipeOffset(0);
   };
 
   // Pageview de la oferta — llegó por un link directo (WhatsApp/FB/etc), es
@@ -148,7 +179,15 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
   return (
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: bg, color: txt, ...F }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', overscrollBehaviorY: 'contain', scrollbarWidth: 'none' }}>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        {/* Bloque header+foto: minHeight 100% del contenedor con scroll (que
+            ya termina justo antes de TiendaNavBar, ver ese componente) para
+            que ocupe TODA la pantalla disponible al cargar — así el banner
+            "¿Tenés un negocio?" y el footer de marca (TiendaFooter, más
+            abajo) quedan bajo el fold, invisibles hasta que el usuario
+            scrollea a propósito. Antes ese bloque medía solo lo que su
+            contenido pedía, y el footer se asomaba de entrada, sensación de
+            spam/anuncio para alguien que solo quería ver la oferta. */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
 
           {/* ── HERO COMPACTO — fondo liso con GLOW sutil de marca (sin card
               flotante ni franja de color con degradado). Info en fila
@@ -229,18 +268,43 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
             onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
             style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px 24px', maxWidth: 900, margin: '0 auto', width: '100%', touchAction: swipeNav ? 'pan-y' : 'auto' }}>
             <div style={{ textAlign: 'center', width: '100%' }}>
-              <div style={{ display: 'inline-block', maxWidth: 640, width: '100%' }}>
+              <div ref={contenedorRef} style={{ display: 'inline-block', maxWidth: 640, width: '100%' }}>
                 <style>{`
-                  .oi-oferta-img { transition: transform .18s cubic-bezier(0.34,1.56,0.64,1), box-shadow .18s ease; }
-                  @media (hover: hover) { .oi-oferta-img:hover { transform: scale(1.01); } }
-                  .oi-oferta-img:active { transform: scale(0.98); box-shadow: 0 10px 30px rgba(0,0,0,.28) !important; }
+                  .oi-oferta-img { cursor: zoom-in; transition: transform .18s cubic-bezier(0.34,1.56,0.64,1), box-shadow .18s ease; }
+                  @media (hover: hover) { .oi-track:not(.oi-arrastrando) .oi-oferta-img:hover { transform: scale(1.01); } }
+                  .oi-track:not(.oi-arrastrando) .oi-oferta-img:active { transform: scale(0.98); box-shadow: 0 10px 30px rgba(0,0,0,.28) !important; }
                 `}</style>
-                <img src={img} alt={oferta.nombre} onClick={(e) => { if (Math.abs(swipeOffset) > 4) return; trackClick(tienda.id, 'zoom', { origen: 'oferta', productoId: oferta.id }); zoomOferta.abrir(0, e); }} className="oi-oferta-img"
+                {/* Track de 3 fotos (anterior/actual/siguiente) — el MISMO
+                    lenguaje de carrusel deslizante que la portada de tienda:
+                    las fotos vecinas ya están montadas a los costados, el
+                    dedo mueve el track entero y al soltar la transición CSS
+                    termina el recorrido hasta encajar en el slot central
+                    siguiente/anterior (o rebota de vuelta si no llegó al
+                    umbral) — en vez del salto de "una foto reemplaza a otra"
+                    que había antes. */}
+                <div
+                  className={`oi-track${swipeAxisRef.current === 'x' && !asentando ? ' oi-arrastrando' : ''}`}
+                  onTransitionEnd={asentando ? onTrackTransitionEnd : undefined}
                   style={{
-                    width: '100%', borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,.35)', cursor: 'zoom-in', display: 'block',
-                    transform: swipeOffset ? `translateX(${swipeOffset}px)` : undefined,
-                    transition: swipeOffset ? 'none' : undefined,
-                  }} />
+                    display: 'flex',
+                    width: swipeNav ? '300%' : '100%',
+                    marginLeft: swipeNav ? '-100%' : 0,
+                    transform: `translateX(calc(${swipeNav ? '-100%' : '0%'} + ${swipeOffset}px${asentando === 'siguiente' ? ` - ${anchoRef.current}px` : asentando === 'anterior' ? ` + ${anchoRef.current}px` : ''}))`,
+                    transition: asentando ? 'transform .28s cubic-bezier(0.22,1,0.36,1)' : (swipeOffset ? 'none' : undefined),
+                  }}>
+                  {swipeNav && (
+                    <img src={fotoAnterior.imageUrl || fotoAnterior.thumbUrl} alt="" aria-hidden="true"
+                      style={{ width: swipeNav ? `${100 / 3}%` : '100%', flexShrink: 0, borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,.35)', display: 'block' }} />
+                  )}
+                  <img src={img} alt={oferta.nombre}
+                    onClick={(e) => { if (asentando || Math.abs(swipeOffset) > 4) return; trackClick(tienda.id, 'zoom', { origen: 'oferta', productoId: oferta.id }); zoomOferta.abrir(0, e); }}
+                    className="oi-oferta-img"
+                    style={{ width: swipeNav ? `${100 / 3}%` : '100%', flexShrink: 0, borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,.35)', display: 'block' }} />
+                  {swipeNav && (
+                    <img src={fotoSiguiente.imageUrl || fotoSiguiente.thumbUrl} alt="" aria-hidden="true"
+                      style={{ width: swipeNav ? `${100 / 3}%` : '100%', flexShrink: 0, borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,.35)', display: 'block' }} />
+                  )}
+                </div>
                 <div style={{ textAlign: 'center', fontSize: '1.1rem', fontWeight: 800, margin: '14px 0 2px', color: txt }}>{oferta.nombre}</div>
                 {/* Puntitos indicadores — mismo lenguaje visual que el
                     carrusel de fotos del hero de tienda (usePhotoSwipe),
@@ -259,10 +323,14 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
               </div>
             </div>
           </main>
-
-          {/* Footer de marca — MISMO componente que el home, cero divergencia */}
-          <TiendaFooter dark={dark} toggleDark={toggleTheme} tiendaId={tienda.id} />
         </div>
+
+        {/* Footer de marca — MISMO componente que el home, cero divergencia.
+            Vive FUERA del bloque minHeight:100% de arriba a propósito: así
+            queda debajo del fold inicial, visible solo si el usuario
+            scrollea buscando más — no se asoma de entrada como si fuera
+            publicidad en la propia página del dueño. */}
+        <TiendaFooter dark={dark} toggleDark={toggleTheme} tiendaId={tienda.id} />
       </div>
 
       {/* Bottom-nav — MISMO componente que el home. Home · Compartir · WhatsApp
