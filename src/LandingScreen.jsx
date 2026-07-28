@@ -375,19 +375,21 @@ function TiendaPreview() {
             )}
           </div>
 
-          {/* Identidad — relative + z-10: sin contexto de apilamiento propio,
-              el banner de arriba (que tiene una <img> posicionada) quedaba
-              por encima y tapaba el logo y el nombre. */}
-          <div className="relative z-10 px-4 flex items-end gap-3" style={{ marginTop: -26 }}>
+          {/* Identidad — sólo el LOGO se monta sobre el banner (margin
+              negativo propio); el texto queda por debajo del corte de la
+              foto, sobre el fondo de la card. Antes el bloque entero subía
+              -26px y el nombre caía justo en el borde del banner, cortado a
+              la mitad y sin contraste. */}
+          <div className="relative z-10 px-4 flex items-end gap-3">
             <div className="w-14 h-14 rounded-2xl border-2 shadow-lg overflow-hidden shrink-0 flex items-center justify-center"
-              style={{ borderColor: 'var(--surface-solid, #fff)', background: 'var(--surface-solid, #fff)' }}>
+              style={{ borderColor: 'var(--surface-solid, #fff)', background: 'var(--surface-solid, #fff)', marginTop: -28 }}>
               {tienda?.foto
                 ? <img src={tienda.foto} alt="" className="w-full h-full object-cover" />
                 : <Store className="w-6 h-6" style={{ color: 'var(--brand-hex, #00B8D9)' }} />}
             </div>
             {/* El texto va sobre la superficie de la card, no sobre la foto:
                 así se lee igual sin importar qué colores tenga la portada. */}
-            <div className="min-w-0 pb-1 pt-1">
+            <div className="min-w-0 py-2">
               <p className="font-black text-sm leading-tight truncate">{tienda?.nombre || 'Tu negocio'}</p>
               <p className="text-[11px] text-ink-dim truncate">{tienda?.ciudad || 'Tu ciudad'}</p>
             </div>
