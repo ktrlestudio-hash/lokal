@@ -226,30 +226,30 @@ function TerminosPage({ onBack }) {
       onBack={onBack}
     >
       <Highlight>
-        <strong>Lo más importante primero:</strong> Lokal es una plataforma de intermediación digital. No somos vendedores, no intervenimos en las transacciones y no garantizamos resultados comerciales. Conectamos personas que buscan con comercios que venden — el resto lo resuelven entre ellos.
+        <strong>Lo más importante primero:</strong> LOKAL te da una página web para tu negocio. No vendemos, no cobramos por vos y no intervenimos en lo que arreglás con tus clientes. Te damos la vidriera y el link; la venta la hacés vos, por donde quieras.
       </Highlight>
 
-      <Section title="1. Qué es Lokal" abiertaPorDefecto>
+      <Section title="1. Qué es LOKAL" abiertaPorDefecto>
         <p>
-          Lokal es un servicio digital que te permite explorar el catálogo de comercios de comida locales y hacer tu pedido, ya sea a través de la plataforma o por WhatsApp con el comercio. Actuamos exclusivamente como intermediador: facilitamos el contacto pero no somos parte de ningún acuerdo comercial entre usuarios y comercios.
+          LOKAL LINKS es un servicio que te permite armar la página pública de tu negocio y compartirla con un link propio. Publicás lo que ofrecés, elegís cómo se ve la página y la difundís por WhatsApp, Instagram o donde te sirva.
         </p>
         <p>
-          No somos un marketplace, no procesamos pagos entre compradores y vendedores, no almacenamos inventario y no tenemos relación con los productos que los comercios ofrecen.
+          No somos un marketplace: no procesamos pagos, no gestionamos envíos, no almacenamos inventario y no somos parte de ningún acuerdo entre vos y quien te contacta. Tus clientes te escriben a vos y arreglan con vos.
         </p>
       </Section>
 
       <Section title="2. Quiénes pueden usar la plataforma">
         <List items={[
-          'Cualquier persona mayor de 18 años con cuenta de Google puede registrarse como usuario.',
-          'Los comercios deben completar el proceso de registro y abonar la suscripción correspondiente.',
-          'Al usar Lokal, aceptás estos términos en su totalidad.',
-          'Si usás la plataforma en nombre de un negocio, también aceptás los términos en nombre de ese negocio.',
+          'Para crear una tienda hay que ser mayor de 18 años y tener una cuenta de Google.',
+          'Crear la tienda es gratis y viene con un período de prueba; para seguir publicada después hace falta una suscripción activa.',
+          'Visitar la página de una tienda no requiere registro: cualquiera puede entrar con el link.',
+          'Al usar LOKAL aceptás estos términos. Si lo hacés en nombre de un negocio, los aceptás también en nombre de ese negocio.',
         ]} />
       </Section>
 
-      <Section title="3. Qué podés hacer en Lokal">
-        <p><strong className="text-ink">Como usuario:</strong> explorar el catálogo de comercios, armar tu pedido, consultar el historial de tus pedidos anteriores y comunicarte con comercios a través de la plataforma.</p>
-        <p><strong className="text-ink">Como comercio:</strong> recibir pedidos de clientes, gestionar tu catálogo y perfil público, y medir tu alcance mediante estadísticas básicas.</p>
+      <Section title="3. Qué podés hacer en LOKAL">
+        <p><strong className="text-ink">Como dueño de una tienda:</strong> armar tu página pública, publicar lo que ofrecés con foto y datos, elegir el color y las secciones de la página, recibir consultas de clientes y ver estadísticas básicas de visitas.</p>
+        <p><strong className="text-ink">Como visitante:</strong> entrar a la página de una tienda con su link, ver lo que publica y contactarla por los medios que el negocio haya cargado.</p>
       </Section>
 
       <Section title="4. Lo que está prohibido">
@@ -265,10 +265,10 @@ function TerminosPage({ onBack }) {
 
       <Section title="5. Limitación de responsabilidad">
         <Warning>
-          Lokal no garantiza la veracidad de la información publicada por usuarios o comercios, ni la satisfacción en ninguna transacción. La decisión de comprar, contratar o acordar con un comercio es exclusivamente tuya.
+          LOKAL no verifica ni garantiza la información que cada negocio publica en su página. La decisión de contactar, contratar o acordar con un negocio es exclusivamente de quien lo hace.
         </Warning>
         <p>
-          En ningún caso Lokal será responsable por daños directos, indirectos, incidentales o consecuentes derivados del uso de la plataforma, incluyendo pero no limitado a: pérdidas económicas, incumplimiento de acuerdos comerciales privados, o productos y servicios que no cumplan expectativas.
+          En ningún caso LOKAL será responsable por daños directos, indirectos, incidentales o consecuentes derivados del uso de la plataforma, incluyendo pero no limitado a: pérdidas económicas, incumplimiento de acuerdos privados entre un negocio y sus clientes, o productos y servicios que no cumplan expectativas.
         </p>
         <p>
           El servicio se ofrece "tal como está" y puede presentar interrupciones ocasionales por mantenimiento o causas fuera de nuestro control.
@@ -329,19 +329,21 @@ function PrivacidadPage({ onBack }) {
 
       <Section title="1. Qué datos recolectamos" abiertaPorDefecto>
         <p><strong className="text-ink">Datos de cuenta (vía Google):</strong> nombre, dirección de email y foto de perfil. No almacenamos contraseñas.</p>
-        <p><strong className="text-ink">Datos de uso:</strong> pedidos que realizás, historial de interacciones dentro de la plataforma.</p>
+        <p><strong className="text-ink">Datos de tu negocio:</strong> lo que cargás en tu página — nombre, descripción, contacto, horarios, ubicación y lo que publicás. Es información pensada para ser pública: cualquiera con el link puede verla.</p>
+        <p><strong className="text-ink">Datos de uso:</strong> visitas a tu página y consultas recibidas, para armar las estadísticas que ves en tu panel.</p>
         <p><strong className="text-ink">Datos técnicos:</strong> dirección IP, tipo de dispositivo y navegador, para seguridad y funcionamiento del servicio.</p>
-        <p><strong className="text-ink">Preferencias locales:</strong> guardamos en tu dispositivo datos como tema visual, vista elegida del mapa y ubicaciones guardadas para mejorar tu experiencia. Esa información no se comparte automáticamente con terceros.</p>
-        <p><strong className="text-ink">Ubicación:</strong> si usás funciones de mapa o geolocalización, pedimos permiso al navegador y usamos esa información para mostrarte comercios o resultados cercanos.</p>
-        <p><strong className="text-ink">Imágenes y archivos:</strong> fotos o videos que subís voluntariamente a tu perfil o pedidos.</p>
+        <p><strong className="text-ink">Preferencias locales:</strong> guardamos en tu dispositivo datos como el tema visual elegido. Esa información no se comparte con terceros.</p>
+        <p><strong className="text-ink">Ubicación:</strong> si cargás la dirección de tu negocio para mostrarla en el mapa de tu página, ese dato es público por decisión tuya.</p>
+        <p><strong className="text-ink">Imágenes y archivos:</strong> fotos que subís a tu página o enviás en una conversación.</p>
       </Section>
 
       <Section title="2. Para qué usamos tus datos">
         <List items={[
-          'Identificarte como usuario y mantener tu sesión activa.',
-          'Mostrarte comercios y productos relevantes según tu actividad.',
+          'Identificarte como dueño de tu tienda y mantener tu sesión activa.',
+          'Publicar tu página y mostrarla a quien entre con tu link.',
+          'Armar las estadísticas de visitas que ves en tu panel.',
           'Mejorar el funcionamiento y la experiencia de la plataforma.',
-          'Comunicarnos con vos si hay algo importante sobre tu cuenta.',
+          'Comunicarnos con vos si hay algo importante sobre tu cuenta o tu suscripción.',
           'Detectar y prevenir usos fraudulentos o abusivos.',
         ]} />
         <p className="mt-3">
@@ -390,7 +392,7 @@ function PrivacidadPage({ onBack }) {
           Tus datos se conservan mientras tu cuenta esté activa. Si solicitás la eliminación de tu cuenta, borramos tus datos personales en un plazo máximo de 30 días, salvo obligación legal de conservarlos por más tiempo.
         </p>
         <p>
-          Los pedidos e interacciones eliminadas pueden conservarse de manera anonimizada para fines estadísticos.
+          Las visitas e interacciones eliminadas pueden conservarse de manera anonimizada para fines estadísticos.
         </p>
       </Section>
 
@@ -431,7 +433,7 @@ function ComerciosPage({ onBack }) {
 
       <Section title="1. Tu rol en la plataforma" abiertaPorDefecto>
         <p>
-          Como comercio registrado en Lokal, sos un participante independiente. Lokal te da visibilidad y te permite recibir pedidos de clientes, pero <strong className="text-ink">no somos tu empleador, franquiciante ni socio comercial</strong>. Las condiciones de cada venta o acuerdo son responsabilidad tuya.
+          Como negocio registrado en LOKAL, sos un participante independiente. Te damos la página y el link para que te encuentren, pero <strong className="text-ink">no somos tu empleador, franquiciante ni socio comercial</strong>. Las condiciones de cada venta o acuerdo son responsabilidad tuya.
         </p>
         <Warning>
           Lokal no garantiza ventas, clientes o conversiones. La plataforma es una herramienta de contacto — los resultados dependen de la propuesta de valor de tu negocio.
@@ -477,37 +479,38 @@ function ComerciosPage({ onBack }) {
         </p>
       </Section>
 
-      <Section title="5. Calidad del servicio">
+      <Section title="5. Calidad de lo que publicás">
         <p>
-          Te pedimos que confirmes pedidos solo cuando realmente podés cubrirlos. Confirmaciones incumplidas o de mala calidad afectan la experiencia de los usuarios y pueden derivar en la suspensión de tu cuenta.
+          Lo que aparece en tu página tiene que reflejar lo que realmente ofrecés. Publicaciones desactualizadas o engañosas afectan a quien te contacta y pueden derivar en la suspensión de tu cuenta.
         </p>
         <List items={[
-          'Confirmá solo los pedidos que podés preparar y entregar.',
-          'Incluí información útil: precio, tiempos de espera, condiciones de entrega.',
-          'No uses el chat para publicitar otros productos no relacionados.',
+          'Mantené al día lo que publicás: sacá o marcá como vencido lo que ya no ofrecés.',
+          'Incluí información útil y veraz: precio, condiciones, formas de contacto.',
+          'Respondé las consultas que recibas en un plazo razonable.',
+          'No uses el chat para publicitar cosas ajenas a tu negocio.',
         ]} />
       </Section>
 
       <Section title="6. Suscripción y acceso">
         <p>
-          El acceso al panel de pedidos está condicionado a tener una suscripción activa. Si tu suscripción vence:
+          Crear tu tienda es gratis e incluye un período de prueba con todo habilitado. Para que tu página siga publicada después hace falta una suscripción activa. Si vence:
         </p>
         <List items={[
-          'Tu perfil puede seguir visible para los usuarios.',
-          'No podrás recibir ni gestionar nuevos pedidos.',
-          'Podés renovar cuando quieras para recuperar el acceso completo.',
+          'Tu página deja de estar visible para quien entre con el link.',
+          'Tus datos y publicaciones se conservan: no se borra nada.',
+          'Podés renovar cuando quieras y tu página vuelve a publicarse tal como estaba.',
         ]} />
         <p>
-          Lokal se reserva el derecho de modificar los planes de suscripción con un aviso razonable a los comercios activos.
+          El precio depende del rubro y del plan. LOKAL se reserva el derecho de modificar los planes con un aviso razonable a las tiendas activas.
         </p>
       </Section>
 
-      <Section title="7. Relación con los usuarios">
+      <Section title="7. Relación con tus clientes">
         <p>
-          Los acuerdos que llegás a establecer con usuarios a través de Lokal son contratos privados entre vos y el comprador. Lokal no es parte de esos acuerdos y no tiene responsabilidad sobre su cumplimiento.
+          Lo que acordás con quien te contacta a través de tu página es un contrato privado entre vos y esa persona. LOKAL no es parte de ese acuerdo, no procesa el pago ni tiene responsabilidad sobre su cumplimiento.
         </p>
         <p>
-          Si un usuario reporta un problema con tu comercio, podemos ponernos en contacto para escuchar tu versión. En casos de incumplimiento reiterado o grave, podemos suspender tu acceso a la plataforma.
+          Si alguien reporta un problema con tu negocio, podemos ponernos en contacto para escuchar tu versión. En casos de incumplimiento reiterado o grave, podemos suspender tu acceso a la plataforma.
         </p>
       </Section>
 
