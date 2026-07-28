@@ -54,7 +54,7 @@ import TiendaDetailScreen from './screens/TiendaDetailScreen';
 import { CATEGORIES as BASE_CATEGORIES, getCategoryPath, getAllDescendants } from './categories';
 import CategoryIcon from './CategoryIcon';
 import { apiFetch } from './api';
-import { PlaceAutocomplete, MapPicker, uploadFile, uploadOfertaImages, reverseGeocode } from './storeFormUtils';
+import { PlaceAutocomplete, MapPicker, uploadImagenTienda, uploadOfertaImages, reverseGeocode } from './storeFormUtils';
 
 const API_BASE = '/.netlify/functions';
 
@@ -940,9 +940,16 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     setMediaSaving(true);
     setMediaError(null);
     try {
+      // uploadImagenTienda, no uploadFile: redimensiona antes de subir. Estas
+      // fotos se muestran en el hero de la tienda —lo primero que ve un
+      // visitante— y venían subiéndose tal cual salen del celular, o sea
+      // varios MB por imagen. La de perfil se recorta cuadrada y se ve chica,
+      // así que no necesita más de 640px.
       const urls = [];
       for (const item of mediaDraft) {
-        urls.push(item.existing ? item.url : await uploadFile(item.file));
+        if (item.existing) { urls.push(item.url); continue; }
+        urls.push(await uploadImagenTienda(item.file,
+          mediaModal === 'foto' ? { maxDim: 640 } : { maxDim: 1600 }));
       }
 
       if (mediaModal === 'foto') {

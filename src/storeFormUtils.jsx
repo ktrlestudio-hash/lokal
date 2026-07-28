@@ -127,6 +127,34 @@ export async function uploadOfertaImages(file) {
   }
 }
 
+/**
+ * Sube una foto de PERFIL o GALERÍA de tienda, redimensionada.
+ *
+ * Antes estas dos usaban uploadFile() directo, o sea el archivo original tal
+ * cual: una foto de celular moderno son 3-8 MB y se cargan en el hero de la
+ * tienda, que es lo primero que ve cualquier visitante (y ahora también la
+ * card de ejemplo de la landing). Las ofertas ya se procesaban con
+ * uploadOfertaImages; esto cierra el hueco que quedaba.
+ *
+ * No genera 3 variantes como las ofertas: la portada se ve a ancho completo
+ * en una sola medida, así que alcanza con una versión bien dimensionada.
+ * 1600px cubre pantallas grandes con holgura.
+ *
+ * Si el archivo no es procesable por canvas, cae al original — igual que
+ * uploadOfertaImages, nunca bloquea el guardado por esto.
+ */
+export async function uploadImagenTienda(file, { maxDim = 1600, quality = 0.85 } = {}) {
+  try {
+    const img = await loadImageFromFile(file);
+    const base = (file.name || 'foto').replace(/\.[^.]+$/, '');
+    const optimizada = await canvasToFile(resizeToCanvas(img, { maxDim }), `${base}.jpg`, quality);
+    URL.revokeObjectURL(img.src);
+    return await uploadFile(optimizada);
+  } catch {
+    return await uploadFile(file);
+  }
+}
+
 // Tipos de resultado de Nominatim que SÍ son ciudades/localidades reales.
 // Filtramos por `addresstype` (no `type`/`class`): Nominatim dibuja pueblos
 // como category:"boundary"+type:"administrative" (es el polígono del
