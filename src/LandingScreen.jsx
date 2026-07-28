@@ -589,10 +589,19 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
         <div className="max-w-5xl mx-auto px-5 lg:px-8 h-16 flex items-center justify-between">
           <LogoFull size={26} />
           <div className="flex items-center gap-2">
+            {/* Los dos llevan fondo y borde propios EN REPOSO, no sólo en
+                hover: sin contorno se leían como texto suelto sobre el
+                fondo, no como controles. Mismo lenguaje que la cápsula del
+                botón de Google y las cards (turquesa a baja opacidad), sólo
+                que más tenue por ser secundarios. */}
             <button
               onClick={toggleTheme}
               aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-              className="lok-tap w-10 h-10 rounded-full flex items-center justify-center text-ink-dim transition-colors hover:bg-brand/10 hover:text-brand"
+              className="lok-tap lok-chip-btn w-10 h-10 rounded-full flex items-center justify-center text-ink-dim hover:text-brand"
+              style={{
+                background: 'rgb(var(--brand, 0 184 217) / 0.07)',
+                border: '1px solid rgb(var(--brand, 0 184 217) / 0.16)',
+              }}
             >
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
@@ -601,7 +610,11 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
                 una acción de la SPA, así que el elemento correcto es button. */}
             <button
               onClick={irAlPanel}
-              className="lok-tap text-sm font-bold px-4 py-2 rounded-xl transition-colors no-underline hover:bg-brand/10 hover:text-brand text-ink-dim"
+              className="lok-tap lok-chip-btn text-sm font-bold px-4 py-2 rounded-xl no-underline hover:text-brand text-ink-dim"
+              style={{
+                background: 'rgb(var(--brand, 0 184 217) / 0.07)',
+                border: '1px solid rgb(var(--brand, 0 184 217) / 0.16)',
+              }}
             >
               Entrar
             </button>

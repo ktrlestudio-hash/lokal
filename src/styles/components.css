@@ -519,6 +519,25 @@
   -webkit-tap-highlight-color: transparent; /* Android: sin flash gris */
 }
 
+/* Controles secundarios del header de la landing (tema, "Entrar"). El fondo
+   y el borde de reposo van inline en el JSX; el hover vive acá porque una
+   utilidad de Tailwind (hover:bg-*) no puede ganarle a un style inline.
+   Clase propia y no .lok-tap: esa la comparten el acordeón, el carrusel y
+   el botón de Google, que no deben teñirse. */
+@media (hover: hover) {
+  .lok-chip-btn:hover {
+    background: rgb(var(--brand, 0 184 217) / 0.16) !important;
+    border-color: rgb(var(--brand, 0 184 217) / 0.32) !important;
+  }
+}
+.lok-chip-btn:active {
+  background: rgb(var(--brand, 0 184 217) / 0.22) !important;
+  transform: scale(0.96);
+}
+.lok-chip-btn {
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 120ms ease;
+}
+
 /* Pantalla entera que debe sentirse app, no documento: landing y login.
    Aplicar .lok-tap control por control no alcanzaba — los títulos, los
    párrafos y las etiquetas seguían seleccionables, y arrastrar sobre
