@@ -148,10 +148,17 @@ const temaLegal = { isDark: false, toggleTheme: () => {} };
 // no parezca que la página no cargó.
 function Section({ title, children, abiertaPorDefecto = false }) {
   const [abierta, setAbierta] = useState(abiertaPorDefecto);
+  // Capa de compositing propia MIENTRAS anima, igual que FadeUp en la
+  // landing. Sin esto, animar grid-template-rows con un overflow-hidden
+  // anidado deja texto fantasma en varias posiciones al scrollear en Chrome
+  // Android: el layout ya cambió pero la capa compuesta previa no se
+  // descarta a tiempo. Se apaga en onTransitionEnd para no dejar capas GPU
+  // acumuladas en todo el documento (Privacidad tiene 9 secciones).
+  const [animando, setAnimando] = useState(false);
   return (
     <section className="rounded-2xl border overflow-hidden" style={CARD_TINTED}>
       <button
-        onClick={() => setAbierta((v) => !v)}
+        onClick={() => { setAnimando(true); setAbierta((v) => !v); }}
         aria-expanded={abierta}
         // rounded propio: sin él el fondo de :active del navegador se pinta
         // recto y asoma fuera de las esquinas de la card (mismo detalle que
@@ -164,8 +171,12 @@ function Section({ title, children, abiertaPorDefecto = false }) {
       {/* grid-rows 0fr→1fr: anima el alto real sin medir con JS ni fijar un
           max-height inventado. */}
       <div className="grid transition-all duration-300 ease-out motion-reduce:transition-none"
-        style={{ gridTemplateRows: abierta ? '1fr' : '0fr' }}>
-        <div className="overflow-hidden">
+        onTransitionEnd={() => setAnimando(false)}
+        style={{
+          gridTemplateRows: abierta ? '1fr' : '0fr',
+          willChange: animando ? 'grid-template-rows' : 'auto',
+        }}>
+        <div className="overflow-hidden" style={{ transform: 'translateZ(0)' }}>
           <div className="lok-selectable px-5 pb-5 pt-4 space-y-3 text-ink-dim text-sm leading-relaxed"
             style={{ borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.12)' }}>
             {children}
