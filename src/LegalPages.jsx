@@ -79,12 +79,14 @@ function LegalLayout({ title, subtitle, icon: Icon, children, onBack, actualizad
           legales al centro y cada logo en su extremo. El grid 1fr auto 1fr
           centra los legales respecto al footer entero sin depender de que
           ambos logos midan lo mismo. */}
-      <footer className="relative overflow-hidden"
-        style={{ borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.10)' }}>
-        {/* Glow superior: separa mejor que una línea sola y usa el recurso
-            que ya define el lenguaje de la página (ver la card de precio). */}
-        <div className="absolute inset-x-0 top-0 h-32 pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse 70% 100% at 50% 0%, rgb(var(--brand, 0 184 217) / 0.12), transparent)' }} />
+      {/* Glow superior: separa mejor que una línea sola y usa el recurso que
+          ya define el lenguaje de la página. Va como capa del background y
+          no como <div> absoluto con overflow-hidden — ver Highlight. */}
+      <footer className="relative"
+        style={{
+          borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.10)',
+          background: 'radial-gradient(ellipse 70% 128px at 50% 0%, rgb(var(--brand, 0 184 217) / 0.12), transparent)',
+        }}>
         <div className="relative max-w-5xl mx-auto px-5 lg:px-8 py-8">
           {/* Fila de logos: LOKAL · toggle de tema · KTRL, igual que el
               footer de la landing y el de tienda. El grid 1fr auto 1fr deja
@@ -220,14 +222,24 @@ function Section({ title, children, abiertaPorDefecto = false }) {
 // las secciones colapsables sin gritar.
 function Highlight({ children }) {
   return (
-    <div className="lok-selectable relative overflow-hidden rounded-2xl border px-5 py-4 text-sm leading-relaxed"
+    // El glow va como una capa MÁS del background propio, no como un <div>
+    // absoluto con overflow-hidden encima. Esa combinación —degradado en
+    // capa absoluta, recortado por un contenedor con overflow-hidden y
+    // border-radius— obliga a Chrome Android a recortar el degradado contra
+    // las esquinas en cada frame del scroll, y ahí lo arrastra: es el texto
+    // fantasma que se veía sobre el primer desplegable, justo debajo.
+    //
+    // Con dos backgrounds superpuestos el resultado visual es el mismo y no
+    // hay nada que recortar: el fondo ya respeta el border-radius solo.
+    <div className="lok-selectable rounded-2xl border px-5 py-4 text-sm leading-relaxed text-ink"
       style={{
-        background: 'linear-gradient(165deg, rgb(var(--brand, 0 184 217) / 0.10), rgb(var(--brand, 0 184 217) / 0.025))',
+        background: `
+          radial-gradient(ellipse 70% 80px at 50% 0%, rgb(var(--brand, 0 184 217) / 0.14), transparent),
+          linear-gradient(165deg, rgb(var(--brand, 0 184 217) / 0.10), rgb(var(--brand, 0 184 217) / 0.025))
+        `,
         borderColor: 'rgb(var(--brand, 0 184 217) / 0.20)',
       }}>
-      <div className="absolute inset-x-0 top-0 h-20 pointer-events-none"
-        style={{ background: 'radial-gradient(ellipse 70% 100% at 50% 0%, rgb(var(--brand, 0 184 217) / 0.14), transparent)' }} />
-      <div className="relative text-ink">{children}</div>
+      {children}
     </div>
   );
 }

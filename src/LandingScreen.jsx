@@ -794,14 +794,20 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
           gratis y que no hay permanencia. */}
       <section className="relative z-10 max-w-5xl mx-auto px-5 lg:px-8 py-14">
         <FadeUp>
-          <div className="relative overflow-hidden rounded-[2rem] border p-8 lg:p-12 text-center"
+          {/* El glow va como capa del propio background, no como un <div>
+              absoluto recortado por overflow-hidden: esa combinación obliga
+              a Chrome Android a recortar el degradado contra las esquinas
+              redondeadas en cada frame del scroll, y ahí deja texto fantasma
+              (ver el mismo caso en Highlight de LegalPages). */}
+          <div className="rounded-[2rem] border p-8 lg:p-12 text-center"
             style={{
-              background: 'linear-gradient(165deg, rgb(var(--brand, 0 184 217) / 0.09), rgb(var(--brand, 0 184 217) / 0.02))',
+              background: `
+                radial-gradient(ellipse 60% 160px at 50% 0%, rgb(var(--brand, 0 184 217) / 0.16), transparent),
+                linear-gradient(165deg, rgb(var(--brand, 0 184 217) / 0.09), rgb(var(--brand, 0 184 217) / 0.02))
+              `,
               borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)',
             }}>
-            <div className="absolute inset-x-0 top-0 h-40 pointer-events-none"
-              style={{ background: 'radial-gradient(ellipse 60% 100% at 50% 0%, rgb(var(--brand, 0 184 217) / 0.16), transparent)' }} />
-            <div className="relative">
+            <div>
               <h2 className="text-2xl lg:text-3xl font-black mb-3">Empezá sin pagar nada</h2>
               <p className="text-sm leading-relaxed max-w-md mx-auto mb-7" style={{ color: 'var(--text-secondary, #999)' }}>
                 Creás tu tienda y la usás completa durante la prueba. Cuando termine,
@@ -833,10 +839,13 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
           así que el corte se lee como parte del lenguaje de la página y no
           como un divisor genérico. La línea queda, pero muy tenue, sólo para
           rematar el borde del degradado. */}
-      <footer ref={footerRef} className="relative z-10 mt-6 overflow-hidden"
-        style={{ borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.10)' }}>
-        <div className="absolute inset-x-0 top-0 h-32 pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse 70% 100% at 50% 0%, rgb(var(--brand, 0 184 217) / 0.12), transparent)' }} />
+      {/* Glow como capa del background, no como <div> absoluto con
+          overflow-hidden — ver el comentario en la card de precio. */}
+      <footer ref={footerRef} className="relative z-10 mt-6"
+        style={{
+          borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.10)',
+          background: 'radial-gradient(ellipse 70% 128px at 50% 0%, rgb(var(--brand, 0 184 217) / 0.12), transparent)',
+        }}>
         {/* Mobile: tres filas centradas — (1) los dos logos enfrentados como
             en el footer de tienda, (2) el copyright, (3) los legales.
             Desktop: esas mismas tres piezas en una fila, con los legales al

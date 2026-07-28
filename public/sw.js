@@ -1,4 +1,6 @@
-const CACHE_NAME = 'lokal-v5';
+// v6: se sube la versión para invalidar el caché de los clientes ya
+// instalados — el activate de abajo borra todo lo que no sea CACHE_NAME.
+const CACHE_NAME = 'lokal-v6';
 
 // ── Install: precache assets mínimos ─────────────────────────────────────────
 self.addEventListener('install', (e) => {
