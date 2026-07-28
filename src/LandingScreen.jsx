@@ -211,7 +211,7 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
             documento, esos estados nunca llegan a este contenedor. */}
         <div
           ref={marcoRef}
-          className="relative lok-gbtn"
+          className="relative lok-gbtn lok-tap"
           style={{
             width: BTN_W + 2,
             height: 42,
@@ -420,14 +420,14 @@ function PasosCarrusel() {
         <div className="flex items-center justify-center gap-3 mt-5">
           <button onClick={() => irA(Math.max(0, idx - 1))} disabled={idx === 0}
             aria-label="Paso anterior"
-            className="w-8 h-8 rounded-full flex items-center justify-center transition-opacity disabled:opacity-30"
+            className="lok-tap w-8 h-8 rounded-full flex items-center justify-center transition-opacity disabled:opacity-30"
             style={{ background: 'rgb(var(--brand, 0 184 217) / 0.12)', color: 'var(--brand-hex, #00B8D9)' }}>
             <ChevronLeft className="w-4 h-4" />
           </button>
           <div className="flex items-center gap-1.5">
             {PASOS.map((p, i) => (
               <button key={p.titulo} onClick={() => irA(i)} aria-label={`Ir al paso ${i + 1}`}
-                className="h-1.5 rounded-full transition-all"
+                className="lok-tap h-1.5 rounded-full transition-all"
                 style={{
                   width: i === idx ? 20 : 6,
                   background: i === idx ? 'var(--brand-hex, #00B8D9)' : 'rgb(var(--brand, 0 184 217) / 0.25)',
@@ -436,7 +436,7 @@ function PasosCarrusel() {
           </div>
           <button onClick={() => irA(Math.min(PASOS.length - 1, idx + 1))} disabled={idx === PASOS.length - 1}
             aria-label="Paso siguiente"
-            className="w-8 h-8 rounded-full flex items-center justify-center transition-opacity disabled:opacity-30"
+            className="lok-tap w-8 h-8 rounded-full flex items-center justify-center transition-opacity disabled:opacity-30"
             style={{ background: 'rgb(var(--brand, 0 184 217) / 0.12)', color: 'var(--brand-hex, #00B8D9)' }}>
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -592,7 +592,7 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
             <button
               onClick={toggleTheme}
               aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-              className="w-10 h-10 rounded-full flex items-center justify-center text-ink-dim transition-colors hover:bg-brand/10 hover:text-brand"
+              className="lok-tap w-10 h-10 rounded-full flex items-center justify-center text-ink-dim transition-colors hover:bg-brand/10 hover:text-brand"
             >
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
@@ -601,7 +601,7 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
                 una acción de la SPA, así que el elemento correcto es button. */}
             <button
               onClick={irAlPanel}
-              className="text-sm font-bold px-4 py-2 rounded-xl transition-colors no-underline hover:bg-brand/10 hover:text-brand text-ink-dim"
+              className="lok-tap text-sm font-bold px-4 py-2 rounded-xl transition-colors no-underline hover:bg-brand/10 hover:text-brand text-ink-dim"
             >
               Entrar
             </button>
@@ -691,7 +691,51 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
         </div>
       </section>
 
-      {/* ── Precio ──
+      {/* ── FAQ ── (antes del cierre: las dudas se resuelven ANTES de pedir
+          la decisión, no después. Quien llega hasta acá con una objeción sin
+          responder no va a bajar a leerla si primero le mostrás el CTA.) */}
+      <section className="relative z-10 max-w-2xl mx-auto px-5 lg:px-8 py-14">
+        <FadeUp>
+          <h2 className="text-2xl lg:text-3xl font-black text-center mb-10">Preguntas frecuentes</h2>
+        </FadeUp>
+        <div className="space-y-3">
+          {FAQ.map((item, i) => {
+            const abierto = faqOpen === i;
+            return (
+              <FadeUp key={item.q} delay={i * 50}>
+                <div className="rounded-2xl border overflow-hidden" style={CARD_TINTED}>
+                  <button
+                    onClick={() => setFaqOpen(abierto ? null : i)}
+                    aria-expanded={abierto}
+                    /* rounded-2xl propio: sin él, el fondo de :active del
+                       navegador se pintaba como un rectángulo recto que
+                       asomaba fuera de las esquinas de la card al tocar.
+                       lok-tap saca el resaltado azul de selección y el menú
+                       contextual del long-press (ver components.css). */
+                    className="lok-tap w-full flex items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-brand/5 rounded-2xl"
+                  >
+                    <span className="font-bold text-sm">{item.q}</span>
+                    <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${abierto ? 'rotate-180 text-brand' : 'text-ink-dim'}`} />
+                  </button>
+                  {/* grid-rows 0fr→1fr: transición de alto real sin medir el
+                      contenido con JS ni fijar un max-height inventado. */}
+                  <div className="grid transition-all duration-300 ease-out motion-reduce:transition-none"
+                    style={{ gridTemplateRows: abierto ? '1fr' : '0fr' }}>
+                    <div className="overflow-hidden">
+                      <p className="px-5 pb-4 text-sm leading-relaxed pt-4"
+                        style={{ color: 'var(--text-secondary, #999)', borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.12)' }}>
+                        {item.a}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </FadeUp>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ── Precio — cierre de la página ──
           Sin cifras: el precio depende del rubro y lo va a fijar el admin
           general, así que publicar un número acá sería prometer algo que
           todavía no está definido (y quedaría desincronizado del panel).
@@ -730,43 +774,6 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
         </FadeUp>
       </section>
 
-      {/* ── FAQ ── */}
-      <section className="relative z-10 max-w-2xl mx-auto px-5 lg:px-8 py-14">
-        <FadeUp>
-          <h2 className="text-2xl lg:text-3xl font-black text-center mb-10">Preguntas frecuentes</h2>
-        </FadeUp>
-        <div className="space-y-3">
-          {FAQ.map((item, i) => {
-            const abierto = faqOpen === i;
-            return (
-              <FadeUp key={item.q} delay={i * 50}>
-                <div className="rounded-2xl border overflow-hidden" style={CARD_TINTED}>
-                  <button
-                    onClick={() => setFaqOpen(abierto ? null : i)}
-                    aria-expanded={abierto}
-                    className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-brand/5"
-                  >
-                    <span className="font-bold text-sm">{item.q}</span>
-                    <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${abierto ? 'rotate-180 text-brand' : 'text-ink-dim'}`} />
-                  </button>
-                  {/* grid-rows 0fr→1fr: transición de alto real sin medir el
-                      contenido con JS ni fijar un max-height inventado. */}
-                  <div className="grid transition-all duration-300 ease-out motion-reduce:transition-none"
-                    style={{ gridTemplateRows: abierto ? '1fr' : '0fr' }}>
-                    <div className="overflow-hidden">
-                      <p className="px-5 pb-4 text-sm leading-relaxed pt-4"
-                        style={{ color: 'var(--text-secondary, #999)', borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.12)' }}>
-                        {item.a}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </FadeUp>
-            );
-          })}
-        </div>
-      </section>
-
       </main>
 
       {/* ── Footer ── */}
@@ -791,7 +798,7 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
       <button
         onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
         aria-label="Volver arriba"
-        className={`fixed bottom-5 right-5 z-40 w-11 h-11 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${scrolled ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-3 pointer-events-none'}`}
+        className={`lok-tap fixed bottom-5 right-5 z-40 w-11 h-11 rounded-full flex items-center justify-center shadow-lg transition-all duration-300 ${scrolled ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-3 pointer-events-none'}`}
         style={{ background: 'var(--brand-hex, #00B8D9)', color: '#fff' }}
       >
         <ArrowUp className="w-5 h-5" strokeWidth={2.5} />

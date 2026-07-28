@@ -502,6 +502,22 @@
   /* El iframe no propaga cursor:pointer al pasarle por encima. */
   cursor: pointer;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* SUPERFICIE TÁCTIL NATIVA                                                    */
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Para controles que se tocan pero no se leen (botones, cabeceras de
+   acordeón, chips). Sin esto un tap arrastra el texto a selección con el
+   resalte azul, y el tap mantenido abre el menú contextual del navegador
+   ("copiar/buscar") — dos cosas que delatan que es una página web y no una
+   app. El texto de lectura NO lleva esta clase: ahí sí conviene poder
+   seleccionar y copiar. */
+.lok-tap {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;      /* iOS: sin menú al mantener apretado */
+  -webkit-tap-highlight-color: transparent; /* Android: sin flash gris */
+}
 @media (prefers-reduced-motion: reduce) {
   .lok-gbtn { transition: none !important; transform: none !important; }
 }
