@@ -87,6 +87,11 @@ function FadeUp({ children, delay = 0, className = '' }) {
 // (por ejemplo al scrollear). Eso hacía que el botón alternara entre mostrar
 // el correo y "Continuar con Google", y que la página pegara un salto cuando
 // el iframe cambiaba de alto al reconstruirse.
+// Ancho pedido a GIS. Google agrega ~10px de margen invisible a cada lado
+// (medido con Playwright: pedís 320 y el iframe real mide 340), así que el
+// pill visible siempre queda BTN_W. Se probó 200 y 230: por debajo de ~250
+// el texto "Continuar con Google" empieza a apretarse contra el logo.
+const BTN_W = 260;
 function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }) {
   const slotRef = useRef(null);
   const [gisListo, setGisListo] = useState(false);
@@ -122,9 +127,7 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
       // DIÁLOGO nativo que se abre al tocar el botón (la lista de cuentas),
       // que sí debe acompañar el tema de la página, no el color del botón.
       colorScheme: isDark ? 'dark' : 'light',
-      // 320px: el máximo que admite GIS es 400, pero por encima de ~330 el
-      // botón se estira y el logo queda flotando lejos del texto.
-      width: 320,
+      width: BTN_W,
       onLogin: (u) => cbRef.current.onLogin?.(u),
       onError: (e) => cbRef.current.onError?.(e),
       // El dominio no está en "Authorized JavaScript origins": el botón de
@@ -178,7 +181,7 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
         <div
           className="relative overflow-hidden"
           style={{
-            width: 322,
+            width: BTN_W + 2,
             height: 42,
             borderRadius: 21,
             background: isDark
@@ -223,8 +226,10 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
                 en modo oscuro el iframe se dibujara blanco contra el fondo
                 casi negro de la landing (el iframe en sí SIEMPRE tiene
                 fondo blanco donde no hay botón). */}
+            {/* +20 = el margen invisible que Google agrega al iframe (~10px
+                por lado, constante sin importar el width pedido). */}
             <div ref={slotRef} className="flex items-center justify-center shrink-0"
-              style={{ colorScheme: isDark ? 'dark' : 'light', width: 340, height: 44 }} />
+              style={{ colorScheme: isDark ? 'dark' : 'light', width: BTN_W + 20, height: 44 }} />
           </div>
         </div>
         <span className="text-[11px] font-semibold text-center" style={{ color: 'var(--text-secondary, #999)' }}>
