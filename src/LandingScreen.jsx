@@ -295,21 +295,30 @@ const FAQ = [
 // ofertas — grilla de cards con su badge de vencimiento y la fila de
 // acciones. Sirve para que el dueño reconozca la herramienta antes de
 // registrarse.
-function PanelMockup() {
+// escala: en mobile el teléfono va al 78% y con menos alto, para que quepa
+// DEBAJO del botón sin empujarlo fuera de pantalla. Antes tenía
+// "hidden lg:block" y directamente no se veía en celular — justo donde
+// entra la mayoría, el hero no mostraba nada del producto.
+function PanelMockup({ escala = 1 }) {
+  // Nombres genéricos a propósito: el producto no es sólo gastronomía, y
+  // "Muzzarella grande / Combo doble" lo encasillaba en comida.
   const OFERTAS = [
-    { emoji: '🍕', nombre: 'Muzzarella grande', fecha: '31/07' },
-    { emoji: '🍔', nombre: 'Combo doble',       fecha: null    },
-    { emoji: '🥤', nombre: 'Gaseosa 1.5L',      fecha: '02/08' },
-    { emoji: '🍟', nombre: 'Papas cheddar',     fecha: null    },
+    { nombre: 'Promo de la semana', fecha: '31/07' },
+    { nombre: 'Combo 2x1',          fecha: null    },
+    { nombre: 'Envío sin cargo',    fecha: '02/08' },
+    { nombre: 'Nuevo ingreso',      fecha: null    },
   ];
   return (
-    <div className="relative w-[248px] mx-auto select-none" aria-hidden="true">
+    <div className="relative w-[248px] mx-auto select-none"
+      style={{ transform: `scale(${escala})`, transformOrigin: 'top center' }}
+      aria-hidden="true">
       <div className="absolute inset-0 rounded-full blur-[56px] scale-105 -z-0"
         style={{ background: 'rgb(var(--brand, 0 184 217) / 0.22)' }} />
       <div className="relative z-10 rounded-[2.6rem] p-2.5 shadow-2xl border border-white/10"
         style={{ background: '#0F172A' }}>
         <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-14 h-4 rounded-full bg-black z-20" />
         <div className="rounded-[2.2rem] overflow-hidden bg-white" style={{ height: 452 }}>
+          {/* Header calcado del real (StorePageHeader con icon={Tag}) */}
           <div className="px-4 pt-7 pb-3 border-b border-slate-100 flex items-center gap-2.5">
             <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
               style={{ background: 'rgb(var(--brand, 0 184 217) / 0.12)' }}>
@@ -320,13 +329,20 @@ function PanelMockup() {
               <p className="text-[9px] text-slate-400 mt-1">4 publicaciones</p>
             </div>
           </div>
+          {/* Grilla calcada de OfertaCard: proporción 1/1.414 (la real, era
+              1/1.1), badge de fecha flotante sobre la foto y fila de 3
+              acciones abajo. Sin emojis: eran un dibujo que no se parecía a
+              una publicación real. El lugar de la foto va con un degradado
+              neutro, que es lo que se ve mientras una imagen carga. */}
           <div className="p-3 grid grid-cols-2 gap-2.5">
             {OFERTAS.map((o) => (
               <div key={o.nombre} className="rounded-2xl border border-slate-100 overflow-hidden bg-white">
-                <div className="relative bg-slate-100 flex items-center justify-center" style={{ aspectRatio: '1 / 1.1' }}>
-                  <span className="text-2xl">{o.emoji}</span>
+                <div className="relative" style={{
+                  aspectRatio: '1 / 1.414',
+                  background: 'linear-gradient(150deg, #eef2f5, #e2e8ee)',
+                }}>
                   {o.fecha && (
-                    <span className="absolute top-1.5 right-1.5 text-[7px] font-bold text-white px-1.5 py-0.5 rounded-full"
+                    <span className="absolute top-1.5 right-1.5 text-[7px] font-bold text-white px-1.5 py-[3px] rounded-full"
                       style={{ background: 'rgba(0,0,0,.55)' }}>
                       {o.fecha}
                     </span>
@@ -686,8 +702,21 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
               </p>
             </FadeUp>
           </div>
+          {/* Desktop: al lado del texto, tamaño completo. */}
           <FadeUp delay={200} className="hidden lg:block">
             <PanelMockup />
+          </FadeUp>
+          {/* Mobile: DEBAJO del CTA y al 78%, no al lado. Antes tenía
+              "hidden lg:block" y no se veía en celular, que es por donde
+              entra la mayoría: el hero no mostraba nada del producto.
+              Ponerlo arriba del botón empujaría la acción principal fuera
+              de pantalla, así que va después, como refuerzo de lo que se
+              acaba de prometer. El alto se reserva ya escalado porque
+              scale() no afecta el layout. */}
+          <FadeUp delay={200} className="lg:hidden overflow-hidden" >
+            <div style={{ height: 470 * 0.78 }}>
+              <PanelMockup escala={0.78} />
+            </div>
           </FadeUp>
         </div>
       </section>

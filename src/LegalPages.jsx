@@ -19,6 +19,27 @@ function LegalLayout({ title, subtitle, icon: Icon, children, onBack, actualizad
     window.scrollTo(0, 0);
   }, []);
 
+  // Título y descripción propios del documento. Sin esto las tres páginas
+  // heredaban los meta de index.html (los de la landing), así que compartir
+  // el link de Términos en WhatsApp mostraba "Tu negocio en un solo link" y
+  // la pestaña del navegador no decía en qué documento estabas.
+  //
+  // Al desmontar se restaura el original: es una SPA, si no volvés a la
+  // landing con el título de la última legal que abriste.
+  useEffect(() => {
+    const tituloPrevio = document.title;
+    const meta = document.querySelector('meta[name="description"]');
+    const descPrevia = meta?.getAttribute('content');
+
+    document.title = `${title} — LOKAL`;
+    if (meta && subtitle) meta.setAttribute('content', subtitle);
+
+    return () => {
+      document.title = tituloPrevio;
+      if (meta && descPrevia) meta.setAttribute('content', descPrevia);
+    };
+  }, [title, subtitle]);
+
   // lok-app-surface: mismo tratamiento táctil que landing y login (sin
   // selección de texto ni menú contextual en los controles); el texto legal
   // sí se puede seleccionar, ver .lok-selectable más abajo.

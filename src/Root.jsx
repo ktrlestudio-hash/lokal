@@ -1,13 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { auth, onAuthStateChanged, getRedirectResult, signOut } from './firebase';
 import TiendaPublica from './TiendaPublica';
 import OfertaPublica from './OfertaPublica';
-import StoreApp from './StoreApp';
 import AdminLogin from './AdminLogin';
-import RegistroTienda from './RegistroTienda';
-import AdminPanel from './AdminPanel';
 import LegalPageView from './LegalPages';
 import LandingScreen from './LandingScreen';
+
+// Estas cuatro se cargan aparte, sólo cuando se entra a ellas. Antes todo
+// venía en un único bundle de 1.24 MB: alguien que llegaba a la landing
+// desde un link, la miraba y se iba, descargaba igual el admin entero, el
+// panel de super-admin y el registro.
+//
+// NO se dividen: landing, login, legales y tienda pública. Son las cuatro
+// que puede ver alguien que llega de afuera, y ahí un chunk extra sería un
+// parpadeo en la primera impresión — justo lo que no se quiere ganar a
+// cambio de unos kB.
+//
+// StoreApp entra en esta lista aunque sea la más usada por el dueño: cuando
+// llega a ella ya pasó por el login, así que la descarga ocurre mientras
+// mira una pantalla que igual está esperando datos del servidor.
+const StoreApp       = lazy(() => import('./StoreApp'));
+const RegistroTienda = lazy(() => import('./RegistroTienda'));
+const AdminPanel     = lazy(() => import('./AdminPanel'));
 import { apiFetch } from './api.js';
 import { ADMIN_EMAILS } from './config/flags';
 import { SplashScreenFull, InlineLoader } from './LokalLoader.jsx';
@@ -184,6 +198,16 @@ export default function Root() {
       await redirectPromise;
       if (!mounted) return;
       setFirebaseUser(user || null);
+
+      // Con sesión confirmada, el próximo destino es StoreApp o
+      // RegistroTienda. Se piden ya, en paralelo con el fetch de la tienda,
+      // para que el chunk esté listo cuando toque renderizar: así dividir el
+      // bundle no agrega una espera visible, sólo la mueve a un momento en
+      // que la pantalla ya estaba esperando datos.
+      if (user) {
+        import('./StoreApp');
+        import('./RegistroTienda');
+      }
     });
     return () => { mounted = false; unsub(); };
   }, []);
@@ -294,7 +318,14 @@ export default function Root() {
     }
     // onVolver: salir del panel de super-admin y volver al backoffice de la
     // tienda (/admin → StoreApp). Sin esto, la única salida era cerrar sesión.
-    return <AdminPanel onLogout={handleLogout} onVolver={() => { window.history.pushState({}, '', '/admin'); forceUrlRecheck(); }} />;
+    // Suspense con el MISMO AppLoader que ya usa el resto del flujo: al
+    // dividir el bundle, la espera por el chunk se ve igual que la espera
+    // por los datos, sin introducir un loader distinto.
+    return (
+      <Suspense fallback={<AppLoader />}>
+        <AdminPanel onLogout={handleLogout} onVolver={() => { window.history.pushState({}, '', '/admin'); forceUrlRecheck(); }} />
+      </Suspense>
+    );
   }
 
   // ── Backoffice del dueño de la tienda ─────────────────────────────────────
@@ -331,15 +362,17 @@ export default function Root() {
     // el banner de evaluación de abajo (verificada:false salvo invitación).
     if (!tiendaData) {
       return (
-        <RegistroTienda
-          firebaseUser={firebaseUser}
-          onCreada={setTiendaData}
-          onLogout={handleLogout}
-          // /admin también es el punto de entrada de login para dueños de
-          // tienda — un admin que se loguea acá (sin tienda propia) puede
-          // querer ir a /admin/panel en vez de crear una tienda de prueba.
-          onIrAlPanelAdmin={esAdminLogueado ? () => { window.history.pushState({}, '', '/admin/panel'); forceUrlRecheck(); } : null}
-        />
+        <Suspense fallback={<AppLoader />}>
+          <RegistroTienda
+            firebaseUser={firebaseUser}
+            onCreada={setTiendaData}
+            onLogout={handleLogout}
+            // /admin también es el punto de entrada de login para dueños de
+            // tienda — un admin que se loguea acá (sin tienda propia) puede
+            // querer ir a /admin/panel en vez de crear una tienda de prueba.
+            onIrAlPanelAdmin={esAdminLogueado ? () => { window.history.pushState({}, '', '/admin/panel'); forceUrlRecheck(); } : null}
+          />
+        </Suspense>
       );
     }
     return (
@@ -353,16 +386,21 @@ export default function Root() {
             Tu tienda está siendo evaluada — vas a poder salir a público en cuanto la aprobemos. Mientras tanto podés cargar ofertas y probar todo.
           </div>
         )}
-        <StoreApp
-          firebaseUser={firebaseUser}
-          tiendaData={tiendaData}
-          onLogout={handleLogout}
-          onTiendaUpdate={setTiendaData}
-          isDark={isDark}
-          toggleTheme={toggleTheme}
-          isAdmin={esAdminLogueado}
-          onOpenAdmin={esAdminLogueado ? () => { window.history.pushState({}, '', '/admin/panel'); forceUrlRecheck(); } : undefined}
-        />
+        {/* El Suspense va acá dentro y no envolviendo el fragmento entero:
+            así el banner de evaluación de arriba sigue en pantalla mientras
+            se descarga el chunk, en vez de parpadear junto con él. */}
+        <Suspense fallback={<AppLoader />}>
+          <StoreApp
+            firebaseUser={firebaseUser}
+            tiendaData={tiendaData}
+            onLogout={handleLogout}
+            onTiendaUpdate={setTiendaData}
+            isDark={isDark}
+            toggleTheme={toggleTheme}
+            isAdmin={esAdminLogueado}
+            onOpenAdmin={esAdminLogueado ? () => { window.history.pushState({}, '', '/admin/panel'); forceUrlRecheck(); } : undefined}
+          />
+        </Suspense>
       </>
     );
   }
