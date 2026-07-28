@@ -518,6 +518,26 @@
   -webkit-touch-callout: none;      /* iOS: sin menú al mantener apretado */
   -webkit-tap-highlight-color: transparent; /* Android: sin flash gris */
 }
+
+/* Pantalla entera que debe sentirse app, no documento: landing y login.
+   Aplicar .lok-tap control por control no alcanzaba — los títulos, los
+   párrafos y las etiquetas seguían seleccionables, y arrastrar sobre
+   ellos mostraba el resalte azul y el menú de "copiar/buscar". Acá se
+   apaga en todo el árbol y se vuelve a habilitar sólo donde copiar sirve
+   de verdad (.lok-selectable): la URL de la tienda, un email, un código. */
+.lok-app-surface {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.lok-app-surface .lok-selectable,
+.lok-app-surface input,
+.lok-app-surface textarea {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
 @media (prefers-reduced-motion: reduce) {
   .lok-gbtn { transition: none !important; transform: none !important; }
 }

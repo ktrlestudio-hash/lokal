@@ -55,7 +55,7 @@ export default function AdminLogin({ isDark, toggleTheme, onVolver }) {
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden" style={{ background: isDark ? '#040a14' : 'var(--surface-solid, #fff)' }}>
+    <div className="lok-app-surface relative min-h-screen flex items-center justify-center px-6 overflow-hidden" style={{ background: isDark ? '#040a14' : 'var(--surface-solid, #fff)' }}>
       {/* Ambiente de luz de marca — mismo lenguaje que el splash de carga
           (AdminLoader): glow radial superior que pulsa + reflejo inferior
           tenue. Usa el color de marca (--brand) en vez del turquesa fijo del
@@ -74,17 +74,26 @@ export default function AdminLogin({ isDark, toggleTheme, onVolver }) {
       }} />
 
       <div className="relative w-full max-w-sm">
-        {/* Card en modo oscuro: "glass" real — blanco a baja opacidad +
-            blur, deja pasar el color/glow del fondo A TRAVÉS del blur en
-            vez de imponer un color propio encima (que fue el primer
-            intento, mal: un azul más CLARO que el fondo terminaba viéndose
-            más claro en vez de "enriquecido" con él). Este es el mismo
-            truco que un vidrio esmerilado de verdad: no tiñe, difumina lo
-            que ya está atrás. Modo claro sigue sólida (bg-surface-card):
-            sobre fondo blanco el glass no aporta nada. */}
+        {/* Mismo tratamiento que las cards de la landing (CARD_TINTED en
+            LandingScreen.jsx): una pizca de turquesa de marca en el fondo y
+            en el borde, en vez de gris neutro. Los tokens globales son
+            "cero azul" a propósito (ver index.css §4), correcto para el
+            panel pero apagado acá.
+
+            En dark se suma al glass que ya había: blanco a baja opacidad +
+            blur, que deja pasar el glow del fondo a través en vez de
+            imponer un color propio encima. El turquesa va por debajo del
+            blur, así tiñe sin tapar. */}
         <div
-          className={`relative border border-slate-100 dark:border-white/8 rounded-3xl shadow-2xl px-6 py-8 text-center ${isDark ? '' : 'bg-surface-card'}`}
-          style={isDark ? { background: 'rgba(255,255,255,.06)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)' } : undefined}
+          className="relative rounded-3xl shadow-2xl px-6 py-8 text-center"
+          style={{
+            background: isDark
+              ? 'linear-gradient(160deg, rgba(255,255,255,.07), rgb(var(--brand, 0 184 217) / 0.06))'
+              : 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.06), rgb(var(--brand, 0 184 217) / 0.015)), var(--surface-solid, #fff)',
+            border: '1px solid rgb(var(--brand, 0 184 217) / 0.18)',
+            backdropFilter: isDark ? 'blur(24px)' : undefined,
+            WebkitBackdropFilter: isDark ? 'blur(24px)' : undefined,
+          }}
         >
           {/* Retroceso — esquina izquierda, espejo del toggle de tema.
               Vuelve al sitio público. Mismo lenguaje de botón-ícono

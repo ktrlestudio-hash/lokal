@@ -555,7 +555,7 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
   };
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden"
+    <div className="lok-app-surface relative min-h-screen overflow-x-hidden"
       style={{ background: isDark ? '#040a14' : 'var(--surface-solid, #fff)', color: 'var(--text-primary)' }}>
 
       {/* Salto al contenido — invisible hasta que se navega con teclado.

@@ -272,7 +272,18 @@ export default function Root() {
   //    corresponda, resuelto más abajo por isAdminRoute). ─────────────────
   if (isAdminPanelRoute) {
     if (firebaseUser === undefined || !redirectChecked) return <AppLoader />;
-    if (!firebaseUser) return <AdminLogin isDark={isDark} toggleTheme={toggleTheme} />;
+    if (!firebaseUser) return (
+      <AdminLogin
+        isDark={isDark}
+        toggleTheme={toggleTheme}
+        // Sin onVolver, AdminLogin cae a window.location.href='/' y recarga
+        // la página entera para volver a la landing: pantalla en blanco y
+        // splash de nuevo. Es el mismo salto que ya se corrigió en el
+        // sentido landing→login; acá va el inverso, con el pushState que
+        // usa el resto de la app.
+        onVolver={() => { window.history.pushState({}, '', '/'); forceUrlRecheck(); }}
+      />
+    );
     const esAdmin = firebaseUser.email && ADMIN_EMAILS.includes(firebaseUser.email.toLowerCase());
     if (!esAdmin) {
       window.history.replaceState({}, '', '/admin');
@@ -287,7 +298,18 @@ export default function Root() {
   // ── Backoffice del dueño de la tienda ─────────────────────────────────────
   if (isAdminRoute) {
     if (firebaseUser === undefined || !redirectChecked) return <AppLoader />;
-    if (!firebaseUser) return <AdminLogin isDark={isDark} toggleTheme={toggleTheme} />;
+    if (!firebaseUser) return (
+      <AdminLogin
+        isDark={isDark}
+        toggleTheme={toggleTheme}
+        // Sin onVolver, AdminLogin cae a window.location.href='/' y recarga
+        // la página entera para volver a la landing: pantalla en blanco y
+        // splash de nuevo. Es el mismo salto que ya se corrigió en el
+        // sentido landing→login; acá va el inverso, con el pushState que
+        // usa el resto de la app.
+        onVolver={() => { window.history.pushState({}, '', '/'); forceUrlRecheck(); }}
+      />
+    );
     if (loadingTienda) return <AppLoader />;
     // Error real de red/servidor al buscar la tienda del usuario — distinto
     // de "no tiene tienda todavía" (404), que sí lleva a RegistroTienda.
