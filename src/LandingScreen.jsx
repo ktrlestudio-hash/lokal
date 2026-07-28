@@ -161,25 +161,25 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
           — gisListo jamás llegaba a ponerse en true. Bug circular: el ref
           necesitaba el estado que el propio efecto debía setear. */}
       <div className="inline-flex flex-col gap-2">
-        {/* Marco fijo de 320x40+2px de borde: SIEMPRE el mismo tamaño, tenga
-            GIS listo o no. Adentro se superponen dos capas con position
-            absolute — nuestro botón custom (mismo pill, mismo logo, mismo
-            texto que "Continuar con Google") y el slot real de Google — y
-            se cruzan con opacity. Antes, mientras cargaba, se veía un botón
-            de FORMA distinta ("Creá tu tienda gratis" en bg-ink) que
-            after cambiaba abruptamente al pill blanco/negro de Google — un
-            salto de identidad visual, no solo de contenido. Ahora el marco
-            nunca cambia de forma: lo único que se disuelve es cuál capa es
-            la visible, con el mismo contorno.
+        {/* Google NO permite desactivar el botón personalizado: no hay campo
+            en IdConfiguration ni en GsiButtonConfiguration para forzar el
+            texto genérico cuando hay sesión (verificado en la referencia de
+            la API). Su botón SIEMPRE va a pasar de "Continuar con Google" a
+            "Continuar como X" cuando resuelve la sesión, y ese salto es
+            visible sí o sí mientras su botón sea el que se ve.
 
-            El fundido cruzado tampoco tapa el parpadeo INTERNO de Google
-            (genérico → "Continuar como X", que ocurre del lado de adentro
-            del iframe y no se puede evitar) — pero ese parpadeo ya pasa
-            DESPUÉS de que el usuario ve nuestro botón calcado, con la misma
-            forma exacta, así que se percibe como "el botón ya estaba ahí y
-            se puso su nombre", no como dos botones distintos turnándose. */}
+            Así que su botón no se ve nunca: va encima con opacity:0,
+            recibiendo el click real — lo que mantiene el sheet nativo sin
+            ventana intermedia — y debajo se ve SIEMPRE el nuestro, que no
+            cambia de texto ni parpadea porque no depende del estado de
+            sesión. Sin fundido cruzado, sin capa que aparezca y desaparezca.
+
+            Contra: es una técnica que la doc de Google no cubre (ni la
+            recomienda ni la prohíbe), así que depende de que su iframe siga
+            siendo clickeable por encima. Si algún día dejara de funcionar,
+            onPopup sigue como respaldo en el mismo botón. */}
         <div
-          className="relative overflow-hidden"
+          className="relative"
           style={{
             width: BTN_W + 2,
             height: 42,
@@ -191,20 +191,17 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
             boxShadow: '0 6px 22px -10px rgb(var(--brand, 0 184 217) / 0.55)',
           }}
         >
-          {/* Capa 1: nuestro botón, calcado del real de Google (mismo pill,
-              mismo logo multicolor, mismo texto y tamaño) — visible desde
-              el instante cero, con el theme correcto invertido (ver más
-              abajo) para que ya contraste bien contra la página. */}
+          {/* Lo que el usuario ve: nuestro botón, con el pill, el logo
+              multicolor y el texto de Google. Estable de punta a punta.
+              onClick queda como respaldo — si GIS cargó, el click nunca
+              llega acá porque lo intercepta la capa de arriba. */}
           <button
             type="button"
             onClick={onPopup}
-            aria-hidden={gisListo}
-            tabIndex={gisListo ? -1 : 0}
             disabled={loading}
-            className="absolute inset-0 flex items-center justify-center gap-2.5 font-medium text-[15px] transition-opacity duration-300"
+            className="absolute inset-0 flex items-center justify-center gap-2.5 font-medium text-[15px] overflow-hidden"
             style={{
-              opacity: gisListo ? 0 : 1,
-              pointerEvents: gisListo ? 'none' : 'auto',
+              borderRadius: 20,
               background: isDark ? '#fff' : '#131314',
               color: isDark ? '#1f1f1f' : '#e3e3e3',
             }}
@@ -213,19 +210,14 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
             Continuar con Google
           </button>
 
-          {/* Capa 2: el slot real de Google, debajo del custom, que se
-              revela con fade-in cuando gisListo. El swap interno de Google
-              (genérico → personalizado) puede seguir ocurriendo acá, pero
-              ya ocurre por encima de nuestro botón idéntico, no reemplazando
-              a otro de forma distinta. */}
+          {/* El botón real de Google: invisible pero clickeable, encima de
+              todo. aria-hidden no: sigue siendo el control que recibe el
+              click, y su iframe trae su propia accesibilidad. El nuestro de
+              abajo queda como respaldo visual y de teclado. */}
           <div
-            className="absolute inset-0 flex items-center justify-center transition-opacity duration-300"
-            style={{ opacity: gisListo ? 1 : 0 }}
+            className="absolute inset-0 flex items-center justify-center"
+            style={{ opacity: 0 }}
           >
-            {/* color-scheme sigue al tema real: forzarlo a light hacía que
-                en modo oscuro el iframe se dibujara blanco contra el fondo
-                casi negro de la landing (el iframe en sí SIEMPRE tiene
-                fondo blanco donde no hay botón). */}
             {/* +20 = el margen invisible que Google agrega al iframe (~10px
                 por lado, constante sin importar el width pedido). */}
             <div ref={slotRef} className="flex items-center justify-center shrink-0"
