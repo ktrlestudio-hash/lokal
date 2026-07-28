@@ -599,8 +599,11 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
               aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
               className="lok-tap lok-chip-btn w-10 h-10 rounded-full flex items-center justify-center text-ink-dim hover:text-brand"
               style={{
-                background: 'rgb(var(--brand, 0 184 217) / 0.07)',
-                border: '1px solid rgb(var(--brand, 0 184 217) / 0.16)',
+                // Borde sólo en dark: sobre el fondo casi negro el relleno
+                // al 7% no alcanza a definir la forma. En light el fondo ya
+                // se ve solo y el borde sumaba ruido.
+                background: `rgb(var(--brand, 0 184 217) / ${isDark ? 0.09 : 0.08})`,
+                border: isDark ? '1px solid rgb(var(--brand, 0 184 217) / 0.18)' : '1px solid transparent',
               }}
             >
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -612,8 +615,11 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel }) {
               onClick={irAlPanel}
               className="lok-tap lok-chip-btn text-sm font-bold px-4 py-2 rounded-xl no-underline hover:text-brand text-ink-dim"
               style={{
-                background: 'rgb(var(--brand, 0 184 217) / 0.07)',
-                border: '1px solid rgb(var(--brand, 0 184 217) / 0.16)',
+                // Borde sólo en dark: sobre el fondo casi negro el relleno
+                // al 7% no alcanza a definir la forma. En light el fondo ya
+                // se ve solo y el borde sumaba ruido.
+                background: `rgb(var(--brand, 0 184 217) / ${isDark ? 0.09 : 0.08})`,
+                border: isDark ? '1px solid rgb(var(--brand, 0 184 217) / 0.18)' : '1px solid transparent',
               }}
             >
               Entrar
