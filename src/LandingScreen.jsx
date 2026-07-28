@@ -157,42 +157,30 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
           render, salía por esa guarda sin loguear nada, y nunca reintentaba
           — gisListo jamás llegaba a ponerse en true. Bug circular: el ref
           necesitaba el estado que el propio efecto debía setear. */}
-      <div className="inline-flex flex-col gap-2" style={{ display: gisListo ? 'inline-flex' : 'none' }}>
-        {/* Cápsula de marca: UNA sola capa de recorte, sin padding entre el
-            borde y el visor del botón. Medido con Playwright sobre el botón
-            real: el iframe que inyecta GIS se dibuja 340x44 con un
-            margin:-2px -10px propio, esquinas cuadradas y fondo blanco
-            propio (siempre blanco, sea cual sea el tema).
+      <div className="inline-flex flex-col gap-2">
+        {/* Marco fijo de 320x40+2px de borde: SIEMPRE el mismo tamaño, tenga
+            GIS listo o no. Adentro se superponen dos capas con position
+            absolute — nuestro botón custom (mismo pill, mismo logo, mismo
+            texto que "Continuar con Google") y el slot real de Google — y
+            se cruzan con opacity. Antes, mientras cargaba, se veía un botón
+            de FORMA distinta ("Creá tu tienda gratis" en bg-ink) que
+            after cambiaba abruptamente al pill blanco/negro de Google — un
+            salto de identidad visual, no solo de contenido. Ahora el marco
+            nunca cambia de forma: lo único que se disuelve es cuál capa es
+            la visible, con el mismo contorno.
 
-            Un intento anterior tenía DOS overflow-hidden anidados con un
-            p-1 (4px) en el de afuera para "dejar ver un hilo de borde" — ese
-            padding es justo el hueco por donde el blanco del iframe asomaba
-            arriba y abajo del botón: el visor interno recortaba bien, pero
-            el padding entre visor y cápsula quedaba vacío/con fondo propio
-            de la cápsula, así que si el iframe se filtraba un poco por el
-            borde del visor (subpíxel de redondeo), no había una segunda
-            capa que lo recorte de nuevo.
-
-            Ahora la cápsula ES el único recorte. Medido con Playwright el
-            div REAL que Google pinta adentro del iframe (no el iframe
-            entero, que trae 10px de margen invisible en cada lado): 320x40,
-            centrado en un iframe de 340x44. La cápsula mide ese 320x40
-            exacto, con radio = height/2 (20px) para un pill perfecto en las
-            puntas, igual que dibuja Google — antes usaba un radio fijo
-            (18.4px) que no coincidía con el radio real del botón, y una
-            altura de 44 (la del iframe, no la del botón visible) que dejaba
-            4px de sobra arriba/abajo y descentraba el conjunto.
-
-            El flex justify-center centra solo el iframe de 340 dentro de
-            los 320 de la cápsula — SIN marginLeft manual: ese -10 competía
-            con el centrado automático del flex y corría el botón hacia un
-            lado, que es el espacio de sobra que se veía a la derecha. */}
+            El fundido cruzado tampoco tapa el parpadeo INTERNO de Google
+            (genérico → "Continuar como X", que ocurre del lado de adentro
+            del iframe y no se puede evitar) — pero ese parpadeo ya pasa
+            DESPUÉS de que el usuario ve nuestro botón calcado, con la misma
+            forma exacta, así que se percibe como "el botón ya estaba ahí y
+            se puso su nombre", no como dos botones distintos turnándose. */}
         <div
-          className="overflow-hidden flex items-center justify-center"
+          className="relative overflow-hidden"
           style={{
-            width: 320,
-            height: 40,
-            borderRadius: 20,
+            width: 322,
+            height: 42,
+            borderRadius: 21,
             background: isDark
               ? 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.16), rgb(var(--brand, 0 184 217) / 0.04))'
               : 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.12), rgb(var(--brand, 0 184 217) / 0.03))',
@@ -200,29 +188,49 @@ function BotonGoogle({ full = true, isDark, loading, onPopup, onLogin, onError }
             boxShadow: '0 6px 22px -10px rgb(var(--brand, 0 184 217) / 0.55)',
           }}
         >
-          {/* color-scheme sigue al tema real: forzarlo a light hacía que en
-              modo oscuro el iframe se dibujara blanco contra el fondo casi
-              negro de la landing (el iframe en sí SIEMPRE tiene fondo
-              blanco donde no hay botón — por eso hace falta el recorte de
-              arriba, esto solo evita que el CONTENIDO del botón salga claro
-              en dark). */}
-          <div ref={slotRef} className="flex items-center justify-center shrink-0"
-            style={{ colorScheme: isDark ? 'dark' : 'light', width: 340, height: 44 }} />
+          {/* Capa 1: nuestro botón, calcado del real de Google (mismo pill,
+              mismo logo multicolor, mismo texto y tamaño) — visible desde
+              el instante cero, con el theme correcto invertido (ver más
+              abajo) para que ya contraste bien contra la página. */}
+          <button
+            type="button"
+            onClick={onPopup}
+            aria-hidden={gisListo}
+            tabIndex={gisListo ? -1 : 0}
+            disabled={loading}
+            className="absolute inset-0 flex items-center justify-center gap-2.5 font-medium text-[15px] transition-opacity duration-300"
+            style={{
+              opacity: gisListo ? 0 : 1,
+              pointerEvents: gisListo ? 'none' : 'auto',
+              background: isDark ? '#fff' : '#131314',
+              color: isDark ? '#1f1f1f' : '#e3e3e3',
+            }}
+          >
+            {loading ? <Loader2 className="w-[18px] h-[18px] animate-spin" /> : <GoogleIcon size={18} />}
+            Continuar con Google
+          </button>
+
+          {/* Capa 2: el slot real de Google, debajo del custom, que se
+              revela con fade-in cuando gisListo. El swap interno de Google
+              (genérico → personalizado) puede seguir ocurriendo acá, pero
+              ya ocurre por encima de nuestro botón idéntico, no reemplazando
+              a otro de forma distinta. */}
+          <div
+            className="absolute inset-0 flex items-center justify-center transition-opacity duration-300"
+            style={{ opacity: gisListo ? 1 : 0 }}
+          >
+            {/* color-scheme sigue al tema real: forzarlo a light hacía que
+                en modo oscuro el iframe se dibujara blanco contra el fondo
+                casi negro de la landing (el iframe en sí SIEMPRE tiene
+                fondo blanco donde no hay botón). */}
+            <div ref={slotRef} className="flex items-center justify-center shrink-0"
+              style={{ colorScheme: isDark ? 'dark' : 'light', width: 340, height: 44 }} />
+          </div>
         </div>
         <span className="text-[11px] font-semibold text-center" style={{ color: 'var(--text-secondary, #999)' }}>
           Gratis para empezar · sin tarjeta
         </span>
       </div>
-      {!gisListo && (
-        <button
-          onClick={onPopup}
-          disabled={loading}
-          className={`${full ? 'w-full sm:w-auto' : ''} inline-flex items-center justify-center gap-3 bg-ink dark:bg-white hover:bg-ink/90 dark:hover:bg-white/90 text-white dark:text-[#18181b] font-bold py-3.5 px-7 rounded-2xl transition-all shadow-lg hover:shadow-xl disabled:opacity-60 active:scale-[0.98]`}
-        >
-          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <GoogleIcon size={20} />}
-          Creá tu tienda gratis
-        </button>
-      )}
     </div>
   );
 }
