@@ -354,6 +354,19 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
                  no tiene sentido: roba alto justo donde escasea y queda
                  lejísimos del cursor. Arriba de 860px la barra se oculta y
                  estas acciones aparecen en la misma fila del logo. */
+              /* Margen único de la pantalla: header y cuerpo lo comparten,
+                 así el aire contra los bordes se ve igual arriba que a los
+                 costados. */
+              .oi-header-info, .oi-main { --oi-margen: 18px; }
+              /* Mobile: 30px arriba para dejarle aire al botón atrás, que
+                 acá flota sobre la foto (fixed) y si no se superpone con el
+                 logo de la tienda. */
+              .oi-header-info { padding: 30px var(--oi-margen) 18px; }
+              .oi-main { padding: 12px var(--oi-margen) 24px; }
+              @media (min-width: 860px), (orientation: landscape) and (min-width: 700px) {
+                .oi-header-info, .oi-main { --oi-margen: 20px; }
+              }
+
               .oi-acciones-desktop { display: none; }
               /* display:contents — el wrapper no crea caja propia, así
                  TiendaNavBar sigue siendo hijo directo del flex-column raíz
@@ -444,8 +457,15 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
                 .oi-atras-flotante { display: none !important; }
                 /* El padding superior generoso existía para dejarle aire al
                    botón atrás flotante; ahora que es una columna más de la
-                   fila, se empareja arriba y abajo. */
-                .oi-header-info { padding: 14px 18px 14px; }
+                   fila, se empareja arriba y abajo.
+                   El lateral NO es igual al vertical a propósito: quien
+                   define el alto del header es el logo (52px), y los
+                   botones de los costados son más bajos (40 y 36px), así
+                   que quedan centrados con MÁS aire arriba y abajo que a
+                   los lados — con 20px parejos, el de las acciones medía 28
+                   vertical contra 20 lateral y se veía desbalanceado. Los
+                   28px laterales igualan ese aire real. */
+                .oi-header-info { padding: var(--oi-margen) 28px; }
               }
 
               /* Pantalla MUY baja (celular apaisado, ~390px de alto): el
@@ -474,7 +494,7 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
             {/* Info de la tienda — fila horizontal, centrada, sobre el glow.
                 Padding vertical balanceado (arriba deja aire para el botón
                 atrás sin exagerar; abajo cierra parejo hacia la foto). */}
-            <div className="oi-header-info" style={{ position: 'relative', zIndex: 1, padding: '30px 18px 18px' }}>
+            <div className="oi-header-info" style={{ position: 'relative', zIndex: 1 }}>
               {/* Fila del header: [atrás] · [identidad de la tienda] ·
                   [acciones]. Las dos columnas laterales miden 1fr cada una,
                   así la identidad queda centrada respecto a la ventana y no
@@ -544,7 +564,8 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
               arriba) ── */}
           <main
             ref={mainRef}
-            style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px 24px', maxWidth: 900, margin: '0 auto', width: '100%', touchAction: swipeNav ? 'pan-y' : 'auto', overscrollBehaviorX: 'contain' }}>
+            className="oi-main"
+            style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', maxWidth: 900, margin: '0 auto', width: '100%', touchAction: swipeNav ? 'pan-y' : 'auto', overscrollBehaviorX: 'contain' }}>
             <div className="oi-cuerpo">
               <style>{`
                   /* Track deslizante — mismo patrón que el .nov-track de

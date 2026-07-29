@@ -73,6 +73,21 @@ const GLOBAL_CSS = `
   .cm-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
   @media (min-width: 620px) { .cm-grid { grid-template-columns: repeat(3, 1fr); gap: 16px; } }
   @media (min-width: 980px) { .cm-grid { grid-template-columns: repeat(4, 1fr); } }
+  /* Pantallas anchas: más columnas en vez de cards gigantes. Con 4 columnas
+     a 1440px cada oferta medía ~340px de ancho por ~480 de alto (son
+     verticales, proporción A4), así que una sola fila ya no entraba en
+     pantalla y obligaba a scrollear para ver el resto del catálogo. Con 5
+     y 6 la fila entra completa y se ve más oferta de un vistazo, que es de
+     lo que se trata la pantalla. */
+  /* auto-fit + minmax en vez de un número fijo de columnas: una tienda con
+     3 ofertas en una pantalla de 6 columnas dejaba media fila vacía a la
+     derecha, con todo el bloque colgado a la izquierda. Así las columnas se
+     crean solo si hay cards que ponerles, y justify-content:center apoya el
+     conjunto en el medio. El minmax fija el ancho máximo de card: sin él,
+     pocas ofertas se estiraban a media pantalla cada una. */
+  @media (min-width: 1280px) {
+    .cm-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 260px)); justify-content: center; }
+  }
   .cm-chips::-webkit-scrollbar { display: none; }
   /* Scroll vertical principal de la página — mismo criterio: oculta la
      scrollbar en Chrome/Safari/mobile (::-webkit-scrollbar) y Firefox
@@ -1349,7 +1364,47 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
            mueva los controles de lugar. */
         .cm-acciones-tienda { display: none; }
         @media (min-width: 860px), (orientation: landscape) and (min-width: 700px) {
-          .cm-acciones-tienda { display: flex; align-items: center; gap: 8px; }
+          /* Ancladas a la ESQUINA de la ventana, no al final de la franja
+             centrada del hero: .cm-hero-ed-inner tiene max-width 720px, así
+             que dentro de esa caja los botones terminaban a mitad de camino
+             del borde derecho (x=1062 en una ventana de 1440), leyéndose
+             como parte del bloque de identidad en vez de como los controles
+             de la pantalla. Posicionadas contra .cm-hero-ed (ancho
+             completo) quedan alineadas con el borde, igual que en la vista
+             de oferta. */
+          /* El ancla es .cm-hero-ed (el header entero, ancho completo).
+             La foto de portada mide 150px y la fila logo+info sube 40px
+             sobre ella (margin-top:-40), así que su centro cae a ~152px:
+             ahí se alinean los botones con el logo y el nombre.
+             A la DERECHA, igual que en la vista de oferta individual: son
+             controles de la pantalla, y saltar de lado entre una pantalla y
+             la otra no tendría lógica para quien navega. */
+          .cm-acciones-tienda {
+            display: flex; align-items: center; gap: 8px;
+            position: absolute; right: 28px; top: 152px;
+            transform: translateY(-50%); z-index: 4;
+          }
+          /* La identidad arranca a la IZQUIERDA (no centrada) y las redes
+             van pegadas a ella, no empujadas al extremo por un margin-left
+             auto: con la identidad centrada y las redes estiradas hacia el
+             borde, esos íconos quedaban flotando a mitad de camino, sin
+             pertenecer ni al nombre ni a la esquina. */
+          .cm-hero-ed-info > div:first-child { justify-content: flex-start; }
+          .cm-hero-ed-social { margin-left: 0 !important; }
+          /* La info deja de estirarse a todo el ancho disponible (flex:1) y
+             mide lo que ocupa su contenido: así las redes terminan donde
+             termina el nombre, y no en el borde de una caja invisible. */
+          .cm-hero-ed-info { flex: 0 1 auto; min-width: 0; }
+          /* La franja del hero deja de estar acotada a 720px CENTRADOS: eso
+             empujaba la identidad a 378px del borde en una ventana de 1440
+             (y a 498 en 1680), o sea nada de "pegada a la izquierda". Ahora
+             ocupa el ancho real y el logo arranca en el margen de la
+             pantalla, como en la vista de oferta. */
+          .cm-hero-ed-inner { max-width: none; }
+          /* Mismo margen lateral que el header de la oferta individual
+             (28px), para que las dos pantallas respiren igual contra los
+             bordes. La derecha reserva el espacio de los tres botones. */
+          .cm-hero-ed-row { padding-left: 28px; padding-right: 28px; }
         }
         .cm-accion {
           display: inline-flex; align-items: center; gap: 7px;
@@ -1417,6 +1472,30 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
         )}
       </div>
 
+      {/* Acciones de la tienda — SOLO en horizontal (en mobile viven en la
+          barra inferior, al alcance del pulgar). Van acá, hijas directas
+          del header y no de .cm-hero-ed-inner, porque ese contenedor está
+          acotado a 720px centrados: adentro los botones terminaban a mitad
+          de camino del borde y se leían como parte del bloque de identidad.
+          Fuera de esa caja se anclan a la esquina real de la ventana, igual
+          que en la vista de oferta individual. */}
+      {modo === 'standalone' && (
+        <div className="cm-acciones-tienda">
+          {onAbrirMapa && (
+            <button className="cm-accion no-press" onClick={() => { trackClick(tienda.id, 'mapa'); onAbrirMapa(); }}>
+              <MapPin size={15} /> Mapa
+            </button>
+          )}
+          <button className="cm-accion no-press" onClick={() => setHorariosOpen?.(true)}>
+            <Clock size={15} /> Horarios
+          </button>
+          <button className="cm-accion no-press" onClick={compartir}
+            style={{ background: primary, color: 'var(--tp-on-primary)', borderColor: primary }}>
+            <Share2 size={15} /> Compartir
+          </button>
+        </div>
+      )}
+
       <div className="cm-hero-ed-inner">
       {/* Fila: logo izquierda + info columna derecha */}
       <div className="cm-hero-ed-row">
@@ -1462,25 +1541,6 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
               </div>
             )}
 
-            {/* Acciones que en mobile viven en la barra inferior. Solo en
-                standalone: en modo plataforma el bottom-nav global de LOKAL
-                sigue siendo el lugar de estas acciones. */}
-            {modo === 'standalone' && (
-              <div className="cm-acciones-tienda" style={{ gap: 8, flexShrink: 0, marginLeft: 'auto' }}>
-                {onAbrirMapa && (
-                  <button className="cm-accion no-press" onClick={() => { trackClick(tienda.id, 'mapa'); onAbrirMapa(); }}>
-                    <MapPin size={15} /> Mapa
-                  </button>
-                )}
-                <button className="cm-accion no-press" onClick={() => setHorariosOpen?.(true)}>
-                  <Clock size={15} /> Horarios
-                </button>
-                <button className="cm-accion no-press" onClick={compartir}
-                  style={{ background: primary, color: 'var(--tp-on-primary)', borderColor: primary }}>
-                  <Share2 size={15} /> Compartir
-                </button>
-              </div>
-            )}
           </div>
           <div className="cm-hero-ed-meta" style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, flexWrap: 'wrap', fontSize: 12, color: txtM }}>
             {texto && (
