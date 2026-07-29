@@ -1424,21 +1424,18 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
            dos clases hacía que compitieran (Tailwind resuelve por orden en
            la hoja, no en el atributo) — el botón perdía el fixed y se
            movía de lugar. */
-        className={`overflow-hidden lok-tap no-press lok-volver-arriba fixed right-5 z-40 w-11 h-11 rounded-full flex items-center justify-center shadow-lg ${lejosDelTope ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-90 pointer-events-none'}`}
+        className={`overflow-hidden lok-tap no-press lok-volver-arriba fixed right-5 z-40 w-11 h-11 rounded-full flex items-center justify-center shadow-lg ${lejosDelTope ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
         style={{
           background: 'var(--brand-hex, #00B8D9)',
           color: '#fff',
-          // 20px del borde inferior, más lo que el footer haya subido: así
-          // se apoya sobre el footer en vez de taparlo, y vuelve solo al
-          // borde cuando se scrollea hacia arriba. Sin transición en bottom
-          // (seguiría al scroll con retraso); la que queda es la de opacidad.
+          // bottom sigue el scroll en tiempo real, sin transición: es lo
+          // que hace que el botón se apoye en el footer exactamente al
+          // mismo ritmo que uno scrollea, sin ir "atrás" del gesto. El
+          // scale de entrada/salida que tenía antes competía visualmente
+          // con ese movimiento 1:1 y se leía como un delay — vuelve a ser
+          // solo opacidad, simple.
           bottom: 20 + topeFooter,
-          // no-press + transición propia: la global de los botones usa
-          // cubic-bezier(.34,1.56,.64,1), una curva con rebote pensada para
-          // el tap. Acá el botón APARECE y DESAPARECE con el scroll, y ese
-          // rebote al entrar/salir se lee tosco. Una curva de salida simple
-          // lo hace aparecer sereno.
-          transition: 'opacity 260ms ease-out, transform 260ms cubic-bezier(.22,1,.36,1)',
+          transition: 'opacity 200ms ease-out',
         }}
       >
         <ArrowUp className="w-5 h-5" strokeWidth={2.5} />
