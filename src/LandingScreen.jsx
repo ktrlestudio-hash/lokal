@@ -1220,7 +1220,10 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
               a Chrome Android a recortar el degradado contra las esquinas
               redondeadas en cada frame del scroll, y ahí deja texto fantasma
               (ver el mismo caso en Highlight de LegalPages). */}
-          <div className="rounded-[2rem] border p-8 lg:p-12 text-center"
+          {/* lok-halo: luz que orbita despacio detrás del borde — el
+              único bloque de precio de la página, así que es donde un
+              acento así se gana su lugar sin competir con nada. */}
+          <div className="lok-halo rounded-[2rem] border p-8 lg:p-12 text-center"
             style={{
               background: `
                 radial-gradient(ellipse 60% 160px at 50% 0%, rgb(var(--brand, 0 184 217) / 0.16), transparent),
