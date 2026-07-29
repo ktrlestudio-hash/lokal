@@ -38,6 +38,62 @@ const CARD_TINTED = {
   borderColor: 'rgb(var(--brand, 0 184 217) / 0.14)',
 };
 
+// Palabra que rota en el título del hero — mismo recurso que usa Shopify en
+// su home ("Estrella de la IA" / "Marca reconocida" / "Imperio global"): da
+// movimiento sin sumar una librería de animación, y de paso dice en tres
+// palabras lo que el producto hace en vez de tener que explicarlo.
+//
+// El ancho se reserva con la palabra MÁS LARGA, renderizada invisible: sin
+// eso el texto de al lado (y el punto final) saltaría en cada cambio.
+// prefers-reduced-motion deja la primera palabra fija, sin ciclo.
+// Todas arrancan sin preposición: el "en" queda fijo en el título y solo
+// cambia lo que sigue, que es lo que hace legible el efecto.
+const PALABRAS_HERO = ['un solo link', 'WhatsApp', 'Instagram', 'tu bio'];
+
+function PalabraRotativa({ palabras = PALABRAS_HERO, intervalo = 2600 }) {
+  const [i, setI] = useState(0);
+  const [saliendo, setSaliendo] = useState(false);
+  const reduce = typeof window !== 'undefined'
+    && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+  useEffect(() => {
+    if (reduce || palabras.length < 2) return undefined;
+    const id = setInterval(() => {
+      // Dos tiempos: primero sale la palabra actual, y recién cuando
+      // terminó de irse entra la siguiente — si se cambia el índice de
+      // una, las dos se cruzan a mitad de camino.
+      setSaliendo(true);
+      setTimeout(() => {
+        setI((n) => (n + 1) % palabras.length);
+        setSaliendo(false);
+      }, 260);
+    }, intervalo);
+    return () => clearInterval(id);
+  }, [palabras.length, intervalo, reduce]);
+
+  const masLarga = palabras.reduce((a, b) => (b.length > a.length ? b : a), '');
+
+  // El punto final viaja DENTRO de este componente, pegado a la palabra: si
+  // queda afuera, la reserva de ancho (que mide la palabra más larga) lo
+  // empuja lejos y con las palabras cortas se ve un punto flotando solo.
+  return (
+    <span className="relative inline-grid align-bottom">
+      {/* Reserva de ancho: ocupa lugar en el layout pero no se ve. */}
+      <span aria-hidden="true" className="invisible col-start-1 row-start-1 whitespace-nowrap">{masLarga}.</span>
+      <span
+        className="col-start-1 row-start-1 whitespace-nowrap justify-self-start motion-reduce:transition-none"
+        style={{
+          transition: 'opacity 240ms ease, transform 240ms ease',
+          opacity: saliendo ? 0 : 1,
+          transform: saliendo ? 'translateY(-0.35em)' : 'translateY(0)',
+        }}
+      >
+        <span style={{ color: 'var(--brand-hex, #00B8D9)' }}>{palabras[i]}</span>.
+      </span>
+    </span>
+  );
+}
+
 // Aparición al entrar en viewport — IntersectionObserver nativo en vez de
 // motion/react: la landing es lo primero que carga un visitante nuevo, no
 // conviene sumarle una librería de animación al bundle crítico.
@@ -724,7 +780,7 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
               <h1 className="text-4xl lg:text-5xl font-black leading-[1.08] tracking-tight mb-5">
                 Tu negocio,
                 <br />
-                <span style={{ color: 'var(--brand-hex, #00B8D9)' }}>en un solo link.</span>
+                <span className="whitespace-nowrap">en <PalabraRotativa /></span>
               </h1>
             </FadeUp>
             <FadeUp delay={160}>
