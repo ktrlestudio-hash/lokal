@@ -635,3 +635,67 @@ a.lok-tap * {
   .lok-entra { animation: none; }
   .lok-brilla { animation: none; }
 }
+
+/* Halo que gira despacio alrededor de la card de precio.
+   El borde real se mantiene quieto; lo que rota es un degradado cónico en
+   una capa DETRÁS de la card, apenas más grande, difuminado. Con eso el
+   efecto se lee como una luz que orbita y no como un borde de neón —la
+   diferencia entre premium y casino— y además no toca el layout: solo se
+   anima el ángulo, en una propiedad registrada que el navegador interpola
+   en el compositor.
+   El fallback (sin @property) simplemente no anima y queda un halo fijo,
+   que también se ve bien. */
+@property --lok-giro {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes lok-orbita {
+  to { --lok-giro: 360deg; }
+}
+.lok-halo { position: relative; isolation: isolate; }
+.lok-halo::before {
+  content: '';
+  position: absolute;
+  inset: -1.5px;
+  border-radius: inherit;
+  z-index: -1;
+  background: conic-gradient(
+    from var(--lok-giro),
+    transparent 0deg,
+    rgb(var(--brand, 0 184 217) / 0.55) 60deg,
+    transparent 140deg,
+    transparent 220deg,
+    rgb(var(--brand, 0 184 217) / 0.35) 300deg,
+    transparent 360deg
+  );
+  filter: blur(6px);
+  opacity: .75;
+  animation: lok-orbita 9s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lok-halo::before { animation: none; }
+}
+
+/* Barra de progreso de lectura, atada al scroll del documento con CSS
+   nativo (animation-timeline: scroll()) — sin listener de JS, sin rAF: el
+   navegador interpola el transform directo del hilo de scroll.
+   scaleX de 0 a 1: más barato que animar width (no dispara layout, solo
+   compositor), con origin-left en la clase para que crezca desde la
+   izquierda y no desde el centro.
+   Soporte: Chrome/Edge 115+. Donde no existe la propiedad, la regla se
+   ignora entera y la barra queda en scaleX(0) — invisible, no rota. Es
+   mejora progresiva, no hace falta un fallback en JS para esto. */
+@supports (animation-timeline: scroll()) {
+  .lok-progreso-lectura {
+    transform: scaleX(0);
+    animation: lok-leer linear;
+    animation-timeline: scroll(root);
+  }
+  @keyframes lok-leer {
+    to { transform: scaleX(1); }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lok-progreso-lectura { display: none; }
+}

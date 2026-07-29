@@ -1014,6 +1014,14 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
           borderBottom: '1px solid rgb(var(--brand, 0 184 217) / 0.10)',
         } : { background: 'transparent', borderBottom: '1px solid transparent' }}
       >
+        {/* Barra de progreso de lectura — CSS puro, sin listener de scroll
+            propio: animation-timeline:scroll() ata el ancho directo a la
+            posición del documento, interpolado por el navegador en el
+            compositor. La barra "vive" en su transform mientras scrolleás,
+            no algo que un observer dispare una vez. */}
+        <div aria-hidden="true" className="lok-progreso-lectura absolute inset-x-0 bottom-0 h-[2.5px] origin-left"
+          style={{ background: 'var(--brand-hex, #00B8D9)' }} />
+
         <div className="max-w-5xl mx-auto px-5 lg:px-8 h-16 flex items-center justify-between">
           <LogoFull size={26} />
           <div className="flex items-center gap-2">
