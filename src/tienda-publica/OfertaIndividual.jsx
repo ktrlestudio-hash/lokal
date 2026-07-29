@@ -16,7 +16,7 @@
  * vista React.
  */
 import React, { useState, useLayoutEffect, useMemo, useEffect, useRef } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, MapPin, Clock, Share2 } from 'lucide-react';
 import { deriveColorPalette, resolvePagina, getEstadoApertura } from './utils.js';
 import { TiendaFooter } from './sections/TiendaFooter.jsx';
 import { TiendaNavBar } from './sections/TiendaNavBar.jsx';
@@ -233,6 +233,68 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
     };
   }, []);
 
+  // Alto real disponible para la foto en escritorio. No se puede resolver
+  // solo con CSS: el header crece o se achica según el nombre de la tienda y
+  // qué acciones tenga (no todas las tiendas tienen mapa o WhatsApp), y
+  // debajo van el título de la oferta y los dots. Se mide el hueco que queda
+  // entre el borde inferior del header y el borde superior del pie, y se
+  // publica como --oi-alto-foto para que la imagen lo use de max-height.
+  const headerRef = useRef(null);
+  const pieRef = useRef(null);
+  useLayoutEffect(() => {
+    const calcular = () => {
+      const cuerpo = mainRef.current;
+      if (!cuerpo) return;
+      // Solo aplica en el layout horizontal; en mobile vertical manda el
+      // ancho. Misma condición que el CSS (ver .oi-acciones-desktop): un
+      // celular apaisado también entra acá, aunque no llegue a 860px.
+      const esHorizontal = window.matchMedia('(min-width: 860px), (orientation: landscape) and (min-width: 700px)').matches;
+      if (!esHorizontal) {
+        cuerpo.style.removeProperty('--oi-alto-foto');
+        cuerpo.style.removeProperty('--oi-ancho-foto');
+        return;
+      }
+      const alto = cuerpo.clientHeight
+        - (pieRef.current?.offsetHeight || 0)
+        - 36; // respiro arriba y abajo, para que no quede pegada
+      cuerpo.style.setProperty('--oi-alto-foto', `${Math.max(200, alto)}px`);
+
+      // Ancho REAL que terminó teniendo la foto una vez escalada por altura
+      // — las flechas se anclan a ese borde. Se calcula de la proporción
+      // natural de la imagen en vez de medir su caja: al montar, la foto
+      // todavía no cargó y getBoundingClientRect devuelve 0, dejando las
+      // flechas pegadas al centro.
+      const foto = cuerpo.querySelector('.oi-oferta-img');
+      if (foto?.naturalWidth) {
+        const anchoProporcional = (alto * foto.naturalWidth) / foto.naturalHeight;
+        const anchoMaximo = cuerpo.clientWidth - 28; // no desbordar el contenedor
+        cuerpo.style.setProperty('--oi-ancho-foto', `${Math.round(Math.min(anchoProporcional, anchoMaximo))}px`);
+      }
+    };
+    calcular();
+    window.addEventListener('resize', calcular);
+    // Rotar el celular cambia de layout (vertical ↔ horizontal) sin que
+    // siempre dispare un resize útil en el momento correcto.
+    window.addEventListener('orientationchange', calcular);
+    // El header cambia de alto si el texto se acomoda distinto (nombres
+    // largos, wrap de las acciones) — un ResizeObserver lo capta sin
+    // depender de que haya un resize de ventana.
+    const ro = new ResizeObserver(calcular);
+    if (headerRef.current) ro.observe(headerRef.current);
+    if (mainRef.current) ro.observe(mainRef.current);
+    // Al montar, las fotos todavía no tienen naturalWidth: se recalcula
+    // cuando cada una termina de cargar (la primera que llegue ya alcanza,
+    // todas comparten proporción).
+    const fotos = [...(mainRef.current?.querySelectorAll('.oi-oferta-img') || [])];
+    fotos.forEach((f) => f.addEventListener('load', calcular));
+    return () => {
+      window.removeEventListener('resize', calcular);
+      window.removeEventListener('orientationchange', calcular);
+      ro.disconnect();
+      fotos.forEach((f) => f.removeEventListener('load', calcular));
+    };
+  }, [ofertasHermanas.length, wa, texto]);
+
   // Pageview de la oferta — llegó por un link directo (WhatsApp/FB/etc), es
   // la señal más fuerte de interés: alguien vio ESTA oferta puntual, no solo
   // la tienda en general.
@@ -266,7 +328,7 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
               glow sin recortarlo por abajo — así se desvanece suave hacia la
               foto en vez de cortarse con una línea dura en el borde inferior
               del header. */}
-          <header style={{ position: 'relative', background: bg, overflowX: 'clip' }}>
+          <header ref={headerRef} style={{ position: 'relative', background: bg, overflowX: 'clip' }}>
             {/* Glow difuso del color de marca, detrás de la info — mismo
                 lenguaje que los ambient orbs del template de tienda. El
                 gradiente radial ya desvanece a transparente en los bordes,
@@ -285,6 +347,89 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
               .oi-wa-btn { transition: transform .12s cubic-bezier(0.34,1.56,0.64,1), filter .15s ease; }
               @media (hover: hover) { .oi-wa-btn:hover { filter: brightness(1.08); } }
               .oi-wa-btn:active { transform: scale(0.9); transition: transform .06s ease; }
+
+              /* ── Acciones del header, SOLO escritorio ──
+                 En mobile viven en TiendaNavBar (barra inferior, al alcance
+                 del pulgar). En una pantalla horizontal esa barra fija abajo
+                 no tiene sentido: roba alto justo donde escasea y queda
+                 lejísimos del cursor. Arriba de 860px la barra se oculta y
+                 estas acciones aparecen en la misma fila del logo. */
+              .oi-acciones-desktop { display: none; }
+              /* display:contents — el wrapper no crea caja propia, así
+                 TiendaNavBar sigue siendo hijo directo del flex-column raíz
+                 (necesita serlo para quedar fijo abajo con flexShrink:0). */
+              .oi-nav-mobile { display: contents; }
+              /* El corte NO es solo por ancho: un celular en horizontal mide
+                 844px de ancho pero apenas 390 de alto, y ahí lo escaso es
+                 el alto igual que en un monitor. Se combina ancho mínimo CON
+                 orientación apaisada, así ese caso entra al layout
+                 horizontal (foto por altura, acciones arriba) en vez de
+                 quedar con una foto de 905px que no entra en pantalla. */
+              @media (min-width: 860px), (orientation: landscape) and (min-width: 700px) {
+                .oi-acciones-desktop { display: flex; }
+                .oi-nav-mobile { display: none; }
+              }
+              .oi-accion {
+                display: inline-flex; align-items: center; gap: 7px;
+                height: 36px; padding: 0 13px; border-radius: 11px;
+                border: 1px solid var(--tp-border); background: var(--tp-surface);
+                color: var(--tp-text-muted); cursor: pointer;
+                font-size: 13px; font-weight: 700; font-family: inherit;
+                transition: background-color .15s ease, color .15s ease, border-color .15s ease, transform .12s cubic-bezier(0.34,1.56,0.64,1);
+              }
+              @media (hover: hover) {
+                .oi-accion:hover { background: color-mix(in srgb, var(--tp-primary) 10%, transparent); color: var(--tp-primary); border-color: var(--tp-primary); }
+              }
+              .oi-accion:active { transform: scale(0.94); }
+
+              /* ── Flechas de navegación entre ofertas, SOLO escritorio ──
+                 Con mouse no hay gesto de swipe, así que sin flechas no hay
+                 forma evidente de pasar de oferta (los dots ya son
+                 clickeables, pero son un blanco chico y se leen como
+                 indicador, no como control). Se ocultan en táctil, donde el
+                 swipe ya es el gesto natural. */
+              .oi-flecha { display: none; }
+              @media (min-width: 860px), (orientation: landscape) and (min-width: 700px) {
+                .oi-flecha {
+                  display: flex; align-items: center; justify-content: center;
+                  position: absolute; top: 50%; transform: translateY(-50%);
+                  width: 44px; height: 44px; border-radius: 14px; z-index: 3;
+                  border: 1px solid var(--tp-border); cursor: pointer;
+                  background: color-mix(in srgb, var(--tp-surface) 88%, transparent);
+                  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+                  color: var(--tp-text); box-shadow: 0 4px 16px rgba(0,0,0,.14);
+                  transition: background-color .15s ease, color .15s ease, opacity .2s ease;
+                }
+                .oi-flecha:hover { background: var(--tp-primary); color: var(--tp-on-primary); border-color: var(--tp-primary); }
+                .oi-flecha:active { transform: translateY(-50%) scale(0.92); }
+                /* En los extremos se apaga pero MANTIENE su lugar (visibility,
+                   no display): navegación lineal sin loop, igual que las
+                   flechas del hero de tienda. Con display:none la
+                   composición se descentraba al llegar al primero o al
+                   último. */
+                .oi-flecha[disabled] { opacity: 0; visibility: hidden; pointer-events: none; }
+                /* Ancladas al borde REAL de la foto, no a los bordes de la
+                   ventana: --oi-ancho-foto lo publica el JS midiendo la
+                   imagen visible (su ancho cambia con el alto disponible,
+                   porque la foto se escala por altura). Sin esto las flechas
+                   quedaban flotando lejísimos, contra los bordes de la
+                   pantalla. */
+                .oi-flecha-prev { left: calc(50% - var(--oi-ancho-foto, 400px) / 2 - 58px); }
+                .oi-flecha-next { left: calc(50% + var(--oi-ancho-foto, 400px) / 2 + 14px); }
+              }
+
+              /* Pantalla MUY baja (celular apaisado, ~390px de alto): el
+                 header con su padding generoso se come casi todo el espacio
+                 que necesita la foto. Se compacta todo — logo más chico,
+                 menos aire vertical, acciones y título más ajustados — para
+                 que la imagen siga siendo la protagonista. */
+              @media (orientation: landscape) and (max-height: 520px) {
+                .oi-header-info { padding: 10px 18px 8px !important; }
+                .oi-logo-tienda { width: 38px !important; height: 38px !important; border-radius: 11px !important; }
+                .oi-nombre-tienda { font-size: 1rem !important; }
+                .oi-accion { height: 32px; padding: 0 11px; font-size: 12.5px; }
+                .oi-pie-nombre { font-size: .95rem !important; margin: 8px 0 0 !important; }
+              }
             `}</style>
 
             {/* Botón atrás — STICKY flotante en la esquina: fixed, siempre
@@ -299,19 +444,19 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
             {/* Info de la tienda — fila horizontal, centrada, sobre el glow.
                 Padding vertical balanceado (arriba deja aire para el botón
                 atrás sin exagerar; abajo cierra parejo hacia la foto). */}
-            <div style={{ position: 'relative', zIndex: 1, padding: '30px 18px 18px' }}>
+            <div className="oi-header-info" style={{ position: 'relative', zIndex: 1, padding: '30px 18px 18px' }}>
               {/* alignItems:center asegura que logo (52px), texto, badge de
                   estado y botón WA (36px) queden centrados en la MISMA línea
                   vertical pese a la diferencia de altura entre ellos — antes
                   el WA quedaba con el color/estilo desactualizado, ahora
                   usa el mismo gradiente real de marca que el hero de tienda. */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <div style={{ width: 52, height: 52, borderRadius: 15, flexShrink: 0, overflow: 'hidden', background: tienda.logo ? 'var(--tp-primary-soft)' : primary, boxShadow: '0 4px 16px rgba(0,0,0,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="oi-logo-tienda" style={{ width: 52, height: 52, borderRadius: 15, flexShrink: 0, overflow: 'hidden', background: tienda.logo ? 'var(--tp-primary-soft)' : primary, boxShadow: '0 4px 16px rgba(0,0,0,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {tienda.logo
                     ? <img src={tienda.logo} alt={tienda.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <LogoSymbolSvg size={28} color="#fff" />}
                 </div>
-                <h1 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, letterSpacing: '-.01em', color: txt }}>{tienda.nombre}</h1>
+                <h1 className="oi-nombre-tienda" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, letterSpacing: '-.01em', color: txt }}>{tienda.nombre}</h1>
                 {texto && (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: `color-mix(in srgb, ${abierta ? '#22C55E' : '#EF4444'} 14%, transparent)`, color: abierta ? '#22C55E' : '#EF4444', padding: '5px 12px', borderRadius: 99, fontSize: '.72rem', fontWeight: 700 }}>
                     <span style={{ width: 6, height: 6, borderRadius: '50%', background: abierta ? '#22C55E' : '#EF4444' }} />{texto}
@@ -325,6 +470,26 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
                     {WA_ICON}
                   </a>
                 )}
+
+                {/* Acciones que en mobile viven en la barra inferior. Acá
+                    van con etiqueta escrita (hay ancho de sobra y con mouse
+                    no hay que adivinar qué hace cada ícono). Separador
+                    visual para que no se lean como parte de la identidad de
+                    la tienda. */}
+                <div className="oi-acciones-desktop" style={{ alignItems: 'center', gap: 8, marginLeft: 6, paddingLeft: 14, borderLeft: `1px solid ${border}` }}>
+                  {tienda.lat && tienda.lng && (
+                    <button className="oi-accion no-press" onClick={() => { trackClick(tienda.id, 'mapa'); setMapaOpen(true); }}>
+                      <MapPin size={15} /> Mapa
+                    </button>
+                  )}
+                  <button className="oi-accion no-press" onClick={() => setHorariosOpen(true)}>
+                    <Clock size={15} /> Horarios
+                  </button>
+                  <button className="oi-accion no-press" onClick={() => setShareOpen(true)}
+                    style={{ background: primary, color: 'var(--tp-on-primary)', borderColor: primary }}>
+                    <Share2 size={15} /> Compartir
+                  </button>
+                </div>
               </div>
             </div>
           </header>
@@ -334,27 +499,17 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
               arriba) ── */}
           <main
             ref={mainRef}
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px 24px', maxWidth: 900, margin: '0 auto', width: '100%', touchAction: swipeNav ? 'pan-y' : 'auto', overscrollBehaviorX: 'contain' }}>
-            <div style={{ textAlign: 'center', width: '100%' }}>
-              {/* display:block (no inline-block): con inline-block el ancho
-                  es shrink-to-fit, o sea lo decide el contenido — los slides
-                  del track a min-width:100% inflaban a este padre y el 100%
-                  terminaba midiendo contra una caja gigante en vez de contra
-                  los 640px reales. Con block + margin auto el ancho queda
-                  acotado de verdad y el track calcula bien. */}
-              <div style={{ display: 'block', maxWidth: 640, width: '100%', margin: '0 auto' }}>
-                <style>{`
-                  /* Track deslizante — copia literal del .nov-track de
-                     DISTRIBUIDORA QR 2.0: flex SIN width propio (se estira
-                     por el flex), slides a min-width:100%, y el movimiento
-                     por translateX en %. La transition se apaga con la clase
-                     .oi-arrastrando mientras el dedo está abajo, para que el
-                     track siga al dedo 1:1 en vez de ir con retardo. */
-                  /* Curva de salida suave y recorrido algo más largo (.45s)
-                     que el .35s de la referencia: acá cada slide es una foto
-                     grande a pantalla casi completa, no una tarjeta chica —
-                     con la curva corta el asentado se sentía brusco. */
-                  .oi-pista { display: flex; align-items: flex-start; width: 100%; transition: transform .45s cubic-bezier(.25,.9,.3,1); will-change: transform; }
+            style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '12px 14px 24px', maxWidth: 900, margin: '0 auto', width: '100%', touchAction: swipeNav ? 'pan-y' : 'auto', overscrollBehaviorX: 'contain' }}>
+            <div className="oi-cuerpo">
+              <style>{`
+                  /* Track deslizante — mismo patrón que el .nov-track de
+                     DISTRIBUIDORA QR 2.0: flex, un slide por ancho de
+                     pantalla, movimiento por translateX. La transition se
+                     apaga con .oi-arrastrando mientras el dedo está abajo,
+                     para que el track lo siga 1:1 en vez de ir con retardo.
+                     Curva más larga (.45s) que el .35s de la referencia:
+                     cada slide es una foto grande, no una tarjeta chica. */
+                  .oi-pista { display: flex; align-items: center; width: 100%; transition: transform .45s cubic-bezier(.25,.9,.3,1); will-change: transform; }
                   .oi-pista.oi-arrastrando { transition: none; }
                   /* flex: 0 0 100% (no min-width): con width:100% en la pista,
                      el flex-basis se resuelve contra el ancho REAL del
@@ -362,39 +517,80 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
                      pantalla. Con min-width:100% el porcentaje se resolvía
                      contra el contenido acumulado del flex y cada slide salía
                      al doble, descolocando todo el track. */
-                  .oi-slide { flex: 0 0 100%; max-width: 100%; }
-                  /* aspect-ratio fijo: las ofertas se suben en 1:1.414 (A4),
-                     pero si alguna viniera con otra proporción el track
-                     entero cambiaría de alto al deslizar. Con la caja fija y
-                     object-fit:cover, la altura no se mueve nunca. */
-                  /* SIN box-shadow: el contenedor del track recorta con
-                     overflow-x hidden, y una sombra que se proyecta hacia los
-                     costados se corta justo en ese borde — se veía el filo
-                     del recorte en vez de una foto flotando. El borde sutil
-                     da separación del fondo sin desbordar la caja. */
+                  .oi-slide { flex: 0 0 100%; max-width: 100%; display: flex; justify-content: center; align-items: center; }
+
+                  /* ── Cómo se dimensiona la foto ──
+                     MOBILE: manda el ANCHO (la pantalla es angosta y alta),
+                     la altura sale de la proporción 1:1.414 con la que se
+                     suben las ofertas. Es el comportamiento de siempre.
+                     Sin box-shadow: el track recorta con overflow-x y una
+                     sombra proyectada se cortaba justo en ese borde,
+                     dejando ver el filo del recorte al deslizar. */
+                  .oi-cuerpo { width: 100%; max-width: 640px; margin: 0 auto; text-align: center; }
+                  .oi-marco { overflow-x: hidden; margin-inline: -8px; }
                   .oi-oferta-img { cursor: zoom-in; display: block; width: 100%; aspect-ratio: 1 / 1.414; object-fit: cover; border-radius: 16px; }
+
+                  /* ESCRITORIO: manda el ALTO. La pantalla es horizontal, así
+                     que lo escaso es el alto, no el ancho: la foto se limita
+                     con max-height al espacio que queda entre el header y el
+                     pie, y el ancho lo deduce de su propia proporción
+                     (width:auto + object-fit:contain = entra entera, sin
+                     recorte ni scroll). --oi-alto-foto lo calcula el JS
+                     midiendo el espacio real disponible. */
+                  @media (min-width: 860px), (orientation: landscape) and (min-width: 700px) {
+                    .oi-cuerpo { max-width: none; position: relative; }
+                    .oi-marco { margin-inline: 0; }
+                    .oi-slide { padding-inline: 0; }
+                    .oi-oferta-img {
+                      width: auto; max-width: 100%;
+                      height: var(--oi-alto-foto, 60vh);
+                      aspect-ratio: auto; object-fit: contain;
+                      margin: 0 auto;
+                    }
+                  }
                 `}</style>
-                {/* overflow-x hidden recorta las fotos vecinas al borde del
-                    contenedor: se las ve entrar y salir por los costados,
-                    como en el carrusel de referencia. El padding lateral de
-                    cada slide es el "espacio adecuado" entre fotos (van
-                    pegadas si no, porque cada una vale 100% justo). */}
-                <div style={{ overflowX: 'hidden', marginInline: -8 }}>
-                  <div
-                    ref={pistaRef}
-                    className={`oi-pista${arrastrando ? ' oi-arrastrando' : ''}`}
-                    style={{ transform: `translateX(calc(${-idxVisible * 100}% + ${arrastreX}px))` }}>
-                    {(swipeNav ? ofertasHermanas : [oferta]).map((o, i) => (
-                      <div key={o.id} className="oi-slide" style={{ paddingInline: 8 }}>
-                        <img src={o.imageUrl || o.thumbUrl} alt={o.nombre}
-                          draggable="false"
-                          onClick={(e) => { if (arrastrando || i !== idxVisible) return; trackClick(tienda.id, 'zoom', { origen: 'oferta', productoId: o.id }); zoomOferta.abrir(0, e); }}
-                          className="oi-oferta-img" />
-                      </div>
-                    ))}
-                  </div>
+              {/* overflow-x hidden recorta las fotos vecinas al borde del
+                  contenedor: se las ve entrar y salir por los costados,
+                  como en el carrusel de referencia. El padding lateral de
+                  cada slide es el "espacio adecuado" entre fotos (van
+                  pegadas si no, porque cada una vale 100% justo). */}
+              <div className="oi-marco">
+                <div
+                  ref={pistaRef}
+                  className={`oi-pista${arrastrando ? ' oi-arrastrando' : ''}`}
+                  style={{ transform: `translateX(calc(${-idxVisible * 100}% + ${arrastreX}px))` }}>
+                  {(swipeNav ? ofertasHermanas : [oferta]).map((o, i) => (
+                    <div key={o.id} className="oi-slide" style={{ paddingInline: 8 }}>
+                      <img src={o.imageUrl || o.thumbUrl} alt={o.nombre}
+                        draggable="false"
+                        onClick={(e) => { if (arrastrando || i !== idxVisible) return; trackClick(tienda.id, 'zoom', { origen: 'oferta', productoId: o.id }); zoomOferta.abrir(0, e); }}
+                        className="oi-oferta-img" />
+                    </div>
+                  ))}
                 </div>
-                <div style={{ textAlign: 'center', fontSize: '1.1rem', fontWeight: 800, margin: '14px 0 2px', color: txt }}>{ofertaVisible.nombre}</div>
+              </div>
+
+              {/* Flechas — solo escritorio (con mouse no hay gesto de swipe).
+                  Hermanas del marco, NO hijas: el marco recorta con
+                  overflow-x para que las fotos vecinas entren y salgan, y
+                  ahí adentro las flechas quedarían recortadas también. */}
+              {swipeNav && ofertasHermanas.length > 1 && (
+                <>
+                  <button className="oi-flecha oi-flecha-prev no-press" onClick={() => irA(-1)}
+                    disabled={idxVisible === 0} aria-label="Oferta anterior">
+                    <ChevronLeft size={22} />
+                  </button>
+                  <button className="oi-flecha oi-flecha-next no-press" onClick={() => irA(1)}
+                    disabled={idxVisible === ofertasHermanas.length - 1} aria-label="Oferta siguiente">
+                    <ChevronRight size={22} />
+                  </button>
+                </>
+              )}
+              {/* Pie del carrusel: nombre + dots. Va medido (pieRef) porque
+                  el alto de la foto en escritorio se calcula restando esto
+                  al espacio disponible. */}
+              <div ref={pieRef}>
+                <div className="oi-pie-nombre" style={{ textAlign: 'center', fontSize: '1.1rem', fontWeight: 800, margin: '14px 0 2px', color: txt }}>{ofertaVisible.nombre}</div>
                 {/* Puntitos indicadores — mismo lenguaje visual que los dots
                     del hero de tienda, solo visibles cuando hay hermanas. */}
                 {swipeNav && ofertasHermanas.length > 1 && (
@@ -423,14 +619,17 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
         <TiendaFooter dark={dark} toggleDark={toggleTheme} tiendaId={tienda.id} />
       </div>
 
-      {/* Bottom-nav — MISMO componente que el home. Home · Compartir · WhatsApp
-          + Mapa/Horarios (según lo pedido). onAbrirMapa/onAbrirHorarios se
-          conectan igual que en la tienda. */}
-      <TiendaNavBar
-        onAbrirMapa={tienda.lat && tienda.lng ? () => { trackClick(tienda.id, 'mapa'); setMapaOpen(true); } : undefined}
-        onAbrirHorarios={() => setHorariosOpen(true)}
-        onCompartir={() => setShareOpen(true)}
-      />
+      {/* Bottom-nav — MISMO componente que el home, pero SOLO en mobile: en
+          escritorio estas mismas acciones viven en el header (ver
+          .oi-acciones-desktop), donde están al lado del cursor y no le
+          roban alto a la foto, que es lo escaso en una pantalla horizontal. */}
+      <div className="oi-nav-mobile">
+        <TiendaNavBar
+          onAbrirMapa={tienda.lat && tienda.lng ? () => { trackClick(tienda.id, 'mapa'); setMapaOpen(true); } : undefined}
+          onAbrirHorarios={() => setHorariosOpen(true)}
+          onCompartir={() => setShareOpen(true)}
+        />
+      </div>
 
       {/* Sheet de horarios — MISMO componente que la tienda, para no divergir */}
       <HorariosSheet open={horariosOpen} onClose={() => setHorariosOpen(false)} horarios={tienda.horarios} abierta={abierta} texto={texto} />
