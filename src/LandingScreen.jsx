@@ -391,7 +391,13 @@ function useInclinacion3D(ref, { max = 7 } = {}) {
         const py = (clientY - r.top) / r.height - 0.5;
         // El eje X se invierte: mover el puntero hacia ARRIBA tiene que
         // levantar el borde de arriba, no hundirlo.
-        setTilt({ rx: -py * max * 2, ry: px * max * 2 });
+        // luz: 0..100% para el resplandor que sigue al puntero.
+        setTilt({
+          rx: -py * max * 2,
+          ry: px * max * 2,
+          lx: (px + 0.5) * 100,
+          ly: (py + 0.5) * 100,
+        });
       });
     };
 
@@ -418,6 +424,90 @@ function useInclinacion3D(ref, { max = 7 } = {}) {
   }, [ref, max]);
 
   return tilt;
+}
+
+// Número que sube desde 0 la primera vez que entra en pantalla. El dato es
+// el mismo, pero contando se lee como algo que ESTÁ pasando en la tienda y
+// no como una cifra impresa.
+//
+// La curva es easeOutExpo: arranca rápido y frena al final, que es como se
+// siente natural un contador. Se anima una sola vez (once).
+function NumeroQueSube({ hasta, duracion = 1400, className = '', style }) {
+  const ref = useRef(null);
+  const [n, setN] = useState(0);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { setN(hasta); return undefined; }
+
+    let raf = null;
+    const obs = new IntersectionObserver(([e]) => {
+      if (!e.isIntersecting) return;
+      obs.disconnect();
+      const t0 = performance.now();
+      const paso = (t) => {
+        const p = Math.min(1, (t - t0) / duracion);
+        const eased = p === 1 ? 1 : 1 - Math.pow(2, -10 * p);
+        setN(Math.round(hasta * eased));
+        if (p < 1) raf = requestAnimationFrame(paso);
+      };
+      raf = requestAnimationFrame(paso);
+    }, { threshold: 0.5 });
+    obs.observe(el);
+    return () => { obs.disconnect(); if (raf) cancelAnimationFrame(raf); };
+  }, [hasta, duracion]);
+
+  // tabular-nums: sin esto el ancho baila con cada dígito mientras cuenta.
+  return <span ref={ref} className={`tabular-nums ${className}`} style={style}>{n}</span>;
+}
+
+// Foto que entra con un fundido cuando termina de cargar, en vez de
+// aparecer de golpe. Si viene del caché del navegador ya está completa en
+// el primer render (img.complete), así que arranca visible y no parpadea al
+// volver a la landing.
+//
+// anchoReal recorta la imagen en el origen (Unsplash sirve el tamaño que se
+// le pida por querystring): la portada se descargaba a 1200px para mostrarse
+// a 462, o sea 265 KB para una franja de 108px de alto.
+function FotoSuave({ src, anchoReal, className = '', ...props }) {
+  const ref = useRef(null);
+  const [cargada, setCargada] = useState(false);
+
+  useEffect(() => {
+    // El evento load puede haber pasado antes de montar el listener.
+    if (ref.current?.complete) setCargada(true);
+  }, [src]);
+
+  const url = (() => {
+    if (!src || !anchoReal) return src;
+    try {
+      const u = new URL(src);
+      if (!u.searchParams.has('w')) return src; // no es una URL con tamaño pedible
+      const alto = u.searchParams.get('h');
+      const wPrevio = Number(u.searchParams.get('w'));
+      if (!wPrevio || anchoReal >= wPrevio) return src; // no agrandar
+      if (alto) u.searchParams.set('h', String(Math.round((Number(alto) * anchoReal) / wPrevio)));
+      u.searchParams.set('w', String(anchoReal));
+      return u.toString();
+    } catch { return src; }
+  })();
+
+  return (
+    <img
+      {...props}
+      ref={ref}
+      src={url}
+      onLoad={() => setCargada(true)}
+      decoding="async"
+      className={className}
+      style={{
+        ...props.style,
+        opacity: cargada ? 1 : 0,
+        transition: 'opacity 500ms ease',
+      }}
+    />
+  );
 }
 
 function TiendaPreview({ onVer }) {
@@ -477,6 +567,18 @@ function TiendaPreview({ onVer }) {
       >
       <div ref={cajaRef} className="relative rounded-3xl overflow-hidden border shadow-lg"
         style={{ borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)', background: 'rgb(var(--surface-dim, 245 245 245))' }}>
+        {/* Resplandor que sigue al puntero — refuerza que la superficie es
+            física, igual que el reflejo que se corre en una pantalla real
+            cuando la inclinás. Sobre todo el contenido (z-30) pero sin
+            robar clics. */}
+        <div aria-hidden="true" className="absolute inset-0 z-30 pointer-events-none"
+          style={{
+            opacity: tilt ? 1 : 0,
+            transition: 'opacity 400ms ease',
+            background: tilt
+              ? `radial-gradient(380px circle at ${tilt.lx}% ${tilt.ly}%, rgb(var(--brand, 0 184 217) / 0.16), transparent 70%)`
+              : 'none',
+          }} />
         {/* Muestra con los datos reales: portada, nombre y dos
             publicaciones con sus fotos. pointer-events:none porque no se
             navega desde acá — el clic lo toma el botón de abajo. */}
@@ -484,7 +586,11 @@ function TiendaPreview({ onVer }) {
           {/* Portada */}
           <div className="relative" style={{ height: 108, background: 'rgb(var(--brand, 0 184 217) / 0.18)' }}>
             {tienda?.galeria?.[0] && (
-              <img src={tienda.galeria[0]} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+              /* 960 = el ancho visible (~462px) por 2, para pantallas
+                 retina. Se pedía a 1200 y bajaba 265 KB para una franja de
+                 108px de alto. */
+              <FotoSuave src={tienda.galeria[0]} anchoReal={960} alt=""
+                className="absolute inset-0 w-full h-full object-cover" />
             )}
           </div>
 
@@ -497,14 +603,18 @@ function TiendaPreview({ onVer }) {
             <div className="w-14 h-14 rounded-2xl border-2 shadow-lg overflow-hidden shrink-0 flex items-center justify-center"
               style={{ borderColor: 'var(--surface-solid, #fff)', background: 'var(--surface-solid, #fff)', marginTop: -28 }}>
               {tienda?.foto
-                ? <img src={tienda.foto} alt="" className="w-full h-full object-cover" />
+                ? <FotoSuave src={tienda.foto} anchoReal={120} alt="" className="w-full h-full object-cover" />
                 : <Store className="w-6 h-6" style={{ color: 'var(--brand-hex, #00B8D9)' }} />}
             </div>
             {/* El texto va sobre la superficie de la card, no sobre la foto:
                 así se lee igual sin importar qué colores tenga la portada. */}
+            {/* Nombre y ciudad FIJOS: es siempre la misma tienda de ejemplo,
+                así que no hay razón para esperar al fetch. Antes decía "Tu
+                negocio" y medio segundo después saltaba a "LOKAL", que se
+                leía como un error de carga y no como contenido. */}
             <div className="min-w-0 py-2">
-              <p className="font-black text-sm leading-tight truncate">{tienda?.nombre || 'Tu negocio'}</p>
-              <p className="text-[11px] text-ink-dim truncate">{tienda?.ciudad || 'Tu ciudad'}</p>
+              <p className="font-black text-sm leading-tight truncate">LOKAL</p>
+              <p className="text-[11px] text-ink-dim truncate">Bovril, Entre Ríos</p>
             </div>
           </div>
 
@@ -514,7 +624,8 @@ function TiendaPreview({ onVer }) {
               <div key={o?.id || i} className="min-w-0 rounded-2xl overflow-hidden border border-slate-200/60 dark:border-white/10 bg-surface-card">
                 <div className="relative w-full" style={{ aspectRatio: '1 / 1.414', background: 'rgb(var(--brand, 0 184 217) / 0.07)' }}>
                   {(o?.thumbUrl || o?.imageUrl) && (
-                    <img src={o.thumbUrl || o.imageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+                    <FotoSuave src={o.thumbUrl || o.imageUrl} anchoReal={420} alt=""
+                      className="absolute inset-0 w-full h-full object-cover" />
                   )}
                 </div>
                 {o?.nombre && <p className="px-2 py-1.5 text-[11px] font-bold text-center truncate">{o.nombre}</p>}
@@ -564,7 +675,7 @@ function TiendaPreview({ onVer }) {
           <BarChart3 className="w-4 h-4" style={{ color: 'var(--brand-hex, #00B8D9)' }} />
         </span>
         <span className="leading-tight">
-          <span className="block text-[15px] font-black tabular-nums">248</span>
+          <NumeroQueSube hasta={248} className="block text-[15px] font-black" />
           <span className="block text-[10px] text-ink-dim">visitas esta semana</span>
         </span>
       </div>

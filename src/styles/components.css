@@ -604,3 +604,34 @@ a.lok-tap * {
 @media (prefers-reduced-motion: reduce) {
   .lok-flota { animation: none; }
 }
+
+/* Texto que aparece cuando llegan los datos: un fundido corto con un
+   desplazamiento mínimo, para que se lea como "entró" y no como un cambio
+   brusco de contenido. */
+@keyframes lok-entra {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: none; }
+}
+.lok-entra { animation: lok-entra 340ms ease-out both; }
+
+/* Placeholder con brillo que recorre mientras se esperan los datos. El
+   degradado se mueve con background-position (compositable) en vez de
+   animar un pseudo-elemento con left. */
+@keyframes lok-brilla {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+.lok-brilla {
+  background-image: linear-gradient(
+    90deg,
+    rgb(var(--brand, 0 184 217) / 0.09) 25%,
+    rgb(var(--brand, 0 184 217) / 0.18) 50%,
+    rgb(var(--brand, 0 184 217) / 0.09) 75%
+  );
+  background-size: 200% 100%;
+  animation: lok-brilla 1.5s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lok-entra { animation: none; }
+  .lok-brilla { animation: none; }
+}
