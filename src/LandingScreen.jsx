@@ -74,29 +74,40 @@ function PalabraRotativa({ palabras = PALABRAS_HERO, intervalo = 2600 }) {
     return () => clearInterval(id);
   }, [palabras.length, intervalo, reduce]);
 
-  // Ancho FIJO, reservado con la palabra más larga. Se probó que la caja
-  // acompañara a cada palabra, pero el título está centrado en mobile: con
-  // ancho variable toda la línea —incluido el "en"— se corría en cada
-  // cambio, que se nota mucho más que el hueco.
-  const masLarga = palabras.reduce((a, b) => (b.length > a.length ? b : a), '');
-
-  // El punto final viaja DENTRO de este componente, pegado a la palabra: si
-  // queda afuera, la reserva de ancho lo empuja lejos y con las palabras
-  // cortas se ve un punto flotando solo.
+  // Ancho FIJO, reservado con la palabra más ANCHA — no la de más
+  // caracteres. "un solo link" y "tu biografía" empatan en 12 caracteres,
+  // pero "tu biografía" pesa más (más letras anchas, una tilde) y termina
+  // siendo ~10px más ancha renderizada. Contar caracteres elegía la
+  // primera en el empate ("un solo link"), y esa reserva quedaba angosta
+  // para "tu biografía" — el <h1>, centrado en mobile, recalculaba el
+  // centrado con esa palabra y todo el bloque se corría ~5px.
+  //
+  // La solución no es adivinar el ancho: se renderizan TODAS las palabras
+  // superpuestas en la misma celda del grid (todas invisibles menos la
+  // activa), así el propio navegador usa el ancho de la más ancha real,
+  // igual que si se pusiera cada una a mano y se las comparara con una
+  // regla.
   return (
-    <span className="relative inline-grid align-bottom">
-      {/* Reserva de ancho: ocupa lugar en el layout pero no se ve. */}
-      <span aria-hidden="true" className="invisible col-start-1 row-start-1 whitespace-nowrap">{masLarga}.</span>
-      <span
-        className="col-start-1 row-start-1 whitespace-nowrap justify-self-start motion-reduce:transition-none"
-        style={{
-          transition: 'opacity 240ms ease, transform 240ms ease',
-          opacity: saliendo ? 0 : 1,
-          transform: saliendo ? 'translateY(-0.35em)' : 'translateY(0)',
-        }}
-      >
-        <span style={{ color: 'var(--brand-hex, #00B8D9)' }}>{palabras[i]}</span>.
-      </span>
+    <span className="relative inline-grid align-bottom shrink-0">
+      {palabras.map((p, idx) => {
+        const activa = idx === i;
+        return (
+          <span
+            key={p}
+            aria-hidden={!activa || undefined}
+            className={`col-start-1 row-start-1 whitespace-nowrap justify-self-start motion-reduce:transition-none ${activa ? '' : 'invisible'}`}
+            style={activa ? {
+              transition: 'opacity 240ms ease, transform 240ms ease',
+              opacity: saliendo ? 0 : 1,
+              transform: saliendo ? 'translateY(-0.35em)' : 'translateY(0)',
+            } : undefined}
+          >
+            {activa
+              ? <><span style={{ color: 'var(--brand-hex, #00B8D9)' }}>{p}</span>.</>
+              : `${p}.`}
+          </span>
+        );
+      })}
     </span>
   );
 }
@@ -1054,7 +1065,18 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
               <h1 className="text-4xl lg:text-5xl font-black leading-[1.08] tracking-tight mb-5">
                 Tu negocio,
                 <br />
-                <span className="whitespace-nowrap">en <PalabraRotativa /></span>
+                {/* inline-flex (no un span de texto suelto): el ancho de
+                    "en" + la palabra se calcula por LAYOUT (flex), no por el
+                    shaping del texto completo — con un solo nodo de texto
+                    "en X." el kerning entre "en" y la primera letra cambia
+                    ligerísimamente según la palabra (una vocal pega distinto
+                    que una consonante), y el text-center del título
+                    recentraba esa línea con un corrimiento de 1-2px. Con
+                    flex, el ancho total es siempre "en" + gap + reserva de
+                    PalabraRotativa, sin ese redondeo variable. */}
+                <span className="inline-flex items-baseline whitespace-nowrap" style={{ gap: '0.28em' }}>
+                  en <PalabraRotativa />
+                </span>
               </h1>
             </FadeUp>
             <FadeUp delay={160}>
