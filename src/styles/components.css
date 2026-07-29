@@ -636,6 +636,14 @@ a.lok-tap * {
   .lok-brilla { animation: none; }
 }
 
+/* "Volver arriba" lleva no-press (apaga el scale global de botones) porque
+   ese scale usa una curva con rebote pensada para el tap, y acá competía
+   con la transición de aparición/desaparición al scrollear — se veía
+   tosco. Pero al apagarlo también se perdió el feedback de tocarlo estando
+   visible. Se repone acá con su propia transición (misma curva serena que
+   ya usa el elemento) en vez del active genérico. */
+.lok-volver-arriba:active { transform: scale(0.88) !important; transition: transform 100ms ease-out !important; }
+
 /* Onda de tinta al presionar (ver useRipple en LandingScreen.jsx). El
    elemento que la recibe necesita position:relative + overflow:hidden
    propios (no acá: cada botón ya trae su forma/radio, y overflow:hidden en

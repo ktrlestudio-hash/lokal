@@ -21,6 +21,7 @@
  *   Editá --brand-hex en src/index.css y ese valor se propaga a toda la app.
  *   Acá se usa var(--brand-hex) para que las instancias del logo también cambien.
  */
+import { useId } from 'react';
 
 // ── Constantes de marca ───────────────────────────────────────────────────────
 export const BRAND = {
@@ -65,9 +66,25 @@ const FRAME_PATH = 'M62.52,7.66c6.08,0,11,4.93,11,11v44.12c0,6.08-4.93,11-11,11H
  *
  * @param {number} size    — tamaño en px (ancho y alto)
  * @param {string} color   — color inline (sobrescribe currentColor)
+ * @param {boolean} animado — el MARCO (no el punto) se pinta con un
+ *   degradado cónico que gira, mismo lenguaje que el halo de la card de
+ *   precio (ver .lok-halo en components.css) — acá aplicado directo al
+ *   fill del trazo en vez de a un border CSS, porque el marco YA es un
+ *   path con relleno sólido (fill-rule nonzero, doble contorno = efecto
+ *   anillo), no una línea que se pueda bordear por fuera.
  * @param {string} className
  */
-export function LogoSymbol({ size = 32, color, className = '' }) {
+export function LogoSymbol({ size = 32, color, animado = false, className = '' }) {
+  // id único por instancia: si dos <LogoSymbol animado> coexistieran en la
+  // misma página, un id fijo haría que ambos <path> referencien el MISMO
+  // <linearGradient> (los ids de SVG son globales al documento).
+  const gradId = useId();
+  // <animateTransform> (SMIL) no obedece la media query CSS
+  // prefers-reduced-motion — a diferencia de una @keyframes, hay que
+  // apagarla a mano leyendo la preferencia.
+  const reduceMotion = typeof window !== 'undefined'
+    && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const girar = animado && !reduceMotion;
   return (
     <svg
       viewBox="0 0 81.18 81.44"
@@ -79,8 +96,24 @@ export function LogoSymbol({ size = 32, color, className = '' }) {
       style={color ? { color } : undefined}
       aria-label="Lokal"
     >
+      {animado && (
+        <defs>
+          {/* gradientUnits="userSpaceOnUse" + un rect de igual tamaño que
+              el viewBox: así el gradiente cubre el símbolo completo y
+              gira alrededor de su propio centro, no del origen (0,0). */}
+          <linearGradient id={gradId} x1="0" y1="0" x2="81.18" y2="81.44" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="var(--brand-hex, #00B8D9)" stopOpacity="0.35" />
+            <stop offset="50%" stopColor="var(--brand-hex, #00B8D9)" stopOpacity="1" />
+            <stop offset="100%" stopColor="var(--brand-hex, #00B8D9)" stopOpacity="0.35" />
+            {girar && (
+              <animateTransform attributeName="gradientTransform" type="rotate"
+                from="0 40.59 40.72" to="360 40.59 40.72" dur="4s" repeatCount="indefinite" />
+            )}
+          </linearGradient>
+        </defs>
+      )}
       <circle cx="40.72" cy="40.65" r="11.23" />
-      <path d={FRAME_PATH} />
+      <path d={FRAME_PATH} fill={animado ? `url(#${gradId})` : undefined} />
     </svg>
   );
 }
@@ -137,7 +170,7 @@ export function LogoBadge({ size = 40, inverted = false, dark: darkMode = false,
  * @param {boolean} light — wordmark en blanco (para fondos oscuros sin pasar color)
  * @param {string} className
  */
-export function LogoFull({ size = 28, color, light = false, className = '' }) {
+export function LogoFull({ size = 28, color, light = false, animado = false, className = '' }) {
   const textColor = color || (light ? 'white' : undefined);
   const fontSize  = Math.round(size * 0.9);
   const gap       = Math.round(size * 0.28);
@@ -148,7 +181,7 @@ export function LogoFull({ size = 28, color, light = false, className = '' }) {
       style={{ gap }}
       aria-label="Lokal"
     >
-      <LogoSymbol size={size} color={textColor} />
+      <LogoSymbol size={size} color={textColor} animado={animado} />
       <span
         style={{
           fontSize,

@@ -20,10 +20,15 @@
 import React from 'react';
 import { KtrlMark } from './Brand';
 
-export function LogoLoader() {
+export function LogoLoader({ size }) {
   const cx = 40.72, cy = 40.65, r = 11.23;
+  // Sin size explícito, escala con el viewport: 72px fijos se leían chicos
+  // en una pantalla de escritorio ancha, donde el splash es la única cosa en
+  // pantalla y tiene todo el espacio para respirar. clamp() en vez de un
+  // valor fijo mayor: en mobile el tamaño de antes seguía siendo correcto.
+  const tamano = size ?? 'clamp(72px, 9vw, 120px)';
   return (
-    <svg viewBox="0 0 81.18 81.44" width={72} height={72} xmlns="http://www.w3.org/2000/svg" aria-label="Cargando">
+    <svg viewBox="0 0 81.18 81.44" width={tamano} height={tamano} xmlns="http://www.w3.org/2000/svg" aria-label="Cargando">
       <style>{`
         @keyframes lk-draw { from { stroke-dashoffset: 275; } to { stroke-dashoffset: 0; } }
         @keyframes lk-dot-in {
@@ -65,12 +70,15 @@ export function SplashScreenFull() {
       <div className="absolute inset-x-0 top-0 pointer-events-none" style={{ height: '65%', background: 'radial-gradient(ellipse 75% 55% at 50% 0%, rgba(0,184,217,0.22), transparent)', animation: 'lk-glow-pulse 3s ease-in-out 1.2s infinite' }} />
       <div className="absolute inset-x-0 bottom-0 pointer-events-none" style={{ height: '40%', background: 'radial-gradient(ellipse 60% 50% at 50% 100%, rgba(0,184,217,0.07), transparent)' }} />
       <LogoLoader />
+      {/* fontSize con clamp: mismo criterio que el logo — en escritorio el
+          splash ocupa toda la pantalla y el texto de 34px fijo quedaba
+          chico comparado con el espacio disponible. */}
       <div style={{ animation: 'lk-brand-in 0.45s ease 1.0s both', marginTop: 18 }}>
-        <span style={{ color: 'white', fontSize: 34, fontWeight: 800, letterSpacing: '0.01em', fontFamily: "'Inter', system-ui, sans-serif" }}>lokal</span>
+        <span style={{ color: 'white', fontSize: 'clamp(34px, 3.2vw, 46px)', fontWeight: 800, letterSpacing: '0.01em', fontFamily: "'Inter', system-ui, sans-serif" }}>lokal</span>
       </div>
       <div className="absolute bottom-10 flex items-center gap-1.5" style={{ animation: 'lk-mark-in 0.5s ease 1.2s both', opacity: 0 }}>
-        <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, fontFamily: "'Inter', system-ui, sans-serif", letterSpacing: '0.04em', textTransform: 'uppercase' }}>creado por</span>
-        <KtrlMark className="text-white" style={{ height: 12, width: 'auto', opacity: 0.35 }} />
+        <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 'clamp(10px, 0.9vw, 13px)', fontFamily: "'Inter', system-ui, sans-serif", letterSpacing: '0.04em', textTransform: 'uppercase' }}>creado por</span>
+        <KtrlMark className="text-white" style={{ height: 'clamp(12px, 1.1vw, 16px)', width: 'auto', opacity: 0.35 }} />
       </div>
     </div>
   );

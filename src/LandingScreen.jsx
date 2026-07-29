@@ -931,6 +931,8 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
   // apenas pasa contenido por debajo (24px), mientras que el botón "volver
   // arriba" solo tiene sentido cuando ya te alejaste bastante del tope.
   const [lejosDelTope, setLejosDelTope] = useState(false);
+  const entrarRipple = useRipple();
+  const volverArribaRipple = useRipple();
   // Cuánto del footer ya entró en pantalla: es lo que el botón flotante
   // tiene que levantarse para no taparlo (ver el efecto de scroll).
   const [topeFooter, setTopeFooter] = useState(0);
@@ -1093,7 +1095,7 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
           style={{ background: 'var(--brand-hex, #00B8D9)' }} />
 
         <div className="max-w-5xl mx-auto px-5 lg:px-8 h-16 flex items-center justify-between">
-          <LogoFull size={26} />
+          <LogoFull size={26} animado />
           <div className="flex items-center gap-2">
             {/* El toggle de tema NO va acá: ya vive en el footer, y en el
                 header competía con "Entrar", que es la única acción que
@@ -1112,7 +1114,8 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
                 completa. Acá es una acción de la SPA. */}
             <button
               onClick={irAlPanel}
-              className="lok-tap lok-chip-btn text-sm font-bold px-4 py-2 rounded-xl no-underline hover:text-brand text-ink-dim"
+              onPointerDown={entrarRipple.onPointerDown}
+              className="relative overflow-hidden lok-tap lok-chip-btn text-sm font-bold px-4 py-2 rounded-xl no-underline hover:text-brand text-ink-dim"
               style={{
                 // Borde sólo en dark: sobre el fondo casi negro el relleno
                 // al 7% no alcanza a definir la forma. En light el fondo ya
@@ -1121,6 +1124,7 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
                 border: isDark ? '1px solid rgb(var(--brand, 0 184 217) / 0.18)' : '1px solid transparent',
               }}
             >
+              {entrarRipple.nodos}
               Entrar
             </button>
           </div>
@@ -1413,8 +1417,14 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
           suficiente como para que el header quede lejos. ── */}
       <button
         onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        onPointerDown={volverArribaRipple.onPointerDown}
         aria-label="Volver arriba"
-        className={`lok-tap no-press fixed right-5 z-40 w-11 h-11 rounded-full flex items-center justify-center shadow-lg ${lejosDelTope ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-90 pointer-events-none'}`}
+        /* overflow-hidden SIN relative: `fixed` ya crea el contexto de
+           posicionamiento que la onda necesita para ubicarse, y tener las
+           dos clases hacía que compitieran (Tailwind resuelve por orden en
+           la hoja, no en el atributo) — el botón perdía el fixed y se
+           movía de lugar. */
+        className={`overflow-hidden lok-tap no-press lok-volver-arriba fixed right-5 z-40 w-11 h-11 rounded-full flex items-center justify-center shadow-lg ${lejosDelTope ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-90 pointer-events-none'}`}
         style={{
           background: 'var(--brand-hex, #00B8D9)',
           color: '#fff',
