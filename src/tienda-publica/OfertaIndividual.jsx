@@ -112,7 +112,12 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
   const pistaRef = useRef(null);
   const [arrastreX, setArrastreX] = useState(0);   // px que el dedo lleva movidos
   const [arrastrando, setArrastrando] = useState(false); // sin transition mientras dura
-  const SWIPE_THRESHOLD = 60; // px para disparar cambio de oferta al soltar
+  // El gesto pasa por distancia O por velocidad, lo que ocurra primero: con
+  // solo distancia (60px) el carrusel se sentía duro, había que arrastrar
+  // medio ancho de pantalla para que cediera. Un flick corto y rápido —
+  // como el que se hace sin pensar — ahora también cuenta.
+  const SWIPE_THRESHOLD = 40;      // px de arrastre para cambiar de oferta
+  const SWIPE_VELOCIDAD = 0.35;    // px/ms: un flick rápido pasa aunque sea corto
 
   // Índice LOCAL de la oferta visible. Cambiarlo mueve el track al instante,
   // sin remontar nada; la URL se sincroniza aparte (ver efecto más abajo)
@@ -170,7 +175,7 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
 
     const alEmpezar = (e) => {
       if (!gestoRef.current.swipeNav) return;
-      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
       swipeAxisRef.current = null;
     };
     const alMover = (e) => {
@@ -197,7 +202,15 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
       const g = gestoRef.current;
       if (swipeAxisRef.current === 'x' && touchStartRef.current) {
         const dx = (e.changedTouches?.[0]?.clientX ?? touchStartRef.current.x) - touchStartRef.current.x;
-        if (Math.abs(dx) > SWIPE_THRESHOLD) g.irA(dx < 0 ? 1 : -1);
+        const ms = Math.max(1, Date.now() - touchStartRef.current.t);
+        const velocidad = Math.abs(dx) / ms; // px por ms
+        // Pasa por distancia recorrida O por velocidad del flick. El flick
+        // igual pide un mínimo de 12px: sin eso, un toque nervioso de 3px
+        // hecho en 5ms daría una velocidad altísima y cambiaría de oferta
+        // sin que el usuario haya querido arrastrar nada.
+        const porDistancia = Math.abs(dx) > SWIPE_THRESHOLD;
+        const porFlick = velocidad > SWIPE_VELOCIDAD && Math.abs(dx) > 12;
+        if (porDistancia || porFlick) g.irA(dx < 0 ? 1 : -1);
       }
       // Soltar: se apaga el modo arrastre (vuelve la transition) y el offset
       // en px se limpia — el track termina el recorrido hasta el slide que
@@ -337,7 +350,11 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
                      por translateX en %. La transition se apaga con la clase
                      .oi-arrastrando mientras el dedo está abajo, para que el
                      track siga al dedo 1:1 en vez de ir con retardo. */
-                  .oi-pista { display: flex; align-items: flex-start; width: 100%; transition: transform .35s cubic-bezier(.4,0,.2,1); will-change: transform; }
+                  /* Curva de salida suave y recorrido algo más largo (.45s)
+                     que el .35s de la referencia: acá cada slide es una foto
+                     grande a pantalla casi completa, no una tarjeta chica —
+                     con la curva corta el asentado se sentía brusco. */
+                  .oi-pista { display: flex; align-items: flex-start; width: 100%; transition: transform .45s cubic-bezier(.25,.9,.3,1); will-change: transform; }
                   .oi-pista.oi-arrastrando { transition: none; }
                   /* flex: 0 0 100% (no min-width): con width:100% en la pista,
                      el flex-basis se resuelve contra el ancho REAL del
@@ -350,7 +367,12 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
                      pero si alguna viniera con otra proporción el track
                      entero cambiaría de alto al deslizar. Con la caja fija y
                      object-fit:cover, la altura no se mueve nunca. */
-                  .oi-oferta-img { cursor: zoom-in; display: block; width: 100%; aspect-ratio: 1 / 1.414; object-fit: cover; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+                  /* SIN box-shadow: el contenedor del track recorta con
+                     overflow-x hidden, y una sombra que se proyecta hacia los
+                     costados se corta justo en ese borde — se veía el filo
+                     del recorte en vez de una foto flotando. El borde sutil
+                     da separación del fondo sin desbordar la caja. */
+                  .oi-oferta-img { cursor: zoom-in; display: block; width: 100%; aspect-ratio: 1 / 1.414; object-fit: cover; border-radius: 16px; }
                 `}</style>
                 {/* overflow-x hidden recorta las fotos vecinas al borde del
                     contenedor: se las ve entrar y salir por los costados,
