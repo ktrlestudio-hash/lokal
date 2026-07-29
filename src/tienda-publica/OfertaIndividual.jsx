@@ -418,6 +418,36 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
                 .oi-flecha-next { left: calc(50% + var(--oi-ancho-foto, 400px) / 2 + 14px); }
               }
 
+              /* ── Header en UNA fila (horizontal) ──
+                 Grilla de 3 columnas con los laterales del MISMO ancho
+                 (1fr): así la identidad de la tienda queda centrada de
+                 verdad respecto a la ventana, sin que la corran el botón
+                 atrás o las acciones. En mobile no aplica: ahí el botón
+                 atrás sigue flotando sobre la foto (fixed) y el hero ocupa
+                 todo el ancho, como estaba. */
+              .oi-header-fila { display: block; }
+              .oi-header-lado { display: none; }
+              @media (min-width: 860px), (orientation: landscape) and (min-width: 700px) {
+                .oi-header-fila {
+                  display: grid; grid-template-columns: 1fr auto 1fr;
+                  align-items: center; gap: 16px;
+                }
+                /* La flecha pasa a ser una columna más de la fila, no un
+                   elemento flotante suelto en la esquina. */
+                .oi-header-lado { display: flex; align-items: center; }
+                .oi-header-lado-izq { justify-content: flex-start; }
+                .oi-header-lado-der { justify-content: flex-end; }
+                /* !important: el botón lleva display:flex en su style
+                   inline (más específico que cualquier regla de clase), y
+                   sin esto quedaban DOS flechas de atrás superpuestas — la
+                   flotante y la de la fila. */
+                .oi-atras-flotante { display: none !important; }
+                /* El padding superior generoso existía para dejarle aire al
+                   botón atrás flotante; ahora que es una columna más de la
+                   fila, se empareja arriba y abajo. */
+                .oi-header-info { padding: 14px 18px 14px; }
+              }
+
               /* Pantalla MUY baja (celular apaisado, ~390px de alto): el
                  header con su padding generoso se come casi todo el espacio
                  que necesita la foto. Se compacta todo — logo más chico,
@@ -432,11 +462,11 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
               }
             `}</style>
 
-            {/* Botón atrás — STICKY flotante en la esquina: fixed, siempre
-                visible aunque se scrollee la oferta. Glass sutil (blur +
-                fondo translúcido de superficie) para que se despegue del
-                contenido que pase por debajo. safe-area para el notch. */}
-            <button onClick={onVolver} aria-label="Volver a la tienda" className="no-press oi-hero-btn"
+            {/* Botón atrás en MOBILE — flotante sobre la foto (fixed), que
+                es donde tiene que estar cuando el hero ocupa todo el ancho.
+                En horizontal se oculta (.oi-atras-flotante) porque pasa a
+                ser la primera columna de la fila del header, ver abajo. */}
+            <button onClick={onVolver} aria-label="Volver a la tienda" className="no-press oi-hero-btn oi-atras-flotante"
               style={{ position: 'fixed', top: 'calc(14px + env(safe-area-inset-top))', left: 'calc(10px + env(safe-area-inset-left))', zIndex: 20, width: 40, height: 40, borderRadius: 12, border: `1px solid ${border}`, cursor: 'pointer', background: 'color-mix(in srgb, var(--tp-surface) 80%, transparent)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', color: txt, boxShadow: '0 2px 8px rgba(0,0,0,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <ArrowLeft size={19} />
             </button>
@@ -445,50 +475,65 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
                 Padding vertical balanceado (arriba deja aire para el botón
                 atrás sin exagerar; abajo cierra parejo hacia la foto). */}
             <div className="oi-header-info" style={{ position: 'relative', zIndex: 1, padding: '30px 18px 18px' }}>
-              {/* alignItems:center asegura que logo (52px), texto, badge de
-                  estado y botón WA (36px) queden centrados en la MISMA línea
-                  vertical pese a la diferencia de altura entre ellos — antes
-                  el WA quedaba con el color/estilo desactualizado, ahora
-                  usa el mismo gradiente real de marca que el hero de tienda. */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <div className="oi-logo-tienda" style={{ width: 52, height: 52, borderRadius: 15, flexShrink: 0, overflow: 'hidden', background: tienda.logo ? 'var(--tp-primary-soft)' : primary, boxShadow: '0 4px 16px rgba(0,0,0,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {tienda.logo
-                    ? <img src={tienda.logo} alt={tienda.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : <LogoSymbolSvg size={28} color="#fff" />}
+              {/* Fila del header: [atrás] · [identidad de la tienda] ·
+                  [acciones]. Las dos columnas laterales miden 1fr cada una,
+                  así la identidad queda centrada respecto a la ventana y no
+                  se corre según cuántas acciones haya. En mobile esto es un
+                  bloque simple y solo se ve la identidad. */}
+              <div className="oi-header-fila">
+                {/* Columna izquierda — botón atrás en su lugar de la fila */}
+                <div className="oi-header-lado oi-header-lado-izq">
+                  <button onClick={onVolver} aria-label="Volver a la tienda" className="no-press oi-hero-btn"
+                    style={{ width: 40, height: 40, borderRadius: 12, border: `1px solid ${border}`, cursor: 'pointer', background: 'var(--tp-surface)', color: txt, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <ArrowLeft size={19} />
+                  </button>
                 </div>
-                <h1 className="oi-nombre-tienda" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, letterSpacing: '-.01em', color: txt }}>{tienda.nombre}</h1>
-                {texto && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: `color-mix(in srgb, ${abierta ? '#22C55E' : '#EF4444'} 14%, transparent)`, color: abierta ? '#22C55E' : '#EF4444', padding: '5px 12px', borderRadius: 99, fontSize: '.72rem', fontWeight: 700 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: abierta ? '#22C55E' : '#EF4444' }} />{texto}
-                  </span>
-                )}
-                {wa && (
-                  <a href={`https://wa.me/54${wa}?text=${encodeURIComponent(`Hola ${tienda.nombre}, te contacto desde Lokal.`)}`}
-                    target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" data-tooltip="WhatsApp" className="oi-wa-btn"
-                    onClick={() => trackClick(tienda.id, 'whatsapp', { productoId: ofertaVisible.id })}
-                    style={{ width: 36, height: 36, borderRadius: 11, background: 'linear-gradient(135deg,#25D366,#128C7E)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {WA_ICON}
-                  </a>
-                )}
 
-                {/* Acciones que en mobile viven en la barra inferior. Acá
-                    van con etiqueta escrita (hay ancho de sobra y con mouse
-                    no hay que adivinar qué hace cada ícono). Separador
-                    visual para que no se lean como parte de la identidad de
-                    la tienda. */}
-                <div className="oi-acciones-desktop" style={{ alignItems: 'center', gap: 8, marginLeft: 6, paddingLeft: 14, borderLeft: `1px solid ${border}` }}>
-                  {tienda.lat && tienda.lng && (
-                    <button className="oi-accion no-press" onClick={() => { trackClick(tienda.id, 'mapa'); setMapaOpen(true); }}>
-                      <MapPin size={15} /> Mapa
-                    </button>
+                {/* alignItems:center asegura que logo (52px), texto, badge de
+                    estado y botón WA (36px) queden centrados en la MISMA línea
+                    vertical pese a la diferencia de altura entre ellos — antes
+                    el WA quedaba con el color/estilo desactualizado, ahora
+                    usa el mismo gradiente real de marca que el hero de tienda. */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <div className="oi-logo-tienda" style={{ width: 52, height: 52, borderRadius: 15, flexShrink: 0, overflow: 'hidden', background: tienda.logo ? 'var(--tp-primary-soft)' : primary, boxShadow: '0 4px 16px rgba(0,0,0,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {tienda.logo
+                      ? <img src={tienda.logo} alt={tienda.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : <LogoSymbolSvg size={28} color="#fff" />}
+                  </div>
+                  <h1 className="oi-nombre-tienda" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, letterSpacing: '-.01em', color: txt }}>{tienda.nombre}</h1>
+                  {texto && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: `color-mix(in srgb, ${abierta ? '#22C55E' : '#EF4444'} 14%, transparent)`, color: abierta ? '#22C55E' : '#EF4444', padding: '5px 12px', borderRadius: 99, fontSize: '.72rem', fontWeight: 700 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: abierta ? '#22C55E' : '#EF4444' }} />{texto}
+                    </span>
                   )}
-                  <button className="oi-accion no-press" onClick={() => setHorariosOpen(true)}>
-                    <Clock size={15} /> Horarios
-                  </button>
-                  <button className="oi-accion no-press" onClick={() => setShareOpen(true)}
-                    style={{ background: primary, color: 'var(--tp-on-primary)', borderColor: primary }}>
-                    <Share2 size={15} /> Compartir
-                  </button>
+                  {wa && (
+                    <a href={`https://wa.me/54${wa}?text=${encodeURIComponent(`Hola ${tienda.nombre}, te contacto desde Lokal.`)}`}
+                      target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" data-tooltip="WhatsApp" className="oi-wa-btn"
+                      onClick={() => trackClick(tienda.id, 'whatsapp', { productoId: ofertaVisible.id })}
+                      style={{ width: 36, height: 36, borderRadius: 11, background: 'linear-gradient(135deg,#25D366,#128C7E)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {WA_ICON}
+                    </a>
+                  )}
+                </div>
+
+                {/* Columna derecha — acciones que en mobile viven en la barra
+                    inferior. Van con etiqueta escrita: hay ancho de sobra y
+                    con mouse no hay que adivinar qué hace cada ícono. */}
+                <div className="oi-header-lado oi-header-lado-der">
+                  <div className="oi-acciones-desktop" style={{ alignItems: 'center', gap: 8 }}>
+                    {tienda.lat && tienda.lng && (
+                      <button className="oi-accion no-press" onClick={() => { trackClick(tienda.id, 'mapa'); setMapaOpen(true); }}>
+                        <MapPin size={15} /> Mapa
+                      </button>
+                    )}
+                    <button className="oi-accion no-press" onClick={() => setHorariosOpen(true)}>
+                      <Clock size={15} /> Horarios
+                    </button>
+                    <button className="oi-accion no-press" onClick={() => setShareOpen(true)}
+                      style={{ background: primary, color: 'var(--tp-on-primary)', borderColor: primary }}>
+                      <Share2 size={15} /> Compartir
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

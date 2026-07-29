@@ -958,18 +958,21 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
             </a>
           </div>
 
-          {/* Copyright */}
-          <p className="mt-5 text-center text-[10px]" style={{ color: 'var(--text-secondary, #999)' }}>
-            © {new Date().getFullYear()} LOKAL. Todos los derechos reservados.
-          </p>
-
-          {/* Legales */}
-          <nav className="mt-4 flex items-center justify-center gap-5 text-xs font-semibold"
-            style={{ color: 'var(--text-secondary, #999)' }}>
-            <a href="/terminos-y-condiciones" className="lok-tap lok-link-btn hover:text-brand">Términos</a>
-            <a href="/politica-de-privacidad" className="lok-tap lok-link-btn hover:text-brand">Privacidad</a>
-            <a href="/condiciones-para-comercios" className="lok-tap lok-link-btn hover:text-brand">Comercios</a>
-          </nav>
+          {/* Copyright + legales en la MISMA fila — antes iban en dos
+              bloques apilados (mt-5 y mt-4) que estiraban el footer sin
+              necesidad. En pantallas angostas vuelven a apilarse solos por
+              el flex-wrap, con los legales primero (son lo accionable). */}
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-3">
+            <nav className="order-1 sm:order-2 flex items-center gap-5 text-xs font-semibold"
+              style={{ color: 'var(--text-secondary, #999)' }}>
+              <a href="/terminos-y-condiciones" className="lok-tap lok-link-btn hover:text-brand">Términos</a>
+              <a href="/politica-de-privacidad" className="lok-tap lok-link-btn hover:text-brand">Privacidad</a>
+              <a href="/condiciones-para-comercios" className="lok-tap lok-link-btn hover:text-brand">Comercios</a>
+            </nav>
+            <p className="order-2 sm:order-1 text-center text-[10px]" style={{ color: 'var(--text-secondary, #999)' }}>
+              © {new Date().getFullYear()} LOKAL. Todos los derechos reservados.
+            </p>
+          </div>
         </div>
       </footer>
 

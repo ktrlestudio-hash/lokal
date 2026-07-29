@@ -1152,11 +1152,23 @@ export function TemplateCommerceModern({
           plataforma ya existe el bottom-nav global de LOKAL, provisto por
           fuera del template (App.jsx), sin cambios acá. ── */}
       {modo === 'standalone' && (
-        <TiendaNavBar
-          onAbrirMapa={onAbrirMapa}
-          onAbrirHorarios={() => setHorariosOpen(true)}
-          onCompartir={compartir}
-        />
+        <div className="cm-nav-mobile">
+          <style>{`
+            /* display:contents — el wrapper no crea caja propia, así el nav
+               sigue siendo hijo directo del flex-column raíz (lo necesita
+               para quedar fijo abajo con flexShrink:0). En horizontal se
+               oculta entero: sus acciones ya están en el hero. */
+            .cm-nav-mobile { display: contents; }
+            @media (min-width: 860px), (orientation: landscape) and (min-width: 700px) {
+              .cm-nav-mobile { display: none; }
+            }
+          `}</style>
+          <TiendaNavBar
+            onAbrirMapa={onAbrirMapa}
+            onAbrirHorarios={() => setHorariosOpen(true)}
+            onCompartir={compartir}
+          />
+        </div>
       )}
 
       {/* ── FAB "+" carga rápida de oferta — SOLO visible para el dueño
@@ -1176,6 +1188,12 @@ export function TemplateCommerceModern({
               usan del borde derecho — simetría real, no un valor a ojo. */}
           <style>{`
             :root { --cm-navbar-h: ${modo === 'standalone' ? '92px' : '0px'}; }
+            /* En horizontal el nav no se monta (sus acciones subieron al
+               hero), así que los FABs no tienen que dejarle lugar: sin esto
+               quedaban flotando 92px por encima del borde, sobre nada. */
+            @media (min-width: 860px), (orientation: landscape) and (min-width: 700px) {
+              :root { --cm-navbar-h: 0px; }
+            }
             .cm-fab-add, .cm-fab-stats, .cm-fab-edit { transition: transform .12s cubic-bezier(0.34,1.56,0.64,1), filter .15s ease; }
             @media (hover: hover) { .cm-fab-add:hover, .cm-fab-stats:hover, .cm-fab-edit:hover { filter: brightness(1.08); } }
             .cm-fab-add:active, .cm-fab-stats:active, .cm-fab-edit:active { transform: scale(0.93); transition: transform .06s ease; }
@@ -1321,6 +1339,30 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
         .cm-hero-ed-social a:active { transform: scale(0.9); transition: transform .06s ease; }
         .cm-hero-ed-meta button { transition: transform .12s cubic-bezier(0.34,1.56,0.64,1); }
         .cm-hero-ed-meta button:active { transform: scale(0.94); transition: transform .06s ease; }
+
+        /* ── Acciones de la tienda en el hero, SOLO pantallas horizontales ──
+           En mobile viven en la barra inferior (TiendaNavBar), al alcance
+           del pulgar. En una pantalla apaisada esa barra fija abajo roba
+           alto justo donde escasea y queda lejos del cursor, así que las
+           mismas acciones suben acá — mismo criterio que ya usa la vista de
+           oferta individual, para que pasar de una pantalla a la otra no
+           mueva los controles de lugar. */
+        .cm-acciones-tienda { display: none; }
+        @media (min-width: 860px), (orientation: landscape) and (min-width: 700px) {
+          .cm-acciones-tienda { display: flex; align-items: center; gap: 8px; }
+        }
+        .cm-accion {
+          display: inline-flex; align-items: center; gap: 7px;
+          height: 36px; padding: 0 13px; border-radius: 11px;
+          border: 1px solid var(--tp-border); background: var(--tp-surface);
+          color: var(--tp-text-muted); cursor: pointer;
+          font-size: 13px; font-weight: 700; font-family: inherit;
+          transition: background-color .15s ease, color .15s ease, border-color .15s ease, transform .12s cubic-bezier(0.34,1.56,0.64,1);
+        }
+        @media (hover: hover) {
+          .cm-accion:hover { background: color-mix(in srgb, var(--tp-primary) 10%, transparent); color: var(--tp-primary); border-color: var(--tp-primary); }
+        }
+        .cm-accion:active { transform: scale(0.94); }
       `}</style>
 
       {/* Foto banner de acento — a todo el ancho de la ventana, fuera del
@@ -1417,6 +1459,26 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
                     <Globe size={17} />
                   </a>
                 )}
+              </div>
+            )}
+
+            {/* Acciones que en mobile viven en la barra inferior. Solo en
+                standalone: en modo plataforma el bottom-nav global de LOKAL
+                sigue siendo el lugar de estas acciones. */}
+            {modo === 'standalone' && (
+              <div className="cm-acciones-tienda" style={{ gap: 8, flexShrink: 0, marginLeft: 'auto' }}>
+                {onAbrirMapa && (
+                  <button className="cm-accion no-press" onClick={() => { trackClick(tienda.id, 'mapa'); onAbrirMapa(); }}>
+                    <MapPin size={15} /> Mapa
+                  </button>
+                )}
+                <button className="cm-accion no-press" onClick={() => setHorariosOpen?.(true)}>
+                  <Clock size={15} /> Horarios
+                </button>
+                <button className="cm-accion no-press" onClick={compartir}
+                  style={{ background: primary, color: 'var(--tp-on-primary)', borderColor: primary }}>
+                  <Share2 size={15} /> Compartir
+                </button>
               </div>
             )}
           </div>
