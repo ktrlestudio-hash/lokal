@@ -12,7 +12,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Loader2, AlertCircle, Sun, Moon, Check, ChevronDown, Store, Tag,
   MessageSquare, Share2, Instagram, BarChart3, Sparkles, ArrowUp,
-  ChevronLeft, ChevronRight, ArrowUpRight,
+  ChevronLeft, ChevronRight, ArrowUpRight, MapPin,
 } from 'lucide-react';
 import { signInWithGoogle, renderBotonGoogle, gisDisponible } from './firebase';
 import { LogoFull, KtrlMark } from './Brand';
@@ -800,6 +800,114 @@ function TiendaPreview({ onVer }) {
   );
 }
 
+// Card de ubicación — rompe la seguidilla de cards de puro texto con algo
+// visual, y cuenta una función que la tienda YA tiene hoy (mapa + "cómo
+// llegar" en la vista pública). No promete un mapa global de tiendas que
+// todavía no existe.
+//
+// El mapa son tiles estáticos de CartoDB, no Leaflet: la landing es la
+// primera carga de un visitante nuevo y montar la librería del mapa acá
+// costaría más que la sección entera. Se piden los 4 tiles que rodean el
+// punto y se arma la grilla 2×2 con CSS — el pin va encima, dibujado por
+// nosotros. Sin JS, sin dependencia, y sigue el tema claro/oscuro.
+const MAPA_LAT = -31.3417;
+const MAPA_LNG = -59.4394;
+const MAPA_ZOOM = 13;
+
+// lat/lng → índices de tile (Web Mercator, el estándar de todos los mapas
+// de tiles). Devuelve también la fracción dentro del tile, que es lo que
+// permite ubicar el pin en el píxel exacto.
+function tileDe(lat, lng, z) {
+  const n = 2 ** z;
+  const x = ((lng + 180) / 360) * n;
+  const latRad = (lat * Math.PI) / 180;
+  const y = ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n;
+  return { xTile: Math.floor(x), yTile: Math.floor(y), fx: x - Math.floor(x), fy: y - Math.floor(y) };
+}
+
+const TILE_PX = 256; // tamaño real del tile de CartoDB (sin @2x)
+
+function CardMapa({ isDark }) {
+  const { xTile, yTile, fx, fy } = tileDe(MAPA_LAT, MAPA_LNG, MAPA_ZOOM);
+  const estilo = isDark ? 'dark_all' : 'light_all';
+  // Grilla 3×2 de tiles a su tamaño NATIVO (256px), desplazada con
+  // translate para que el punto quede centrado. Con object-cover y tiles
+  // estirados al contenedor, cada uno se recortaba por separado y la
+  // continuidad del mapa se rompía; a tamaño nativo la grilla es una sola
+  // imagen coherente y el recorte lo hace el contenedor.
+  const cols = 3, rows = 2;
+  const tiles = [];
+  for (let j = 0; j < rows; j++) {
+    for (let i = 0; i < cols; i++) {
+      tiles.push({
+        key: `${i}-${j}`,
+        url: `https://a.basemaps.cartocdn.com/${estilo}/${MAPA_ZOOM}/${xTile - 1 + i}/${yTile + j}.png`,
+      });
+    }
+  }
+  // Dónde cae el punto real dentro de esa grilla, en px: un tile completo
+  // de offset (empezamos en xTile-1) más su fracción interna.
+  const puntoX = (1 + fx) * TILE_PX;
+  const puntoY = fy * TILE_PX;
+
+  return (
+    <div className="rounded-3xl border overflow-hidden" style={CARD_TINTED}>
+      {/* overflow-hidden propio: el mapa es más grande que la card a
+          propósito (así se ve contexto alrededor del punto) y este es el
+          que lo recorta. */}
+      <div className="relative overflow-hidden" style={{ aspectRatio: '16 / 7' }}>
+        {/* La grilla se posiciona con left/top al 50% y se corre hacia
+            atrás la posición del punto: eso deja el punto exactamente en
+            el centro del recorte, sin importar el tamaño de la card. */}
+        <div className="absolute" style={{
+          left: '50%', top: '50%',
+          width: cols * TILE_PX, height: rows * TILE_PX,
+          transform: `translate(${-puntoX}px, ${-puntoY}px)`,
+          display: 'grid',
+          gridTemplateColumns: `repeat(${cols}, ${TILE_PX}px)`,
+          gridTemplateRows: `repeat(${rows}, ${TILE_PX}px)`,
+          opacity: isDark ? 0.7 : 0.95,
+        }}>
+          {/* Los tiles no llevan alt: son decorativos, la información la da
+              el texto de abajo. */}
+          {tiles.map((t) => (
+            <img key={t.key} src={t.url} alt="" loading="lazy" decoding="async"
+              width={TILE_PX} height={TILE_PX} style={{ display: 'block' }} />
+          ))}
+        </div>
+        {/* Degradado hacia el borde inferior: funde el mapa con la card en
+            vez de cortarlo con una línea dura, y da contraste al texto. */}
+        <div className="absolute inset-0 pointer-events-none" style={{
+          background: isDark
+            ? 'linear-gradient(to top, rgba(4,10,20,.92) 8%, rgba(4,10,20,.25) 45%, transparent)'
+            : 'linear-gradient(to top, rgb(var(--surface-dim, 245 245 245) / .92) 8%, rgb(var(--surface-dim, 245 245 245) / .2) 45%, transparent)',
+        }} />
+        {/* Pin fijo en el centro: la grilla de arriba ya se desplazó para
+            que el punto real de la tienda caiga exactamente acá. */}
+        <div className="absolute" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}>
+          <span className="relative flex items-center justify-center">
+            {/* Pulso: el mismo recurso del punto del logo en el splash —
+                señala "acá hay algo" sin necesidad de una etiqueta. */}
+            <span className="absolute w-10 h-10 rounded-full lok-pulso-pin"
+              style={{ background: 'rgb(var(--brand, 0 184 217) / 0.25)' }} />
+            <span className="relative w-8 h-8 rounded-full flex items-center justify-center shadow-lg"
+              style={{ background: 'var(--brand-hex, #00B8D9)' }}>
+              <MapPin className="w-4 h-4" style={{ color: '#fff' }} strokeWidth={2.5} />
+            </span>
+          </span>
+        </div>
+      </div>
+      <div className="px-6 pb-6 pt-1 text-center">
+        <h3 className="font-black text-lg mb-1.5">Te encuentran sin preguntar</h3>
+        <p className="text-sm leading-relaxed mx-auto max-w-md" style={{ color: 'var(--text-secondary, #999)' }}>
+          Cargás tu dirección una vez y tu página muestra el mapa, la zona y
+          cómo llegar. Tus clientes abren el GPS de una y listo.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // Los 3 pasos como carrusel horizontal con snap en mobile (evita la torre
 // vertical de cards) y como fila de 3 en desktop, donde el ancho sobra.
 function PasosCarrusel() {
@@ -1227,6 +1335,14 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
             </FadeUp>
           ))}
         </div>
+      </section>
+
+      {/* ── Ubicación ── Va después de la grilla de ventajas para cortar la
+          seguidilla de cards de texto con algo visual, y antes del FAQ. */}
+      <section className="relative z-10 max-w-3xl mx-auto px-5 lg:px-8 pb-14">
+        <FadeUp>
+          <CardMapa isDark={isDark} />
+        </FadeUp>
       </section>
 
       {/* ── FAQ ── (antes del cierre: las dudas se resuelven ANTES de pedir
