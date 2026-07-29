@@ -475,7 +475,10 @@ function FotoSuave({ src, anchoReal, className = '', ...props }) {
   const [cargada, setCargada] = useState(false);
 
   useEffect(() => {
-    // El evento load puede haber pasado antes de montar el listener.
+    // El evento load puede haber pasado antes de montar el listener (foto
+    // que salió del caché). No se resetea a false cuando cambia src: si el
+    // fetch trae la misma foto con otra URL, apagarla para volver a
+    // encenderla es exactamente el parpadeo que este componente evita.
     if (ref.current?.complete) setCargada(true);
   }, [src]);
 
@@ -504,11 +507,36 @@ function FotoSuave({ src, anchoReal, className = '', ...props }) {
       style={{
         ...props.style,
         opacity: cargada ? 1 : 0,
-        transition: 'opacity 500ms ease',
+        // El desenfoque + la escala mínima hacen que la foto se ASIENTE en
+        // lugar de encenderse: con solo opacity el cambio se sigue leyendo
+        // brusco, porque los bordes y el detalle aparecen de una.
+        filter: cargada ? 'blur(0)' : 'blur(12px)',
+        transform: cargada ? 'scale(1)' : 'scale(1.04)',
+        transition: 'opacity 600ms ease, filter 700ms ease, transform 700ms cubic-bezier(.22,1,.36,1)',
       }}
     />
   );
 }
+
+// Fotos de la tienda de ejemplo, escritas acá y no esperadas del fetch.
+//
+// Antes la vista previa arrancaba vacía y las imágenes recién existían a
+// los ~1200ms: primero había que traer la tienda de la API (~450ms) para
+// saber qué URL pedir. Ese hueco es lo que se veía como "aparecen de
+// golpe", y volvía a pasar en cada refresh aunque las fotos ya estuvieran
+// en caché — el navegador no puede usar el caché de algo que todavía no
+// sabe que tiene que pedir.
+//
+// Con las URLs fijas el navegador las pide en el primer frame y en un
+// refresh salen del caché al instante. El fetch sigue corriendo y
+// reemplaza estos valores si el dueño cambió las fotos.
+const EJEMPLO = {
+  portada: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&h=800&fit=crop&q=80',
+  ofertas: [
+    { id: 'ej-1', nombre: 'Descuento Fin de Semana', thumbUrl: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&h=566&fit=crop&q=80' },
+    { id: 'ej-2', nombre: 'Ofertón Limpieza', thumbUrl: 'https://images.unsplash.com/photo-1585421514738-01798e348b17?w=400&h=566&fit=crop&q=80' },
+  ],
+};
 
 function TiendaPreview({ onVer }) {
   const cajaRef = useRef(null);
@@ -523,7 +551,7 @@ function TiendaPreview({ onVer }) {
   // dentro de un modal su contenido queda fuera de vista. Acá se leen los
   // mismos datos y se arma la muestra; el botón lleva a la tienda de verdad,
   // en su propia URL y con el "atrás" del navegador para volver.
-  const [tienda, setTienda] = useState(null);
+  const [tienda, setTienda] = useState({ galeria: [EJEMPLO.portada], ofertas: EJEMPLO.ofertas });
 
   useEffect(() => {
     let vivo = true;
@@ -620,8 +648,13 @@ function TiendaPreview({ onVer }) {
 
           {/* Publicaciones reales */}
           <div className="px-4 pt-3 grid grid-cols-2 gap-3">
+            {/* key por posición, no por id: son siempre dos slots fijos y el
+                id cambia cuando el fetch reemplaza las ofertas de ejemplo
+                por las reales. Con key={o.id} React desmontaba la imagen ya
+                cargada y la volvía a montar en blanco, que es justo el
+                parpadeo que se quería evitar. */}
             {(tienda?.ofertas?.length ? tienda.ofertas : [null, null]).map((o, i) => (
-              <div key={o?.id || i} className="min-w-0 rounded-2xl overflow-hidden border border-slate-200/60 dark:border-white/10 bg-surface-card">
+              <div key={i} className="min-w-0 rounded-2xl overflow-hidden border border-slate-200/60 dark:border-white/10 bg-surface-card">
                 <div className="relative w-full" style={{ aspectRatio: '1 / 1.414', background: 'rgb(var(--brand, 0 184 217) / 0.07)' }}>
                   {(o?.thumbUrl || o?.imageUrl) && (
                     <FotoSuave src={o.thumbUrl || o.imageUrl} anchoReal={420} alt=""
