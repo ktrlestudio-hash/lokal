@@ -43,12 +43,15 @@ const CARD_TINTED = {
 // movimiento sin sumar una librería de animación, y de paso dice en tres
 // palabras lo que el producto hace en vez de tener que explicarlo.
 //
-// El ancho se reserva con la palabra MÁS LARGA, renderizada invisible: sin
-// eso el texto de al lado (y el punto final) saltaría en cada cambio.
 // prefers-reduced-motion deja la primera palabra fija, sin ciclo.
 // Todas arrancan sin preposición: el "en" queda fijo en el título y solo
 // cambia lo que sigue, que es lo que hace legible el efecto.
-const PALABRAS_HERO = ['un solo link', 'WhatsApp', 'Instagram', 'tu bio'];
+// Largos parecidos a propósito: el ancho se reserva con la más larga, así
+// que una palabra corta al lado de una muy larga deja un hueco visible.
+// "tu biografía" en vez de "tu bio" empareja el conjunto (8 a 13
+// caracteres) sin resignar "un solo link", que es la frase que mejor
+// cuenta la idea del producto.
+const PALABRAS_HERO = ['un solo link', 'WhatsApp', 'Instagram', 'tu biografía'];
 
 function PalabraRotativa({ palabras = PALABRAS_HERO, intervalo = 2600 }) {
   const [i, setI] = useState(0);
@@ -71,11 +74,15 @@ function PalabraRotativa({ palabras = PALABRAS_HERO, intervalo = 2600 }) {
     return () => clearInterval(id);
   }, [palabras.length, intervalo, reduce]);
 
+  // Ancho FIJO, reservado con la palabra más larga. Se probó que la caja
+  // acompañara a cada palabra, pero el título está centrado en mobile: con
+  // ancho variable toda la línea —incluido el "en"— se corría en cada
+  // cambio, que se nota mucho más que el hueco.
   const masLarga = palabras.reduce((a, b) => (b.length > a.length ? b : a), '');
 
   // El punto final viaja DENTRO de este componente, pegado a la palabra: si
-  // queda afuera, la reserva de ancho (que mide la palabra más larga) lo
-  // empuja lejos y con las palabras cortas se ve un punto flotando solo.
+  // queda afuera, la reserva de ancho lo empuja lejos y con las palabras
+  // cortas se ve un punto flotando solo.
   return (
     <span className="relative inline-grid align-bottom">
       {/* Reserva de ancho: ocupa lugar en el layout pero no se ve. */}
