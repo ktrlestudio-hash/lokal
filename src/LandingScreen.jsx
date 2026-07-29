@@ -652,9 +652,12 @@ function TiendaPreview({ onVer }) {
         style={{ borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)', background: 'rgb(var(--surface-dim, 245 245 245))' }}>
         {/* Resplandor que sigue al puntero — refuerza que la superficie es
             física, igual que el reflejo que se corre en una pantalla real
-            cuando la inclinás. Sobre todo el contenido (z-30) pero sin
-            robar clics. */}
-        <div aria-hidden="true" className="absolute inset-0 z-30 pointer-events-none"
+            cuando la inclinás. Sobre el contenido de LA TIENDA (z-10) pero
+            por DEBAJO de las cards flotantes (z-20, hermanas de cajaRef):
+            son una capa aparte, por encima de la tienda, y el reflejo no
+            debe taparlas — se leía como que el brillo "vivía" delante de
+            todo en vez de ser parte de la superficie que se inclina. */}
+        <div aria-hidden="true" className="absolute inset-0 z-10 pointer-events-none"
           style={{
             opacity: tilt ? 1 : 0,
             transition: 'opacity 400ms ease',
