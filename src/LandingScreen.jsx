@@ -366,8 +366,64 @@ const FAQ = [
 // deja ver la portada, el perfil y las primeras publicaciones sin ocupar
 // toda la pantalla. Expandida ocupa el viewport completo, con la tienda
 // entera scrolleable y todo interactivo.
+// Inclinación 3D siguiendo al puntero — el bloque entero (la tienda y sus
+// cards flotantes) se mueve como una pieza sólida en el espacio, no como
+// una imagen plana. Es puro CSS transform: sin librerías y compositable.
+//
+// En táctil funciona igual manteniendo el dedo apoyado, y se endereza al
+// soltar. rAF para no recalcular más veces que frames pinta el navegador.
+function useInclinacion3D(ref, { max = 7 } = {}) {
+  const [tilt, setTilt] = useState(null); // null = en reposo, sin transform
+  const rafRef = useRef(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return undefined;
+
+    const mover = (clientX, clientY) => {
+      if (rafRef.current) return;
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        const r = el.getBoundingClientRect();
+        // -0.5..0.5 desde el centro del bloque
+        const px = (clientX - r.left) / r.width - 0.5;
+        const py = (clientY - r.top) / r.height - 0.5;
+        // El eje X se invierte: mover el puntero hacia ARRIBA tiene que
+        // levantar el borde de arriba, no hundirlo.
+        setTilt({ rx: -py * max * 2, ry: px * max * 2 });
+      });
+    };
+
+    const onMouseMove = (e) => mover(e.clientX, e.clientY);
+    const onTouchMove = (e) => { const t = e.touches[0]; if (t) mover(t.clientX, t.clientY); };
+    const soltar = () => {
+      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+      setTilt(null);
+    };
+
+    el.addEventListener('mousemove', onMouseMove);
+    el.addEventListener('mouseleave', soltar);
+    el.addEventListener('touchmove', onTouchMove, { passive: true });
+    el.addEventListener('touchend', soltar);
+    el.addEventListener('touchcancel', soltar);
+    return () => {
+      el.removeEventListener('mousemove', onMouseMove);
+      el.removeEventListener('mouseleave', soltar);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', soltar);
+      el.removeEventListener('touchcancel', soltar);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [ref, max]);
+
+  return tilt;
+}
+
 function TiendaPreview({ onVer }) {
   const cajaRef = useRef(null);
+  const escenaRef = useRef(null);
+  const tilt = useInclinacion3D(escenaRef);
   // Datos reales de la tienda de ejemplo para la card del hero: su portada,
   // su nombre y sus publicaciones con las fotos de verdad.
   //
@@ -398,6 +454,27 @@ function TiendaPreview({ onVer }) {
   }, []);
 
   return (
+    /* Contenedor sin recorte: las cards flotantes se salen del borde de la
+       tienda a propósito (es lo que las hace leer como una capa por encima
+       y no como parte del contenido). overflow-hidden vive en la caja de
+       adentro, que sí necesita recortar la muestra.
+       La perspectiva va acá y el giro en el hijo: así todo el conjunto
+       —tienda y cards— se inclina como una sola pieza sólida. */
+    /* En mobile la tienda se achica (86% del ancho) y queda centrada: sin
+       ese margen las cards flotantes no tienen a dónde salirse y se leen
+       como parte del contenido en vez de como una capa por encima. */
+    <div ref={escenaRef} className="relative w-[86%] mx-auto sm:w-full" style={{ perspective: 1100 }}>
+      <div
+        style={{
+          transformStyle: 'preserve-3d',
+          transform: tilt
+            ? `rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)`
+            : 'rotateX(0deg) rotateY(0deg)',
+          // Vuelve al reposo con calma; mientras sigue al puntero la
+          // transición es corta para que no se sienta con retardo.
+          transition: tilt ? 'transform 120ms ease-out' : 'transform 600ms cubic-bezier(.22,1,.36,1)',
+        }}
+      >
       <div ref={cajaRef} className="relative rounded-3xl overflow-hidden border shadow-lg"
         style={{ borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)', background: 'rgb(var(--surface-dim, 245 245 245))' }}>
         {/* Muestra con los datos reales: portada, nombre y dos
@@ -464,6 +541,52 @@ function TiendaPreview({ onVer }) {
           </span>
         </button>
       </div>
+
+      {/* ── Cards de interfaz flotando sobre la tienda ──
+          La muestra de arriba dice cómo SE VE la página; estas dos dicen
+          para qué sirve — que alguien la encuentra y que esa visita se
+          convierte en una consulta. Son piezas reales del producto (el
+          contador del panel y una consulta de WhatsApp), recortadas y
+          superpuestas: el recurso que usa Shopify para que se lea "producto
+          funcionando" sin montar un mockup entero.
+
+          En mobile también se ven: la tienda se achica al 86% del ancho
+          para dejarles lugar donde salirse sin taparla. */}
+      <div aria-hidden="true"
+        className="z-20 flex items-center gap-2 absolute -right-8 sm:-right-6 lg:-right-10 top-[14%] rounded-2xl px-3 py-2 lg:px-3.5 lg:py-2.5 shadow-xl border lok-flota"
+        style={{
+          background: 'var(--surface-solid, #fff)',
+          borderColor: 'rgb(var(--brand, 0 184 217) / 0.16)',
+          animationDelay: '0s',
+        }}>
+        <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background: 'rgb(var(--brand, 0 184 217) / 0.12)' }}>
+          <BarChart3 className="w-4 h-4" style={{ color: 'var(--brand-hex, #00B8D9)' }} />
+        </span>
+        <span className="leading-tight">
+          <span className="block text-[15px] font-black tabular-nums">248</span>
+          <span className="block text-[10px] text-ink-dim">visitas esta semana</span>
+        </span>
+      </div>
+
+      <div aria-hidden="true"
+        className="z-20 flex items-center gap-2 absolute -left-8 sm:-left-6 lg:-left-10 bottom-[30%] rounded-2xl px-3 py-2 lg:px-3.5 lg:py-2.5 shadow-xl border lok-flota"
+        style={{
+          background: 'var(--surface-solid, #fff)',
+          borderColor: 'rgb(var(--brand, 0 184 217) / 0.16)',
+          animationDelay: '1.4s',
+        }}>
+        <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background: 'rgba(37,211,102,.14)' }}>
+          <MessageSquare className="w-4 h-4" style={{ color: '#25D366' }} />
+        </span>
+        <span className="leading-tight">
+          <span className="block text-[11px] font-bold">Nueva consulta</span>
+          <span className="block text-[10px] text-ink-dim">«¿Hasta qué hora abren?»</span>
+        </span>
+      </div>
+      </div>
+    </div>
   );
 }
 

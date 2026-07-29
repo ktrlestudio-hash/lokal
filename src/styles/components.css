@@ -586,3 +586,21 @@ a.lok-tap * {
 @media (prefers-reduced-motion: reduce) {
   .lok-gbtn { transition: none !important; transform: none !important; }
 }
+
+/* Cards de interfaz que flotan sobre la vista previa de la tienda en la
+   landing. El vaivén es de 6px y de 7s: apenas perceptible, lo justo para
+   que se lean como una capa suspendida por encima y no como parte del
+   contenido. Con dos instancias desfasadas (animation-delay distinto) el
+   conjunto no late al unísono, que es lo que delataría el truco.
+   Se anima solo transform — compositable, sin reflow. */
+@keyframes lok-flota {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+.lok-flota {
+  animation: lok-flota 7s ease-in-out infinite;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lok-flota { animation: none; }
+}
