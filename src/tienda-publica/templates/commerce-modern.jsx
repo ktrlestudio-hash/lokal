@@ -1379,10 +1379,12 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
              A la DERECHA, igual que en la vista de oferta individual: son
              controles de la pantalla, y saltar de lado entre una pantalla y
              la otra no tendría lógica para quien navega. */
+          /* Dentro del flujo de la barra (no absolute): así la barra crece
+             o se achica con su contenido y las acciones acompañan, en vez
+             de estar clavadas a una coordenada calculada a mano. */
           .cm-acciones-tienda {
             display: flex; align-items: center; gap: 8px;
-            position: absolute; right: 28px; top: 152px;
-            transform: translateY(-50%); z-index: 4;
+            margin-left: auto; flex-shrink: 0;
           }
           /* La identidad arranca a la IZQUIERDA (no centrada) y las redes
              van pegadas a ella, no empujadas al extremo por un margin-left
@@ -1401,16 +1403,148 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
              ocupa el ancho real y el logo arranca en el margen de la
              pantalla, como en la vista de oferta. */
           .cm-hero-ed-inner { max-width: none; }
-          /* Mismo margen lateral que el header de la oferta individual
-             (28px), para que las dos pantallas respiren igual contra los
-             bordes. La derecha reserva el espacio de los tres botones. */
-          .cm-hero-ed-row { padding-left: 28px; padding-right: 28px; }
+
+          /* ══════════════════════════════════════════════════════════════
+             ESCRITORIO — barra fija + portada como bloque
+
+             El banner de 150px hacía de fondo del header: cortaba el logo
+             por la mitad (que subía -40px para pisarlo) y dejaba a la
+             identidad sin comportarse como una barra de navegación real.
+             Acá se separan las dos funciones, que es como lo resuelven las
+             páginas modernas:
+
+               1. BARRA fija arriba — identidad + acciones, siempre visible
+                  al scrollear, con fondo translúcido y blur (glass aplicado
+                  solo donde hay superposición real, no decorativo).
+               2. PORTADA como bloque de contenido propio — card ancha y
+                  baja con esquinas redondeadas, no fondo de nada.
+
+             Sirve igual a una despensa (que quiere mostrar productos ya) o
+             a un restaurante (que quiere mostrar ambiente): si la tienda no
+             subió fotos, el bloque de portada simplemente no se monta y el
+             catálogo sube. ══════════════════════════════════════════════ */
+
+          /* El header pasa a flex-column para poder REORDENAR sin tocar el
+             JSX: en mobile la foto va primero (es el fondo del que cuelga
+             el logo), en escritorio la barra sube arriba y la foto baja
+             como bloque de contenido. Mismo marcado, dos composiciones. */
+          .cm-hero-ed { display: flex; flex-direction: column; }
+          /* align-self:stretch — al volver flex al header, sus hijos dejan
+             de ocupar el ancho completo y se encogen al contenido: el inner
+             medía 827px de 1440 y la barra arrancaba a 306px del borde, sin
+             llegar nunca a las esquinas. */
+          .cm-hero-ed > * { align-self: stretch; }
+          .cm-hero-ed-inner { order: 1; width: 100%; }
+          .cm-hero-ed-photo { order: 2; }
+          .cm-hero-ed-desc  { order: 3; }
+          /* La descripción deja de estar centrada al medio de la pantalla:
+             con todo lo demás alineado a la izquierda, ese centrado se leía
+             como un elemento suelto de otra composición. Va sobre una
+             franja propia, apenas teñida, que cierra el bloque de la
+             tienda antes de que empiece el catálogo. */
+          /* Sin franja ni borde propios: con el chip flotando arriba, la
+             descripción es texto suelto sobre el fondo de la página, que
+             es lo que corresponde. Alineada con el margen del chip. */
+          .cm-hero-ed-desc { text-align: left !important; padding: 4px 34px 14px !important; }
+          .cm-hero-ed-desc p { margin: 0 !important; max-width: 68ch !important; font-size: 13.5px !important; }
+
+          /* La portada NO se muestra en escritorio, por ahora. Estirada a
+             todo el ancho perdía el encuadre que el dueño compuso pensando
+             en vertical, y el mosaico de dos fotos tampoco terminó de
+             funcionar. Es un problema de diseño abierto: mostrar fotos
+             pensadas para 9:16 en una pantalla apaisada. Mientras tanto la
+             pantalla arranca por lo que importa — la barra de la tienda y
+             el catálogo — en vez de por una franja recortada.
+             En mobile sigue intacta: ahí la proporción es la correcta. */
+          .cm-hero-ed-photo { display: none; }
+
+          /* La fila de identidad se despega de la foto: ya no sube a
+             pisarla (margin-top negativo) ni se apoya abajo. Es la barra. */
+          /* ── La barra como CHIP FLOTANTE ──
+             No una franja pegada al borde superior, sino una píldora
+             despegada de los bordes que flota sobre el contenido. El
+             contenido pasa POR DEBAJO al scrollear y se ve a través del
+             blur — que es donde el glass tiene sentido real (hay algo
+             detrás que difuminar), no como decoración.
+             El inner es quien queda sticky (ver más abajo) y este chip
+             vive adentro con su propio margen. */
+          .cm-hero-ed-row {
+            margin: 14px 20px;
+            padding: 10px 14px 10px 12px;
+            align-items: center;
+            gap: 12px;
+            border-radius: 22px;
+            /* Turquesa de la tienda mezclado en la superficie: translúcido
+               para que el glass funcione, con un degradado que le da
+               volumen en vez de un plano muerto. */
+            background:
+              linear-gradient(140deg,
+                color-mix(in srgb, var(--tp-primary) 12%, color-mix(in srgb, var(--tp-surface) 80%, transparent)),
+                color-mix(in srgb, var(--tp-primary) 4%, color-mix(in srgb, var(--tp-surface) 86%, transparent)));
+            backdrop-filter: blur(24px) saturate(160%);
+            -webkit-backdrop-filter: blur(24px) saturate(160%);
+            /* Borde claro arriba + sombra difusa abajo: el par que hace que
+               un elemento se lea como "flotando" y no como pegado. */
+            border: 1px solid color-mix(in srgb, var(--tp-primary) 18%, transparent);
+            box-shadow:
+              0 8px 28px color-mix(in srgb, var(--tp-primary) 14%, transparent),
+              0 2px 8px rgba(0,0,0,.04),
+              inset 0 1px 0 rgba(255,255,255,.5);
+            z-index: 20;
+          }
+          .dark .cm-hero-ed-row {
+            box-shadow:
+              0 8px 28px rgba(0,0,0,.34),
+              inset 0 1px 0 rgba(255,255,255,.07);
+          }
+          /* El sticky va en el INNER (hijo directo del contenedor con
+             scroll), no en la fila: sticky se ancla al ancestro scrollable
+             más cercano, y anidado un nivel más abajo no se despega nunca.
+             Sin fondo propio: el chip de adentro es lo único visible, y el
+             contenido tiene que pasar por debajo para que el blur muestre
+             algo. pointer-events se apaga acá y se enciende en el chip, si
+             no esta caja transparente robaría los clics del catálogo. */
+          .cm-hero-ed-inner {
+            position: sticky; top: 0; z-index: 20;
+            background: none; pointer-events: none;
+          }
+          .cm-hero-ed-row { pointer-events: auto; }
+          /* Logo proporcionado a una barra, no a un avatar de perfil: el
+             borde blanco de 4px existía para despegarlo de la foto que
+             tenía detrás, y sin esa foto sobra. */
+          .cm-hero-ed-logo {
+            width: 42px; height: 42px; border-radius: 12px;
+            border: 1px solid color-mix(in srgb, var(--tp-primary) 16%, transparent);
+            box-shadow: 0 1px 6px color-mix(in srgb, var(--tp-primary) 12%, transparent);
+          }
+          .cm-hero-ed-info { padding-bottom: 0; }
+          /* Nombre con más peso y tracking cerrado: en una barra de una
+             línea la tipografía es lo único que carga la jerarquía. */
+          .cm-hero-ed-name { font-size: 17px; letter-spacing: -0.03em; }
+          /* La barra es de UNA línea: el nombre y su meta (estado +
+             dirección) dejan de apilarse y comparten fila. */
+          .cm-hero-ed-info { display: flex; align-items: center; gap: 12px; }
+          .cm-hero-ed-meta { margin-top: 0 !important; flex-shrink: 0; }
+          /* Separador sutil entre la identidad (nombre + estado) y las
+             redes: sin él, íconos de colores y texto se leían como una
+             sola tira. Es la misma jerarquía que usa la vista de oferta. */
+          .cm-hero-ed-social {
+            padding-left: 12px;
+            border-left: 1px solid var(--tp-border);
+          }
+          /* Redes al tamaño de la barra: 36px competían con el logo. */
+          .cm-hero-ed-social a { width: 32px !important; height: 32px !important; border-radius: 10px !important; }
+          .cm-hero-ed-social a svg { width: 15px !important; height: 15px !important; }
         }
         .cm-accion {
           display: inline-flex; align-items: center; gap: 7px;
-          height: 36px; padding: 0 13px; border-radius: 11px;
-          border: 1px solid var(--tp-border); background: var(--tp-surface);
-          color: var(--tp-text-muted); cursor: pointer;
+          height: 34px; padding: 0 13px; border-radius: 11px;
+          /* Chip teñido de marca, no blanco sobre blanco: sobre la barra
+             (que ya lleva su pizca de color) un fondo neutro desaparecía.
+             Mismo criterio que los chips de la landing. */
+          border: 1px solid color-mix(in srgb, var(--tp-primary) 16%, transparent);
+          background: color-mix(in srgb, var(--tp-primary) 6%, transparent);
+          color: var(--tp-text); cursor: pointer;
           font-size: 13px; font-weight: 700; font-family: inherit;
           transition: background-color .15s ease, color .15s ease, border-color .15s ease, transform .12s cubic-bezier(0.34,1.56,0.64,1);
         }
@@ -1423,9 +1557,14 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
       {/* Foto banner de acento — a todo el ancho de la ventana, fuera del
           contenedor centrado (a diferencia de la fila de info/descripción,
           que sí se acota en desktop). */}
-      <div className="cm-hero-ed-photo">
+      {/* data-rol marca, para el CSS del mosaico en escritorio, cuál es la
+          foto grande y cuál la que asoma al lado. En mobile ese atributo no
+          se usa: siguen todas apiladas con crossfade, como siempre. */}
+      <div className={`cm-hero-ed-photo${multiFoto ? ' cm-mosaico' : ''}`}>
         {fotos.length > 0
-          ? fotos.map((src, i) => (
+          ? fotos.map((src, i) => {
+              const siguiente = (photoIdx + 1) % fotos.length;
+              const rol = i === photoIdx ? 'principal' : (i === siguiente ? 'secundaria' : 'oculta');
               // pointerEvents:'none' en las fotos NO visibles — todas ocupan
               // el mismo inset:0 (crossfade), así que sin esto el navegador
               // puede aterrizar el click en la imagen invisible de arriba en
@@ -1433,10 +1572,18 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
               // encontrado probando con Playwright: elementFromPoint devolvía
               // la foto oculta, el guard i===photoIdx bloqueaba todo en
               // silencio y el zoom nunca abría.
-              <img key={src} src={src} alt=""
-                onClick={(e) => { if (i === photoIdx) { trackClick(tienda.id, 'zoom', { origen: 'banner' }); zoomBanner.abrir(i, e); } }}
-                style={{ position: 'absolute', inset: 0, opacity: i === photoIdx ? 1 : 0, transition: 'opacity .4s ease', cursor: i === photoIdx ? 'zoom-in' : 'default', pointerEvents: i === photoIdx ? 'auto' : 'none' }} />
-            ))
+              return (
+                <img key={src} src={src} alt="" data-rol={rol}
+                  onClick={(e) => {
+                    // En el mosaico, tocar la foto de al lado la trae al
+                    // frente en vez de abrir el zoom: es el gesto que el
+                    // usuario espera de una miniatura que asoma.
+                    if (rol === 'secundaria') { setPhotoIdx(siguiente); return; }
+                    if (i === photoIdx) { trackClick(tienda.id, 'zoom', { origen: 'banner' }); zoomBanner.abrir(i, e); }
+                  }}
+                  style={{ position: 'absolute', inset: 0, opacity: i === photoIdx ? 1 : 0, transition: 'opacity .4s ease', cursor: i === photoIdx ? 'zoom-in' : 'default', pointerEvents: i === photoIdx ? 'auto' : 'none' }} />
+              );
+            })
           : <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, ${primary}, var(--tp-surface))` }} />}
         {modo !== 'standalone' && (
           <button className="cm-hero-share-btn" onClick={compartir} aria-label="Compartir"
@@ -1472,32 +1619,10 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
         )}
       </div>
 
-      {/* Acciones de la tienda — SOLO en horizontal (en mobile viven en la
-          barra inferior, al alcance del pulgar). Van acá, hijas directas
-          del header y no de .cm-hero-ed-inner, porque ese contenedor está
-          acotado a 720px centrados: adentro los botones terminaban a mitad
-          de camino del borde y se leían como parte del bloque de identidad.
-          Fuera de esa caja se anclan a la esquina real de la ventana, igual
-          que en la vista de oferta individual. */}
-      {modo === 'standalone' && (
-        <div className="cm-acciones-tienda">
-          {onAbrirMapa && (
-            <button className="cm-accion no-press" onClick={() => { trackClick(tienda.id, 'mapa'); onAbrirMapa(); }}>
-              <MapPin size={15} /> Mapa
-            </button>
-          )}
-          <button className="cm-accion no-press" onClick={() => setHorariosOpen?.(true)}>
-            <Clock size={15} /> Horarios
-          </button>
-          <button className="cm-accion no-press" onClick={compartir}
-            style={{ background: primary, color: 'var(--tp-on-primary)', borderColor: primary }}>
-            <Share2 size={15} /> Compartir
-          </button>
-        </div>
-      )}
-
       <div className="cm-hero-ed-inner">
-      {/* Fila: logo izquierda + info columna derecha */}
+      {/* Fila: logo izquierda + info columna derecha. En escritorio es la
+          BARRA fija de la tienda (ver CSS: sticky + glass), y el bloque de
+          portada queda debajo como contenido propio. */}
       <div className="cm-hero-ed-row">
         <div className="cm-hero-ed-logo" style={{ background: tienda.foto ? primarySoft : primary }}>
           {tienda.foto
@@ -1558,16 +1683,37 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
             )}
           </div>
         </div>
-      </div>
 
-      {/* Descripción — sola, centrada al ancho de la pantalla (las redes ya
-          subieron a la fila del título, que sigue alineada a la izquierda). */}
+        {/* Acciones de la tienda — SOLO en horizontal (en mobile viven en la
+            barra inferior, al alcance del pulgar). Dentro de la fila, que en
+            escritorio ES la barra de la tienda: quedan alineadas a la
+            derecha por margin-left auto, sin coordenadas absolutas. */}
+        {modo === 'standalone' && (
+          <div className="cm-acciones-tienda">
+            {onAbrirMapa && (
+              <button className="cm-accion no-press" onClick={() => { trackClick(tienda.id, 'mapa'); onAbrirMapa(); }}>
+                <MapPin size={15} /> Mapa
+              </button>
+            )}
+            <button className="cm-accion no-press" onClick={() => setHorariosOpen?.(true)}>
+              <Clock size={15} /> Horarios
+            </button>
+            <button className="cm-accion no-press" onClick={compartir}
+              style={{ background: primary, color: 'var(--tp-on-primary)', borderColor: primary }}>
+              <Share2 size={15} /> Compartir
+            </button>
+          </div>
+        )}
+      </div>
+      </div>{/* fin .cm-hero-ed-inner */}
+
+      {/* Descripción — bloque propio, ordenable: en mobile va debajo de la
+          identidad; en escritorio baja junto a la portada (order 3). */}
       {tienda.descripcion && (
-        <div style={{ padding: '12px 18px 0', textAlign: 'center' }}>
+        <div className="cm-hero-ed-desc" style={{ padding: '12px 18px 0', textAlign: 'center' }}>
           <p style={{ margin: '0 auto', fontSize: 12.5, lineHeight: 1.5, color: txtM, maxWidth: 400 }}>{tienda.descripcion}</p>
         </div>
       )}
-      </div>{/* fin .cm-hero-ed-inner */}
     </header>
   );
 }
