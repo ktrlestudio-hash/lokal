@@ -444,6 +444,42 @@ function useInclinacion3D(ref, { max = 7 } = {}) {
   return tilt;
 }
 
+// Ondas de tinta al presionar — feedback físico además del scale(0.93)
+// global de los botones. Se dibuja UNA sola onda por toque, nacida en el
+// punto exacto donde tocaste (no desde el centro): eso es lo que lo hace
+// leer como una reacción al gesto y no como una animación decorativa.
+//
+// No se usa en BotonGoogle: ese botón recibe el click en un iframe de otro
+// origen (el de Google, invisible y superpuesto), así que clientX/clientY
+// del toque real nunca llegan a este componente — no hay de dónde nacer la
+// onda. Ver el comentario de esa función para el detalle completo.
+function useRipple() {
+  const [ondas, setOndas] = useState([]);
+
+  const onPointerDown = (e) => {
+    const el = e.currentTarget;
+    const r = el.getBoundingClientRect();
+    const id = Date.now();
+    const tam = Math.max(r.width, r.height) * 2; // cubre la esquina más lejana
+    setOndas((prev) => [...prev, {
+      id,
+      x: e.clientX - r.left - tam / 2,
+      y: e.clientY - r.top - tam / 2,
+      tam,
+    }]);
+    // Se retira sola cuando termina — no hace falta un onAnimationEnd por
+    // elemento, alcanza con la misma duración que la animación CSS.
+    setTimeout(() => setOndas((prev) => prev.filter((o) => o.id !== id)), 600);
+  };
+
+  const nodos = ondas.map((o) => (
+    <span key={o.id} aria-hidden="true" className="lok-onda"
+      style={{ left: o.x, top: o.y, width: o.tam, height: o.tam }} />
+  ));
+
+  return { onPointerDown, nodos };
+}
+
 // Número que sube desde 0 la primera vez que entra en pantalla. El dato es
 // el mismo, pero contando se lee como algo que ESTÁ pasando en la tienda y
 // no como una cifra impresa.
@@ -560,6 +596,7 @@ function TiendaPreview({ onVer }) {
   const cajaRef = useRef(null);
   const escenaRef = useRef(null);
   const tilt = useInclinacion3D(escenaRef);
+  const ripple = useRipple();
   // Datos reales de la tienda de ejemplo para la card del hero: su portada,
   // su nombre y sus publicaciones con las fotos de verdad.
   //
@@ -696,8 +733,16 @@ function TiendaPreview({ onVer }) {
           onClick={onVer}
           className="lok-tap absolute inset-x-0 bottom-0 pt-10 pb-4 flex items-end justify-center"
         >
-          <span className="inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-full shadow-md"
+          {/* onPointerDown y overflow-hidden van los DOS en este span, no
+              en el <button> grande: getBoundingClientRect() en useRipple
+              mide contra quien recibe el evento, así que si el listener
+              estuviera en el botón (que ocupa toda el área) la onda
+              nacería mal ubicada respecto al chip visible donde en
+              realidad se pinta. */}
+          <span onPointerDown={ripple.onPointerDown}
+            className="relative overflow-hidden inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-full shadow-md"
             style={{ background: 'var(--brand-hex, #00B8D9)', color: '#fff' }}>
+            {ripple.nodos}
             Ver la tienda completa
             <ArrowUpRight className="w-3.5 h-3.5" />
           </span>

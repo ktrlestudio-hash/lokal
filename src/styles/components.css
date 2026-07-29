@@ -636,6 +636,28 @@ a.lok-tap * {
   .lok-brilla { animation: none; }
 }
 
+/* Onda de tinta al presionar (ver useRipple en LandingScreen.jsx). El
+   elemento que la recibe necesita position:relative + overflow:hidden
+   propios (no acá: cada botón ya trae su forma/radio, y overflow:hidden en
+   una clase compartida chocaría con sombras o contenido que se sale a
+   propósito en otros botones). Solo transform + opacity: compositable,
+   sin recalcular layout en cada frame. */
+.lok-onda {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+  transform: scale(0);
+  opacity: 0.6;
+  animation: lok-onda 600ms ease-out forwards;
+}
+@keyframes lok-onda {
+  to { transform: scale(1); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lok-onda { display: none; }
+}
+
 /* Halo que gira despacio alrededor de la card de precio.
    El borde real se mantiene quieto; lo que rota es un degradado cónico en
    una capa DETRÁS de la card, apenas más grande, difuminado. Con eso el
