@@ -879,6 +879,10 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
   const [error, setError] = useState(null);
   const [faqOpen, setFaqOpen] = useState(null);
   const [scrolled, setScrolled] = useState(false);
+  // Dos umbrales distintos: el vidrio del header tiene que encenderse
+  // apenas pasa contenido por debajo (24px), mientras que el botón "volver
+  // arriba" solo tiene sentido cuando ya te alejaste bastante del tope.
+  const [lejosDelTope, setLejosDelTope] = useState(false);
   // Cuánto del footer ya entró en pantalla: es lo que el botón flotante
   // tiene que levantarse para no taparlo (ver el efecto de scroll).
   const [topeFooter, setTopeFooter] = useState(0);
@@ -895,13 +899,25 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
   useEffect(() => {
     let pendiente = false;
     let ultimo = null;
+    let ultimoLejos = null;
     let ultimoTope = null;
     const evaluar = () => {
       pendiente = false;
-      const ahora = window.scrollY > 320;
+      // El vidrio del header aparece apenas empieza a pasar contenido por
+      // debajo, no a los 320px: con ese umbral el hero entero (incluido el
+      // botón de Google) se deslizaba por detrás de un header transparente,
+      // y el desenfoque recién arrancaba después. Se lee como que el efecto
+      // "no le aplica" al hero. 24px es suficiente para no encender el
+      // vidrio con el rebote del scroll en el tope.
+      const ahora = window.scrollY > 24;
       if (ahora !== ultimo) {
         ultimo = ahora;
         setScrolled(ahora);
+      }
+      const lejos = window.scrollY > 480;
+      if (lejos !== ultimoLejos) {
+        ultimoLejos = lejos;
+        setLejosDelTope(lejos);
       }
       // El botón flotante se apoya sobre el footer en vez de taparlo:
       // mientras el footer no entró en pantalla su tope es el borde
@@ -983,7 +999,13 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
   };
 
   return (
-    <div className="lok-app-surface relative min-h-screen overflow-x-hidden"
+    /* lok-contener-x usa overflow-x: clip, NO hidden. "hidden" obliga al
+       navegador a poner el otro eje en "auto" (por especificación), lo que
+       convierte a este div en contenedor de scroll y rompe el
+       position:sticky del header. "clip" recorta igual el desborde
+       horizontal pero no crea contenedor de scroll, así el sticky
+       funciona. */
+    <div className="lok-app-surface lok-contener-x relative min-h-screen"
       style={{ background: isDark ? '#040a14' : 'var(--surface-solid, #fff)', color: 'var(--text-primary)' }}>
 
       {/* Salto al contenido — invisible hasta que se navega con teclado.
@@ -1344,7 +1366,7 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
       <button
         onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
         aria-label="Volver arriba"
-        className={`lok-tap fixed right-5 z-40 w-11 h-11 rounded-full flex items-center justify-center shadow-lg transition-opacity duration-300 ${scrolled ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        className={`lok-tap no-press fixed right-5 z-40 w-11 h-11 rounded-full flex items-center justify-center shadow-lg ${lejosDelTope ? 'opacity-100 scale-100 pointer-events-auto' : 'opacity-0 scale-90 pointer-events-none'}`}
         style={{
           background: 'var(--brand-hex, #00B8D9)',
           color: '#fff',
@@ -1353,6 +1375,12 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
           // borde cuando se scrollea hacia arriba. Sin transición en bottom
           // (seguiría al scroll con retraso); la que queda es la de opacidad.
           bottom: 20 + topeFooter,
+          // no-press + transición propia: la global de los botones usa
+          // cubic-bezier(.34,1.56,.64,1), una curva con rebote pensada para
+          // el tap. Acá el botón APARECE y DESAPARECE con el scroll, y ese
+          // rebote al entrar/salir se lee tosco. Una curva de salida simple
+          // lo hace aparecer sereno.
+          transition: 'opacity 260ms ease-out, transform 260ms cubic-bezier(.22,1,.36,1)',
         }}
       >
         <ArrowUp className="w-5 h-5" strokeWidth={2.5} />

@@ -274,7 +274,19 @@
 
 html, body, #root {
   max-width: 100vw;
-  overflow-x: hidden;
+}
+
+/* NO usar overflow-x:hidden acá.
+   Por especificación, si un eje de overflow es "hidden" el otro NO puede
+   ser "visible": el navegador lo fuerza a "auto". Eso convierte a
+   html/body/#root en contenedores de scroll propios, y un ancestro con
+   overflow distinto de visible ROMPE position:sticky en todos sus
+   descendientes — era la razón por la que el header de la landing no
+   quedaba pegado al scrollear, y afectaba a cualquier sticky de la app.
+   El desborde horizontal se contiene en el elemento que lo produce
+   (ver .lok-contener-x), no clausurando el scroll de toda la página. */
+.lok-contener-x {
+  overflow-x: clip; /* clip no crea contenedor de scroll: sticky sigue vivo */
 }
 
 /* Barra de scroll oculta en toda la app: el contenido sigue scrolleando

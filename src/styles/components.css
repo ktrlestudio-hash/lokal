@@ -669,6 +669,21 @@ a.lok-tap * {
     rgb(var(--brand, 0 184 217) / 0.35) 300deg,
     transparent 360deg
   );
+  /* Máscara: recorta el degradado cónico a un ANILLO delgado en el borde.
+     Sin esto, aunque el ::before mida apenas más que la card (inset:-1.5px),
+     el color se ve completo por dentro de los bordes redondeados en vez de
+     quedar contenido en el filo — el bug real era este, no un problema de
+     tamaño. padding-box recorta el centro; el degradado radial en destination-out
+     agujerea el centro dejando solo el marco visible. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  padding: 6px;
   filter: blur(6px);
   opacity: .75;
   animation: lok-orbita 9s linear infinite;
