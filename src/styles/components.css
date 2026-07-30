@@ -644,17 +644,47 @@ a.lok-tap * {
    ya usa el elemento) en vez del active genérico. */
 .lok-volver-arriba:active { transform: scale(0.88) !important; transition: transform 100ms ease-out !important; }
 
-/* Pulso del pin en la card de mapa de la landing: señala el punto sin
-   necesidad de una etiqueta. Mismo lenguaje que el punto del logo en el
-   splash de carga (lk-pulse), pero más lento y sutil — acá no está
-   comunicando "cargando" sino "acá estás". */
-@keyframes lok-pulso-pin {
-  0%, 100% { transform: scale(0.85); opacity: 0.7; }
-  50%      { transform: scale(1.25); opacity: 0.25; }
+/* Ondas del pin en la card de mapa: se expanden y se apagan, como un
+   radar. Dos instancias con animation-delay distinto (ver LandingScreen)
+   hacen que siempre haya una onda en camino — con una sola se sentía un
+   latido aislado. Escala grande y opacidad a 0 en el mismo tramo: la onda
+   "se disuelve" en vez de cortarse. */
+@keyframes lok-radar {
+  0%   { transform: scale(0.7); opacity: 0.55; }
+  70%  { opacity: 0; }
+  100% { transform: scale(3.2); opacity: 0; }
 }
-.lok-pulso-pin { animation: lok-pulso-pin 2.8s ease-in-out infinite; }
+.lok-radar { animation: lok-radar 2.8s ease-out infinite; }
+
+/* La burbuja con el nombre entra una sola vez, desde abajo y creciendo un
+   poco: se lee como que "aparece sobre el mapa" y no como que ya estaba.
+   El delay le deja al mapa un momento para cargar sus tiles primero. */
+/* La burbuja se posiciona con un wrapper: el translate(-50%,-55%) que la
+   monta sobre el borde de la card vive en el elemento externo (estilo
+   inline), y acá solo se animan opacity/scale/translateY relativos. Dos
+   animaciones sobre transform en el mismo elemento se pisan entre sí —
+   gana la última — así que separar la posición del movimiento es lo que
+   permite tener entrada Y flote sin que una anule a la otra.
+   -55% en Y deja poco más de la mitad de la burbuja afuera de la card, que
+   es lo que la hace leer como una capa por encima y no como parte del mapa. */
+@keyframes lok-burbuja-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes lok-burbuja-flota {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-5px); }
+}
+/* En cadena: entra una vez y desde ahí queda flotando (delay = 320 + 520). */
+.lok-burbuja {
+  animation:
+    lok-burbuja-in 520ms cubic-bezier(.22,1,.36,1) 320ms both,
+    lok-burbuja-flota 6s ease-in-out 840ms infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .lok-pulso-pin { animation: none; }
+  .lok-radar { animation: none; }
+  .lok-burbuja { animation: none; }
 }
 
 /* Onda de tinta al presionar (ver useRipple en LandingScreen.jsx). El

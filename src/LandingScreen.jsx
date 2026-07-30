@@ -12,7 +12,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Loader2, AlertCircle, Sun, Moon, Check, ChevronDown, Store, Tag,
   MessageSquare, Share2, Instagram, BarChart3, Sparkles, ArrowUp,
-  ChevronLeft, ChevronRight, ArrowUpRight, MapPin,
+  ChevronLeft, ChevronRight, ArrowUpRight, MapPin, Clock,
 } from 'lucide-react';
 import { signInWithGoogle, renderBotonGoogle, gisDisponible } from './firebase';
 import { LogoFull, KtrlMark } from './Brand';
@@ -810,9 +810,15 @@ function TiendaPreview({ onVer }) {
 // costaría más que la sección entera. Se piden los 4 tiles que rodean el
 // punto y se arma la grilla 2×2 con CSS — el pin va encima, dibujado por
 // nosotros. Sin JS, sin dependencia, y sigue el tema claro/oscuro.
-const MAPA_LAT = -31.3417;
-const MAPA_LNG = -59.4394;
-const MAPA_ZOOM = 13;
+// Centro real de Bovril (Nominatim), no la coordenada de la tienda de
+// ejemplo: con esa el pueblo quedaba corrido a la izquierda del pin. Acá el
+// pin cae sobre el casco urbano, que es lo que la card quiere mostrar.
+const MAPA_LAT = -31.3414622;
+const MAPA_LNG = -59.4453353;
+// 15 y no 13: a 13 se veía sobre todo campo alrededor del pueblo, con las
+// calles apenas insinuadas. A 15 se lee la trama urbana, que es lo que hace
+// que el mapa se sienta un lugar real y no una mancha.
+const MAPA_ZOOM = 15;
 
 // lat/lng → índices de tile (Web Mercator, el estándar de todos los mapas
 // de tiles). Devuelve también la fracción dentro del tile, que es lo que
@@ -828,6 +834,12 @@ function tileDe(lat, lng, z) {
 const TILE_PX = 256; // tamaño real del tile de CartoDB (sin @2x)
 
 function CardMapa({ isDark }) {
+  // Mismo tratamiento que la vista previa de la tienda: la card se inclina
+  // siguiendo al puntero y un resplandor recorre su superficie. Reusa el
+  // hook, así las dos piezas visuales de la landing se sienten del mismo
+  // material en vez de tener cada una su propia física.
+  const escenaRef = useRef(null);
+  const tilt = useInclinacion3D(escenaRef, { max: 5 });
   const { xTile, yTile, fx, fy } = tileDe(MAPA_LAT, MAPA_LNG, MAPA_ZOOM);
   const estilo = isDark ? 'dark_all' : 'light_all';
   // Grilla 3×2 de tiles a su tamaño NATIVO (256px), desplazada con
@@ -851,11 +863,28 @@ function CardMapa({ isDark }) {
   const puntoY = fy * TILE_PX;
 
   return (
-    <div className="rounded-3xl border overflow-hidden" style={CARD_TINTED}>
+    /* La perspectiva va en el contenedor externo y el giro en el hijo, igual
+       que en TiendaPreview: así la card entera —mapa, pin y burbuja— se
+       inclina como una sola pieza. */
+    <div ref={escenaRef} style={{ perspective: 1100 }}>
+    <div
+      style={{
+        transformStyle: 'preserve-3d',
+        transform: tilt ? `rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)` : 'rotateX(0deg) rotateY(0deg)',
+        transition: tilt ? 'transform 120ms ease-out' : 'transform 600ms cubic-bezier(.22,1,.36,1)',
+      }}
+    >
+    {/* Sin overflow-hidden acá: la burbuja del nombre tiene que poder salirse
+        del borde. El recorte de los tiles vive en el div del mapa, que es el
+        único que lo necesita. rounded-3xl igual se respeta porque el mapa
+        lleva su propio redondeo arriba. */}
+    <div className="relative rounded-3xl border" style={CARD_TINTED}>
       {/* overflow-hidden propio: el mapa es más grande que la card a
           propósito (así se ve contexto alrededor del punto) y este es el
           que lo recorta. */}
-      <div className="relative overflow-hidden" style={{ aspectRatio: '16 / 7' }}>
+      {/* rounded-3xl completo (no solo arriba): sin el bloque de texto
+          debajo, el mapa ES la card entera. */}
+      <div className="relative overflow-hidden rounded-3xl" style={{ aspectRatio: '4 / 3' }}>
         {/* La grilla se posiciona con left/top al 50% y se corre hacia
             atrás la posición del punto: eso deja el punto exactamente en
             el centro del recorte, sin importar el tamaño de la card. */}
@@ -875,35 +904,102 @@ function CardMapa({ isDark }) {
               width={TILE_PX} height={TILE_PX} style={{ display: 'block' }} />
           ))}
         </div>
-        {/* Degradado hacia el borde inferior: funde el mapa con la card en
-            vez de cortarlo con una línea dura, y da contraste al texto. */}
+        {/* Viñeta suave en los bordes: el degradado fuerte de antes existía
+            para dar contraste al texto que estaba debajo dentro de la card.
+            Ahora el texto vive afuera, así que solo queda un oscurecido
+            leve que asienta el mapa y evita que los tiles terminen con un
+            corte plano contra el borde. */}
         <div className="absolute inset-0 pointer-events-none" style={{
           background: isDark
-            ? 'linear-gradient(to top, rgba(4,10,20,.92) 8%, rgba(4,10,20,.25) 45%, transparent)'
-            : 'linear-gradient(to top, rgb(var(--surface-dim, 245 245 245) / .92) 8%, rgb(var(--surface-dim, 245 245 245) / .2) 45%, transparent)',
+            ? 'radial-gradient(ellipse 120% 100% at 50% 50%, transparent 45%, rgba(4,10,20,.55))'
+            : 'radial-gradient(ellipse 120% 100% at 50% 50%, transparent 50%, rgb(var(--surface-dim, 245 245 245) / .5))',
         }} />
+        {/* Resplandor que sigue al puntero, igual que en la vista previa de
+            la tienda: refuerza que la card es una superficie física que se
+            inclina. Por debajo del pin y la burbuja (z bajo), como en la
+            preview, para no lavarlos. */}
+        <div aria-hidden="true" className="absolute inset-0 z-10 pointer-events-none"
+          style={{
+            opacity: tilt ? 1 : 0,
+            transition: 'opacity 400ms ease',
+            background: tilt
+              ? `radial-gradient(320px circle at ${tilt.lx}% ${tilt.ly}%, rgb(var(--brand, 0 184 217) / 0.18), transparent 70%)`
+              : 'none',
+          }} />
         {/* Pin fijo en el centro: la grilla de arriba ya se desplazó para
             que el punto real de la tienda caiga exactamente acá. */}
         <div className="absolute" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}>
           <span className="relative flex items-center justify-center">
-            {/* Pulso: el mismo recurso del punto del logo en el splash —
-                señala "acá hay algo" sin necesidad de una etiqueta. */}
-            <span className="absolute w-10 h-10 rounded-full lok-pulso-pin"
-              style={{ background: 'rgb(var(--brand, 0 184 217) / 0.25)' }} />
-            <span className="relative w-8 h-8 rounded-full flex items-center justify-center shadow-lg"
-              style={{ background: 'var(--brand-hex, #00B8D9)' }}>
-              <MapPin className="w-4 h-4" style={{ color: '#fff' }} strokeWidth={2.5} />
+            {/* Dos ondas desfasadas en vez de un solo pulso: se lee como
+                una señal que se expande (tipo radar) y no como algo que
+                late en el lugar. */}
+            <span className="absolute w-8 h-8 rounded-full lok-radar"
+              style={{ background: 'rgb(var(--brand, 0 184 217) / 0.35)' }} />
+            <span className="absolute w-8 h-8 rounded-full lok-radar"
+              style={{ background: 'rgb(var(--brand, 0 184 217) / 0.35)', animationDelay: '1.4s' }} />
+            <span className="relative w-9 h-9 rounded-full flex items-center justify-center shadow-lg"
+              style={{ background: 'var(--brand-hex, #00B8D9)', boxShadow: '0 4px 14px rgb(var(--brand, 0 184 217) / 0.5)' }}>
+              <MapPin className="w-[18px] h-[18px]" style={{ color: '#fff' }} strokeWidth={2.5} />
             </span>
           </span>
         </div>
       </div>
-      <div className="px-6 pb-6 pt-1 text-center">
-        <h3 className="font-black text-lg mb-1.5">Te encuentran sin preguntar</h3>
-        <p className="text-sm leading-relaxed mx-auto max-w-md" style={{ color: 'var(--text-secondary, #999)' }}>
-          Cargás tu dirección una vez y tu página muestra el mapa, la zona y
-          cómo llegar. Tus clientes abren el GPS de una y listo.
-        </p>
+
+      {/* Burbuja con el nombre de la tienda — hermana del mapa, no hija: ese
+          contenedor recorta con overflow-hidden (lo necesita para los
+          tiles), así que desde adentro la burbuja no podría sobresalir.
+          Acá SÍ se sale por el borde de arriba, misma idea que las cards
+          flotantes del hero: poco más de la mitad queda fuera de la card y
+          el resto sobre el mapa, que es lo que la despega del fondo. */}
+      {/* Wrapper: SOLO posiciona (el translate que la monta sobre el borde).
+          El hijo es el que anima — ver el comentario de lok-burbuja en
+          components.css para por qué están separados. */}
+      <div aria-hidden="true" className="absolute z-20"
+        style={{ left: '50%', top: 0, transform: 'translate(-50%, -55%)' }}>
+        <div className="lok-burbuja flex items-center gap-2 rounded-2xl px-3 py-2 shadow-xl border"
+          style={{
+            background: 'var(--surface-solid, #fff)',
+            borderColor: 'rgb(var(--brand, 0 184 217) / 0.16)',
+          }}>
+          <span className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+            style={{ background: 'rgb(var(--brand, 0 184 217) / 0.12)' }}>
+            <Store className="w-4 h-4" style={{ color: 'var(--brand-hex, #00B8D9)' }} />
+          </span>
+          <span className="leading-tight text-left">
+            <span className="block text-[12px] font-black">LOKAL</span>
+            <span className="block text-[10px] text-ink-dim">Bovril, Entre Ríos</span>
+          </span>
+          {/* Sin colita: apuntaba al pin cuando la burbuja estaba justo
+              encima de él. Ahora vive en el borde de la card, como las cards
+              flotantes del hero, y una colita ahí no señalaría nada. */}
+        </div>
       </div>
+      {/* El texto vive AFUERA de la card (ver la sección que la usa): en
+          escritorio va en la columna de al lado, como un hero invertido. En
+          mobile queda debajo. Acá la card es solo el mapa. */}
+
+      {/* Chips flotantes de marca — no son datos, son señales del universo
+          gráfico de LOKAL: los mismos íconos que la app usa para ubicación,
+          horario y contacto, orbitando la card. Cada uno con su propio
+          delay, así el conjunto no late al unísono. */}
+      {[
+        { Icon: MapPin, top: '18%', left: -18, delay: '0s' },
+        { Icon: Clock, top: '62%', left: -26, delay: '2.1s' },
+        { Icon: MessageSquare, top: '38%', right: -22, delay: '1.1s' },
+      ].map(({ Icon, top, left, right, delay }, i) => (
+        <div key={i} aria-hidden="true"
+          className="hidden sm:flex absolute z-20 w-11 h-11 rounded-2xl items-center justify-center shadow-lg border lok-flota"
+          style={{
+            top, left, right,
+            background: 'var(--surface-solid, #fff)',
+            borderColor: 'rgb(var(--brand, 0 184 217) / 0.16)',
+            animationDelay: delay,
+          }}>
+          <Icon className="w-[19px] h-[19px]" style={{ color: 'var(--brand-hex, #00B8D9)' }} strokeWidth={2.2} />
+        </div>
+      ))}
+    </div>
+    </div>
     </div>
   );
 }
@@ -1337,12 +1433,51 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
         </div>
       </section>
 
-      {/* ── Ubicación ── Va después de la grilla de ventajas para cortar la
-          seguidilla de cards de texto con algo visual, y antes del FAQ. */}
-      <section className="relative z-10 max-w-3xl mx-auto px-5 lg:px-8 pb-14">
-        <FadeUp>
-          <CardMapa isDark={isDark} />
-        </FadeUp>
+      {/* ── Ubicación ── Hero INVERTIDO respecto al de arriba: allá el texto
+          va a la izquierda y la vista previa a la derecha; acá el mapa a la
+          izquierda y el texto a la derecha. Misma grilla, mismo ancho
+          (max-w-5xl), orden espejado — así la página tiene ritmo en vez de
+          repetir la misma composición dos veces.
+          En mobile las dos columnas se apilan: mapa arriba, texto abajo. */}
+      <section className="relative z-10 max-w-5xl mx-auto px-5 lg:px-8 pb-14">
+        <div className="grid lg:grid-cols-2 gap-10 lg:gap-12 items-center">
+          <FadeUp>
+            <CardMapa isDark={isDark} />
+          </FadeUp>
+          <FadeUp delay={120}>
+            <div className="text-center lg:text-left">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold mb-4"
+                style={{ background: 'rgb(var(--brand, 0 184 217) / 0.12)', color: 'var(--brand-hex, #00B8D9)' }}>
+                <MapPin className="w-3.5 h-3.5" />
+                Tu zona, tu gente
+              </span>
+              <h2 className="text-2xl lg:text-3xl font-black leading-tight mb-4">
+                Te encuentran sin preguntar
+              </h2>
+              <p className="text-sm lg:text-base leading-relaxed mb-6 max-w-md mx-auto lg:mx-0"
+                style={{ color: 'var(--text-secondary, #999)' }}>
+                Cargás tu dirección una vez y tu página muestra el mapa, la zona
+                y cómo llegar. Tus clientes abren el GPS de una, sin escribirte
+                para preguntar dónde estás.
+              </p>
+              <ul className="space-y-2.5 text-sm text-left inline-block">
+                {[
+                  'Mapa y "cómo llegar" en tu página',
+                  'Tu horario, siempre a la vista',
+                  'Si te mudás, lo cambiás en un toque',
+                ].map((t) => (
+                  <li key={t} className="flex items-start gap-2.5">
+                    <span className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5"
+                      style={{ background: 'rgb(var(--brand, 0 184 217) / 0.18)' }}>
+                      <Check className="w-2.5 h-2.5" style={{ color: 'var(--brand-hex, #00B8D9)' }} strokeWidth={3} />
+                    </span>
+                    <span>{t}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </FadeUp>
+        </div>
       </section>
 
       {/* ── FAQ ── (antes del cierre: las dudas se resuelven ANTES de pedir
