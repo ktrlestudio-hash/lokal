@@ -1,5 +1,5 @@
-﻿import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Store, Shield, FileText, ShoppingBag, ChevronDown, Sun, Moon, Heart, Instagram } from 'lucide-react';
+﻿import React, { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, Store, Shield, FileText, ShoppingBag, ChevronDown, Sun, Moon, Heart, Instagram, Smartphone, Palette, Unlock, Eye } from 'lucide-react';
 import { LogoFull, KtrlMark } from './Brand';
 
 // Mismo tratamiento de card que la landing (CARD_TINTED en LandingScreen):
@@ -14,18 +14,110 @@ const CARD_TINTED = {
 // actualizado: la fecha estaba escrita a mano en el layout, así que las
 // tres páginas decían lo mismo aunque se editara sólo una. Ahora la declara
 // cada documento; si no la pasa, no se muestra la línea.
-function LegalLayout({ title, subtitle, icon: Icon, children, onBack, actualizado }) {
+// Nav y footer compartidos: los usan tanto las páginas legales (a través de
+// LegalLayout) como "Quiénes somos", que tiene cuerpo propio pero mismo
+// marco. Extraídos para no duplicarlos entre los dos layouts.
+// Misma aparición al entrar en viewport que FadeUp en LandingScreen.jsx —
+// no se importa de ahí porque ese archivo no lo exporta y es un componente
+// chico; copiarlo evita acoplar dos pantallas que no tienen por qué
+// depender una de la otra.
+function FadeUpLegal({ children, delay = 0, className = '' }) {
+  const ref = useRef(null);
+  const [inView, setInView] = useState(false);
   useEffect(() => {
-    window.scrollTo(0, 0);
+    const el = ref.current;
+    if (!el) return undefined;
+    const obs = new IntersectionObserver(
+      ([e]) => { if (e.isIntersecting) setInView(true); },
+      { threshold: 0.12 },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
   }, []);
+  return (
+    <div
+      ref={ref}
+      className={`transition-all duration-700 ease-out motion-reduce:transition-none ${className}`}
+      style={{
+        transitionDelay: `${delay}ms`,
+        opacity: inView ? 1 : 0,
+        transform: inView ? 'none' : 'translateY(16px)',
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
-  // Título y descripción propios del documento. Sin esto las tres páginas
-  // heredaban los meta de index.html (los de la landing), así que compartir
-  // el link de Términos en WhatsApp mostraba "Tu negocio en un solo link" y
-  // la pestaña del navegador no decía en qué documento estabas.
-  //
-  // Al desmontar se restaura el original: es una SPA, si no volvés a la
-  // landing con el título de la última legal que abriste.
+function MarcoNav({ onBack }) {
+  return (
+    <nav className="sticky top-0 z-50 bg-surface-card/85 backdrop-blur border-b border-slate-100 dark:border-white/8">
+      <div className="max-w-5xl mx-auto px-5 lg:px-8 h-16 flex items-center justify-between gap-3">
+        <button
+          onClick={onBack}
+          aria-label="Volver"
+          className="lok-tap ui-icon-btn hover:bg-surface-card-2 dark:hover:bg-white/8 text-ink-dim shrink-0"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <LogoFull size={26} />
+        <div className="w-10 shrink-0" aria-hidden="true" />
+      </div>
+    </nav>
+  );
+}
+
+function MarcoFooter() {
+  return (
+    <footer className="relative"
+      style={{
+        borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.10)',
+        background: 'radial-gradient(ellipse 70% 128px at 50% 0%, rgb(var(--brand, 0 184 217) / 0.12), transparent)',
+      }}>
+      <div className="relative max-w-5xl mx-auto px-5 lg:px-8 py-8">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-4">
+          <div className="justify-self-start">
+            <LogoFull size={22} />
+          </div>
+
+          <button
+            onClick={temaLegal.toggleTheme}
+            aria-label={temaLegal.isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+            className="lok-tap lok-chip-btn justify-self-center w-[30px] h-[30px] rounded-[10px] inline-flex items-center justify-center text-ink hover:text-brand"
+            style={{
+              background: `rgb(var(--brand, 0 184 217) / ${temaLegal.isDark ? 0.09 : 0.08})`,
+              border: temaLegal.isDark ? '1px solid rgb(var(--brand, 0 184 217) / 0.18)' : '1px solid transparent',
+            }}
+          >
+            {temaLegal.isDark ? <Sun className="w-[15px] h-[15px]" /> : <Moon className="w-[15px] h-[15px]" />}
+          </button>
+
+          <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
+            className="lok-tap justify-self-end inline-flex items-center gap-1.5 text-ink-dim hover:text-brand transition-colors">
+            <span className="text-[10px] font-semibold">Creado por</span>
+            <KtrlMark style={{ height: 11, color: 'currentColor' }} />
+          </a>
+        </div>
+
+        <p className="mt-5 text-center text-[10px]" style={{ color: 'var(--text-secondary, #999)' }}>
+          © {new Date().getFullYear()} LOKAL. Todos los derechos reservados.
+        </p>
+
+        <nav className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-semibold"
+          style={{ color: 'var(--text-secondary, #999)' }}>
+          <button onClick={() => navigateLegal('nosotros')} className="lok-tap lok-link-btn hover:text-brand">Quiénes somos</button>
+          <button onClick={() => navigateLegal('terminos')} className="lok-tap lok-link-btn hover:text-brand">Términos</button>
+          <button onClick={() => navigateLegal('privacidad')} className="lok-tap lok-link-btn hover:text-brand">Privacidad</button>
+          <button onClick={() => navigateLegal('comercios')} className="lok-tap lok-link-btn hover:text-brand">Comercios</button>
+        </nav>
+      </div>
+    </footer>
+  );
+}
+
+// Título y descripción propios del documento, restaurados al desmontar.
+// Compartido por los dos layouts.
+function useMetaPropio(title, subtitle) {
   useEffect(() => {
     const tituloPrevio = document.title;
     const meta = document.querySelector('meta[name="description"]');
@@ -39,6 +131,17 @@ function LegalLayout({ title, subtitle, icon: Icon, children, onBack, actualizad
       if (meta && descPrevia) meta.setAttribute('content', descPrevia);
     };
   }, [title, subtitle]);
+}
+
+function LegalLayout({ title, subtitle, icon: Icon, children, onBack, actualizado }) {
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  // Sin esto las páginas heredaban los meta de index.html (los de la
+  // landing), así que compartir el link de Términos en WhatsApp mostraba
+  // "Tu negocio en un solo link".
+  useMetaPropio(title, subtitle);
 
   // lok-app-surface: mismo tratamiento táctil que landing y login (sin
   // selección de texto ni menú contextual en los controles); el texto legal
@@ -50,28 +153,7 @@ function LegalLayout({ title, subtitle, icon: Icon, children, onBack, actualizad
   return (
     <div className="lok-app-surface min-h-screen text-ink"
       style={{ background: 'rgb(var(--surface-dim, 245 245 245))' }}>
-      {/* Navbar — mismo alto y márgenes que el header de la landing (h-16,
-          max-w-5xl, px-5/lg:px-8) en vez de un px-6 py-4 propio, y el botón
-          de retroceso es el cuadrado estándar de la app (.ui-icon-btn, el
-          mismo de PageHeader y las screens de detalle) en lugar de un
-          "← Volver" de texto suelto que no existe en ninguna otra pantalla. */}
-      <nav className="sticky top-0 z-50 bg-surface-card/85 backdrop-blur border-b border-slate-100 dark:border-white/8">
-        <div className="max-w-5xl mx-auto px-5 lg:px-8 h-16 flex items-center justify-between gap-3">
-          <button
-            onClick={onBack}
-            aria-label="Volver"
-            className="lok-tap ui-icon-btn hover:bg-surface-card-2 dark:hover:bg-white/8 text-ink-dim shrink-0"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          {/* 26, igual que el header de la landing: eran 22 y el logo se
-              veía más chico al navegar de una pantalla a la otra. */}
-          <LogoFull size={26} />
-          {/* Espaciador del mismo ancho que el botón, para que el logo quede
-              centrado óptico y no corrido hacia la derecha. */}
-          <div className="w-10 shrink-0" aria-hidden="true" />
-        </div>
-      </nav>
+      <MarcoNav onBack={onBack} />
 
       {/* Hero del documento */}
       <div className="border-b border-slate-100 dark:border-white/8 px-6 py-14 text-center"
@@ -94,65 +176,7 @@ function LegalLayout({ title, subtitle, icon: Icon, children, onBack, actualizad
         {children}
       </div>
 
-      {/* Footer — idéntico al de la landing. Mobile: tres filas centradas
-          (los dos logos enfrentados como en el footer de tienda, el
-          copyright, y los legales). Desktop: las mismas piezas en una fila,
-          legales al centro y cada logo en su extremo. El grid 1fr auto 1fr
-          centra los legales respecto al footer entero sin depender de que
-          ambos logos midan lo mismo. */}
-      {/* Glow superior: separa mejor que una línea sola y usa el recurso que
-          ya define el lenguaje de la página. Va como capa del background y
-          no como <div> absoluto con overflow-hidden — ver Highlight. */}
-      <footer className="relative"
-        style={{
-          borderTop: '1px solid rgb(var(--brand, 0 184 217) / 0.10)',
-          background: 'radial-gradient(ellipse 70% 128px at 50% 0%, rgb(var(--brand, 0 184 217) / 0.12), transparent)',
-        }}>
-        <div className="relative max-w-5xl mx-auto px-5 lg:px-8 py-8">
-          {/* Fila de logos: LOKAL · toggle de tema · KTRL, igual que el
-              footer de la landing y el de tienda. El grid 1fr auto 1fr deja
-              el toggle centrado sin importar cuánto midan los logos. */}
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-4">
-            <div className="justify-self-start">
-              <LogoFull size={22} />
-            </div>
-
-            <button
-              onClick={temaLegal.toggleTheme}
-              aria-label={temaLegal.isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-              className="lok-tap lok-chip-btn justify-self-center w-[30px] h-[30px] rounded-[10px] inline-flex items-center justify-center text-ink hover:text-brand"
-              style={{
-                background: `rgb(var(--brand, 0 184 217) / ${temaLegal.isDark ? 0.09 : 0.08})`,
-                border: temaLegal.isDark ? '1px solid rgb(var(--brand, 0 184 217) / 0.18)' : '1px solid transparent',
-              }}
-            >
-              {temaLegal.isDark ? <Sun className="w-[15px] h-[15px]" /> : <Moon className="w-[15px] h-[15px]" />}
-            </button>
-
-            {/* KTRL con el mismo color que el logo LOKAL, no al 50%: son las
-                dos marcas de la misma fila. */}
-            <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
-              className="lok-tap justify-self-end inline-flex items-center gap-1.5 text-ink-dim hover:text-brand transition-colors">
-              <span className="text-[10px] font-semibold">Creado por</span>
-              <KtrlMark style={{ height: 11, color: 'currentColor' }} />
-            </a>
-          </div>
-
-          <p className="mt-5 text-center text-[10px]" style={{ color: 'var(--text-secondary, #999)' }}>
-            © {new Date().getFullYear()} LOKAL. Todos los derechos reservados.
-          </p>
-
-          {/* flex-wrap: con "Quiénes somos" son cuatro y en pantallas
-              angostas tienen que poder pasar a dos líneas. */}
-          <nav className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-semibold"
-            style={{ color: 'var(--text-secondary, #999)' }}>
-            <button onClick={() => navigateLegal('nosotros')} className="lok-tap lok-link-btn hover:text-brand">Quiénes somos</button>
-            <button onClick={() => navigateLegal('terminos')} className="lok-tap lok-link-btn hover:text-brand">Términos</button>
-            <button onClick={() => navigateLegal('privacidad')} className="lok-tap lok-link-btn hover:text-brand">Privacidad</button>
-            <button onClick={() => navigateLegal('comercios')} className="lok-tap lok-link-btn hover:text-brand">Comercios</button>
-          </nav>
-        </div>
-      </footer>
+      <MarcoFooter />
     </div>
   );
 }
@@ -605,145 +629,166 @@ function ComerciosPage({ onBack }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL — renderiza la página legal correcta
 // ═══════════════════════════════════════════════════════════════════════════════
-// Ficha de quien está detrás del producto. Array y no un bloque suelto:
-// hoy hay una sola persona, y cuando el equipo crezca se agrega acá sin
-// tocar el layout (la grilla pasa sola a dos columnas en pantalla ancha).
-//
-// Sin foto todavía: en lugar de un placeholder gris o un avatar genérico de
-// stock, va la inicial sobre el color de marca — se lee intencional y no
-// como una imagen que faltó cargar.
-const PERSONAS = [
-  {
-    nombre: 'Katriel Martínez',
-    rol: 'Diseño y desarrollo',
-    inicial: 'K',
-    desc: 'Armo y mantengo LOKAL de punta a punta. Si escribís por un problema o una idea, me llega a mí.',
-    instagram: 'katriel.martinez',
-  },
-];
-
-function Personas() {
-  return (
-    <div className={`grid gap-3 mt-5 ${PERSONAS.length > 1 ? 'sm:grid-cols-2' : ''}`}>
-      {PERSONAS.map((p) => (
-        <div key={p.nombre} className="rounded-2xl border p-4 flex gap-4 items-start" style={CARD_TINTED}>
-          {/* Avatar: inicial sobre el color de marca. Cuando haya foto, acá
-              va un <img> con el mismo tamaño y radio. */}
-          <span className="w-14 h-14 rounded-2xl shrink-0 flex items-center justify-center"
-            style={{
-              background: 'var(--brand-hex, #00B8D9)',
-              color: '#fff',
-              fontSize: 22,
-              fontWeight: 900,
-              boxShadow: '0 4px 14px rgb(var(--brand, 0 184 217) / 0.35)',
-            }}>
-            {p.inicial}
-          </span>
-          <div className="min-w-0">
-            <p className="font-black text-[15px] leading-tight">{p.nombre}</p>
-            <p className="text-xs font-bold mb-1.5" style={{ color: 'var(--brand-hex, #00B8D9)' }}>{p.rol}</p>
-            <p className="text-sm leading-relaxed mb-2.5" style={{ color: 'var(--text-secondary, #999)' }}>
-              {p.desc}
-            </p>
-            {p.instagram && (
-              <a href={`https://instagram.com/${p.instagram}`} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs font-bold rounded-lg px-2.5 py-1.5 no-underline"
-                style={{
-                  background: 'rgb(var(--brand, 0 184 217) / 0.10)',
-                  color: 'var(--brand-hex, #00B8D9)',
-                }}>
-                <Instagram className="w-3.5 h-3.5" />
-                @{p.instagram}
-              </a>
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // "Quiénes somos" vive con las legales y no en el header a propósito: quien
 // llega a la landing es un dueño de negocio evaluando una herramienta, y esa
 // pregunta la busca DESPUÉS de que le interesó el producto, no antes. En el
 // header competiría con "Entrar", que es la única acción que importa arriba.
 //
+// Pero el LAYOUT es propio, no el de las legales: un documento se consulta
+// (por eso las secciones son acordeones, un índice colapsado), mientras que
+// "quiénes somos" se LEE de corrido y quiere transmitir algo — necesita el
+// mismo tipo de composición que la landing (hero, cards con FadeUp, la
+// persona real visible de entrada) en vez de esconder todo detrás de
+// desplegables.
+//
 // El contenido dice sólo lo que es verificable hoy: quién lo hace, por qué,
 // y qué se puede esperar. Sin métricas inventadas ni "miles de comercios
 // confían en nosotros" — el producto recién arranca y una cifra falsa se
 // nota más que no tener ninguna.
 function NosotrosPage({ onBack }) {
+  useEffect(() => { window.scrollTo(0, 0); }, []);
+  useMetaPropio('Quiénes somos', 'Quién está detrás de LOKAL y para qué lo hicimos.');
+
+  const PILARES = [
+    { icon: Smartphone, titulo: 'Se usa solo', desc: 'Si necesitás que alguien te lo configure, fallamos. Todo se carga y se edita desde el celular.' },
+    { icon: Palette, titulo: 'Es tu página', desc: 'Elegís el color y el orden. Nuestra marca aparece al pie y nada más — no es nuestra publicidad.' },
+    { icon: Unlock, titulo: 'No te ata', desc: 'Sin comisión por lo que vendés, sin permanencia. Te quedás porque sirve, no porque no podés irte.' },
+    { icon: Eye, titulo: 'Sin humo', desc: 'Preferimos decirte que algo todavía no está antes que prometerlo. Lo que ves es lo que hay.' },
+  ];
+
   return (
-    <LegalLayout
-      title="Quiénes somos"
-      subtitle="Quién está detrás de LOKAL y para qué lo hicimos."
-      icon={Heart}
-      actualizado="julio 2026"
-      onBack={onBack}
-    >
-      <Highlight>
-        <strong>En una línea:</strong> LOKAL LINKS lo hace KTRL, un estudio de Bovril, Entre Ríos. Lo armamos porque en los pueblos hay muchísimos negocios buenos que no tienen dónde mostrar lo que venden — y contratar una página web no es una opción realista para la mayoría.
-      </Highlight>
+    <div className="lok-app-surface min-h-screen text-ink"
+      style={{ background: 'rgb(var(--surface-dim, 245 245 245))' }}>
+      <MarcoNav onBack={onBack} />
 
-      <Section title="Por qué existe" abiertaPorDefecto>
-        <p>
-          Un comercio de barrio compite hoy con negocios que tienen web, catálogo online y presencia en redes. No porque vendan mejor, sino porque se los encuentra más fácil.
-        </p>
-        <p>
-          La opción que quedaba era publicar fotos sueltas en el estado de WhatsApp o en una historia que se borra en 24 horas. Cada cliente que pregunta "¿tenés tal cosa?" o "¿hasta qué hora abrís?" es una venta que cuesta más trabajo de lo que debería.
-        </p>
-        <p>
-          LOKAL LINKS es la respuesta simple a eso: una página con tus cosas, tu horario y tu ubicación, en un link que compartís donde quieras.
-        </p>
-      </Section>
+      {/* ── Hero — mismo lenguaje que el de la landing: glow radial de
+          fondo, badge, título grande. Acá el badge dice de dónde viene el
+          producto en vez de un beneficio, que es lo que corresponde en una
+          página que se trata de identidad y no de conversión. ── */}
+      <section className="relative px-6 pt-16 pb-14 text-center overflow-hidden"
+        style={{ background: 'radial-gradient(ellipse 70% 50% at 50% 0%, rgb(var(--brand, 0 184 217) / 0.12), transparent)' }}>
+        <FadeUpLegal>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold mb-5"
+            style={{ background: 'rgb(var(--brand, 0 184 217) / 0.12)', color: 'var(--brand-hex, #00B8D9)' }}>
+            <Heart className="w-3.5 h-3.5" />
+            Hecho en Bovril, Entre Ríos
+          </span>
+        </FadeUpLegal>
+        <FadeUpLegal delay={80}>
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black leading-[1.1] mb-4 max-w-2xl mx-auto">
+            Le damos vidriera a los negocios que no tienen una
+          </h1>
+        </FadeUpLegal>
+        <FadeUpLegal delay={160}>
+          <p className="text-base max-w-lg mx-auto" style={{ color: 'var(--text-secondary, #999)' }}>
+            En los pueblos hay muchísimos comercios buenos sin dónde mostrar lo que venden. Contratar una página web no es una opción realista para la mayoría — por eso hicimos LOKAL.
+          </p>
+        </FadeUpLegal>
+      </section>
 
-      <Section title="Qué nos importa">
-        <p>
-          <strong>Que lo puedas usar solo.</strong> Si necesitás que alguien te lo configure, fallamos. Todo se carga y se edita desde el celular, sin instalar nada.
-        </p>
-        <p>
-          <strong>Que sea tu página, no nuestra publicidad.</strong> Elegís el color, el orden y qué se muestra. Nuestra marca aparece al pie y nada más.
-        </p>
-        <p>
-          <strong>Que no te ate.</strong> No cobramos comisión por lo que vendés, no hay permanencia y te podés ir cuando quieras. Si sirve, te quedás porque sirve.
-        </p>
-        <p>
-          <strong>Que no te vendamos humo.</strong> Preferimos decirte que algo todavía no está antes que prometerlo. Lo que ves en la página es lo que hay.
-        </p>
-      </Section>
+      <div className="max-w-3xl mx-auto px-6 pb-4 space-y-14">
 
-      <Section title="Quién lo hace">
-        <p>
-          KTRL es un estudio chico de Bovril, Entre Ríos. Trabajamos con comercios de la zona, así que los problemas que resuelve LOKAL son los que vemos de cerca todos los días, no los que suponemos desde afuera.
-        </p>
-        <p>
-          Eso tiene una ventaja concreta para vos: si algo no funciona o te falta una función, hay alguien del otro lado que lo lee y te responde.
-        </p>
-        <Personas />
-      </Section>
+        {/* ── La persona, arriba y visible — no en un acordeón al fondo. ── */}
+        <FadeUpLegal>
+          <div className="rounded-3xl border p-6 sm:p-8 flex flex-col sm:flex-row gap-5 sm:items-center" style={CARD_TINTED}>
+            <span className="w-20 h-20 rounded-3xl shrink-0 flex items-center justify-center mx-auto sm:mx-0"
+              style={{
+                background: 'var(--brand-hex, #00B8D9)', color: '#fff', fontSize: 32, fontWeight: 900,
+                boxShadow: '0 6px 20px rgb(var(--brand, 0 184 217) / 0.4)',
+              }}>
+              K
+            </span>
+            <div className="text-center sm:text-left">
+              <p className="font-black text-xl leading-tight">Katriel Martínez</p>
+              <p className="text-sm font-bold mb-2" style={{ color: 'var(--brand-hex, #00B8D9)' }}>Diseño y desarrollo — KTRL</p>
+              <p className="text-sm leading-relaxed mb-3" style={{ color: 'var(--text-secondary, #999)' }}>
+                Armo y mantengo LOKAL de punta a punta. Trabajo con comercios de la zona, así que los problemas que resuelve la app son los que veo de cerca todos los días — no los que supongo desde afuera. Si escribís por algo, me llega a mí.
+              </p>
+              <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-bold rounded-lg px-2.5 py-1.5 no-underline"
+                style={{ background: 'rgb(var(--brand, 0 184 217) / 0.10)', color: 'var(--brand-hex, #00B8D9)' }}>
+                <Instagram className="w-3.5 h-3.5" />
+                @katriel.martinez
+              </a>
+            </div>
+          </div>
+        </FadeUpLegal>
 
-      <Section title="Hacia dónde va">
-        <p>
-          LOKAL LINKS es la primera pieza de algo más grande. La idea es que con el tiempo los comercios de una misma zona se puedan descubrir entre sí y que un vecino encuentre lo que busca cerca, sin depender de que ya conozca el negocio.
-        </p>
-        <p>
-          No ponemos fechas: preferimos sacar cada cosa cuando esté lista y funcione de verdad. Lo que sí podemos decir es que todo lo que agreguemos va a seguir la misma regla — que lo puedas usar solo, desde el celular, sin complicarte.
-        </p>
-      </Section>
+        {/* ── Por qué existe ── */}
+        <FadeUpLegal>
+          <div>
+            <h2 className="text-2xl font-black text-center mb-6">Por qué existe LOKAL</h2>
+            <div className="space-y-4 text-sm leading-relaxed" style={{ color: 'var(--text-secondary, #999)' }}>
+              <p>
+                Un comercio de barrio compite hoy con negocios que tienen web, catálogo online y presencia en redes. No porque vendan mejor, sino porque se los encuentra más fácil.
+              </p>
+              <p>
+                La opción que quedaba era publicar fotos sueltas en el estado de WhatsApp o en una historia que se borra en 24 horas. Cada cliente que pregunta "¿tenés tal cosa?" o "¿hasta qué hora abrís?" es una venta que cuesta más trabajo de lo que debería.
+              </p>
+              <p>
+                LOKAL LINKS es la respuesta simple a eso: una página con tus cosas, tu horario y tu ubicación, en un link que compartís donde quieras.
+              </p>
+            </div>
+          </div>
+        </FadeUpLegal>
 
-      <Section title="Cómo contactarnos">
-        <p>
-          Si tenés una duda, algo no te funciona o querés proponer una función, escribinos. Nos llega directo y contestamos.
-        </p>
-        <p>
-          Instagram:{' '}
-          <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
-            style={{ color: 'var(--brand-hex, #00B8D9)', fontWeight: 700 }}>
-            @katriel.martinez
-          </a>
-        </p>
-      </Section>
-    </LegalLayout>
+        {/* ── Qué nos importa — grilla de cards, como "Todo lo que incluye"
+            de la landing, en vez de una lista dentro de un acordeón. ── */}
+        <FadeUpLegal>
+          <div>
+            <h2 className="text-2xl font-black text-center mb-6">Qué nos importa</h2>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {PILARES.map(({ icon: Icon, titulo, desc }) => (
+                <div key={titulo} className="rounded-2xl border p-5 flex gap-3.5" style={CARD_TINTED}>
+                  <span className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                    style={{ background: 'rgb(var(--brand, 0 184 217) / 0.14)' }}>
+                    <Icon className="w-5 h-5" style={{ color: 'var(--brand-hex, #00B8D9)' }} strokeWidth={2.2} />
+                  </span>
+                  <div className="min-w-0">
+                    <h3 className="font-black text-sm mb-1">{titulo}</h3>
+                    <p className="text-[13px] leading-relaxed" style={{ color: 'var(--text-secondary, #999)' }}>{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </FadeUpLegal>
+
+        {/* ── Hacia dónde va ── */}
+        <FadeUpLegal>
+          <div className="rounded-3xl border p-6 sm:p-8" style={CARD_TINTED}>
+            <h2 className="text-xl font-black mb-3 text-center">Hacia dónde va</h2>
+            <div className="space-y-3 text-sm leading-relaxed text-center max-w-lg mx-auto" style={{ color: 'var(--text-secondary, #999)' }}>
+              <p>
+                LOKAL LINKS es la primera pieza de algo más grande: que los comercios de una misma zona se puedan descubrir entre sí, y que un vecino encuentre lo que busca cerca sin depender de que ya conozca el negocio.
+              </p>
+              <p>
+                No ponemos fechas — preferimos sacar cada cosa cuando funcione de verdad. Lo que sí podemos decir es que todo lo que agreguemos va a seguir la misma regla: que lo puedas usar solo, desde el celular, sin complicarte.
+              </p>
+            </div>
+          </div>
+        </FadeUpLegal>
+
+        {/* ── Contacto — cierre, como el CTA de precio de la landing. ── */}
+        <FadeUpLegal>
+          <div className="text-center py-4">
+            <h2 className="text-xl font-black mb-2">¿Tenés una duda o una idea?</h2>
+            <p className="text-sm mb-5" style={{ color: 'var(--text-secondary, #999)' }}>
+              Escribinos. Nos llega directo y contestamos.
+            </p>
+            <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
+              className="lok-tap inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-bold no-underline"
+              style={{ background: 'var(--brand-hex, #00B8D9)', color: '#fff' }}>
+              <Instagram className="w-4 h-4" />
+              Escribir en Instagram
+            </a>
+          </div>
+        </FadeUpLegal>
+      </div>
+
+      <MarcoFooter />
+    </div>
   );
 }
 
