@@ -4,3 +4,6 @@ dist/
 .env.local
 .netlify/
 src/tienda-publica/referencia templete/
+# Material de referencia de diseño (páginas guardadas, capturas): 20 MB que
+# no son código del proyecto, mismo criterio que la carpeta de arriba.
+shopify y tienda nube/
