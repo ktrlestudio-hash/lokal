@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Store, Shield, FileText, ShoppingBag, ChevronDown, Sun, Moon, Heart, Instagram, Smartphone, Palette, Unlock, Eye } from 'lucide-react';
+import { ArrowLeft, Store, Shield, FileText, ShoppingBag, ChevronDown, Sun, Moon, Heart, Instagram, Smartphone, Palette, Unlock, Eye, X, Scale } from 'lucide-react';
+import { useSheetOpen } from './tienda-publica/hooks/useSheetOpen.js';
 import { LogoFull, KtrlMark } from './Brand';
 
 // Mismo tratamiento de card que la landing (CARD_TINTED en LandingScreen):
@@ -67,7 +68,65 @@ function MarcoNav({ onBack }) {
   );
 }
 
+// Sheet con los 3 documentos legales, disparado desde el link "Legal" del
+// footer. Antes cada uno tenía su propio link ahí: con "Quiénes somos"
+// sumado eran 4, y en mobile el wrap dejaba el último ("Comercios") solo en
+// su fila, descentrado. Agruparlos acá deja el footer en una fila prolija
+// en cualquier ancho.
+function LegalSheet({ open, onClose, onElegir }) {
+  const { mounted, visible } = useSheetOpen(open, 220, onClose);
+  useEffect(() => {
+    if (!open) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+  if (!mounted) return null;
+
+  const DOCS = [
+    { page: 'terminos', label: 'Términos y Condiciones' },
+    { page: 'privacidad', label: 'Política de Privacidad' },
+    { page: 'comercios', label: 'Condiciones para Comercios' },
+  ];
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 4700, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+      <style>{`
+        .lok-sheet-ov { opacity: 0; transition: opacity 220ms ease; }
+        .lok-sheet-ov.in { opacity: 1; }
+        .lok-sheet-panel { transform: translateY(100%); transition: transform 220ms cubic-bezier(.22,1,.36,1); }
+        .lok-sheet-panel.in { transform: translateY(0); }
+      `}</style>
+      <div onClick={onClose} className={`lok-sheet-ov ${visible ? 'in' : ''}`} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.45)' }} />
+      <div className={`lok-sheet-panel ${visible ? 'in' : ''}`} style={{
+        position: 'relative', background: 'var(--surface-solid, #fff)', borderRadius: '20px 20px 0 0',
+        maxWidth: 480, margin: '0 auto', width: '100%', boxShadow: '0 -8px 30px rgba(0,0,0,.15)',
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgb(var(--brand, 0 184 217) / 0.2)', margin: '10px auto 4px' }} />
+        <div className="flex items-center gap-2.5 px-5 pt-2 pb-3" style={{ borderBottom: '1px solid rgb(var(--brand, 0 184 217) / 0.1)' }}>
+          <Scale className="w-[18px] h-[18px]" style={{ color: 'var(--brand-hex, #00B8D9)' }} />
+          <h3 className="flex-1 font-black text-[15px] m-0">Documentos legales</h3>
+          <button onClick={onClose} aria-label="Cerrar" className="lok-tap w-8 h-8 rounded-lg grid place-items-center shrink-0"
+            style={{ background: 'rgb(var(--brand, 0 184 217) / 0.08)', color: 'var(--text-secondary, #999)' }}>
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-2.5 pb-5">
+          {DOCS.map((d) => (
+            <button key={d.page} onClick={() => onElegir(d.page)}
+              className="lok-tap w-full text-left px-3.5 py-3 rounded-xl font-semibold text-sm hover:text-brand"
+              style={{ color: 'var(--text-primary)' }}>
+              {d.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MarcoFooter() {
+  const [legalSheetOpen, setLegalSheetOpen] = useState(false);
   return (
     <footer className="relative"
       style={{
@@ -92,25 +151,37 @@ function MarcoFooter() {
             {temaLegal.isDark ? <Sun className="w-[15px] h-[15px]" /> : <Moon className="w-[15px] h-[15px]" />}
           </button>
 
+          {/* text-ink, no text-ink-dim: KTRL quedaba gris y apagado al lado
+              del logo LOKAL, que es negro/blanco pleno en la misma fila. */}
           <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
-            className="lok-tap justify-self-end inline-flex items-center gap-1.5 text-ink-dim hover:text-brand transition-colors">
+            className="lok-tap justify-self-end inline-flex items-center gap-1.5 text-ink hover:text-brand transition-colors">
             <span className="text-[10px] font-semibold">Creado por</span>
             <KtrlMark style={{ height: 11, color: 'currentColor' }} />
           </a>
         </div>
 
-        <p className="mt-5 text-center text-[10px]" style={{ color: 'var(--text-secondary, #999)' }}>
-          © {new Date().getFullYear()} LOKAL. Todos los derechos reservados.
-        </p>
-
-        <nav className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-semibold"
-          style={{ color: 'var(--text-secondary, #999)' }}>
-          <button onClick={() => navigateLegal('nosotros')} className="lok-tap lok-link-btn hover:text-brand">Quiénes somos</button>
-          <button onClick={() => navigateLegal('terminos')} className="lok-tap lok-link-btn hover:text-brand">Términos</button>
-          <button onClick={() => navigateLegal('privacidad')} className="lok-tap lok-link-btn hover:text-brand">Privacidad</button>
-          <button onClick={() => navigateLegal('comercios')} className="lok-tap lok-link-btn hover:text-brand">Comercios</button>
-        </nav>
+        {/* Copyright + legales en la misma fila (mt-4, no dos bloques
+            apilados con mt-5/mt-4 separados): con los links agrupados
+            detrás de "Legal" el bloque quedó angosto, y separarlo en dos
+            filas con aire propio acentuaba la sensación de espacio de
+            sobra contra la fila ancha de logos. */}
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+          <p className="order-2 text-center text-[10px]" style={{ color: 'var(--text-secondary, #999)' }}>
+            © {new Date().getFullYear()} LOKAL. Todos los derechos reservados.
+          </p>
+          <nav className="order-1 flex items-center justify-center gap-x-5 text-xs font-semibold"
+            style={{ color: 'var(--text-secondary, #999)' }}>
+            <button onClick={() => navigateLegal('nosotros')} className="lok-tap lok-link-btn hover:text-brand">Quiénes somos</button>
+            <button onClick={() => setLegalSheetOpen(true)} className="lok-tap lok-link-btn hover:text-brand">Legal</button>
+          </nav>
+        </div>
       </div>
+
+      <LegalSheet
+        open={legalSheetOpen}
+        onClose={() => setLegalSheetOpen(false)}
+        onElegir={(page) => { setLegalSheetOpen(false); navigateLegal(page); }}
+      />
     </footer>
   );
 }

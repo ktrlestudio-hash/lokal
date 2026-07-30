@@ -12,12 +12,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Loader2, AlertCircle, Sun, Moon, Check, ChevronDown, Store, Tag,
   MessageSquare, Share2, Instagram, BarChart3, Sparkles, ArrowUp,
-  ChevronLeft, ChevronRight, ArrowUpRight, MapPin, Clock,
+  ChevronLeft, ChevronRight, ArrowUpRight, MapPin, Clock, X, Scale,
 } from 'lucide-react';
 import { signInWithGoogle, renderBotonGoogle, gisDisponible } from './firebase';
 import { LogoFull, KtrlMark } from './Brand';
 import { TIENDA_SLUG_FIJA } from './config/constants';
 import { API_BASE } from './config/flags';
+import { useSheetOpen } from './tienda-publica/hooks/useSheetOpen.js';
 
 const GoogleIcon = ({ size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24">
@@ -37,6 +38,64 @@ const CARD_TINTED = {
   background: 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.055), rgb(var(--brand, 0 184 217) / 0.015))',
   borderColor: 'rgb(var(--brand, 0 184 217) / 0.14)',
 };
+
+// Sheet con los 3 documentos legales — mismo componente que usa el footer
+// compartido de LegalPages.jsx (MarcoFooter), copiado acá en vez de
+// importado para no acoplar la landing a ese archivo por un componente
+// chico. Agrupa Términos/Privacidad/Comercios detrás de un solo link
+// "Legal": con "Quiénes somos" sumado eran 4 links sueltos, y en mobile el
+// último quedaba solo en su fila, descentrado.
+function SheetLegal({ open, onClose }) {
+  const { mounted, visible } = useSheetOpen(open, 220, onClose);
+  useEffect(() => {
+    if (!open) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+  if (!mounted) return null;
+
+  const DOCS = [
+    { href: '/terminos-y-condiciones', label: 'Términos y Condiciones' },
+    { href: '/politica-de-privacidad', label: 'Política de Privacidad' },
+    { href: '/condiciones-para-comercios', label: 'Condiciones para Comercios' },
+  ];
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 4700, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+      <style>{`
+        .lok-sheet-ov { opacity: 0; transition: opacity 220ms ease; }
+        .lok-sheet-ov.in { opacity: 1; }
+        .lok-sheet-panel { transform: translateY(100%); transition: transform 220ms cubic-bezier(.22,1,.36,1); }
+        .lok-sheet-panel.in { transform: translateY(0); }
+      `}</style>
+      <div onClick={onClose} className={`lok-sheet-ov ${visible ? 'in' : ''}`} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.45)' }} />
+      <div className={`lok-sheet-panel ${visible ? 'in' : ''}`} style={{
+        position: 'relative', background: 'var(--surface-solid, #fff)', borderRadius: '20px 20px 0 0',
+        maxWidth: 480, margin: '0 auto', width: '100%', boxShadow: '0 -8px 30px rgba(0,0,0,.15)',
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgb(var(--brand, 0 184 217) / 0.2)', margin: '10px auto 4px' }} />
+        <div className="flex items-center gap-2.5 px-5 pt-2 pb-3" style={{ borderBottom: '1px solid rgb(var(--brand, 0 184 217) / 0.1)' }}>
+          <Scale className="w-[18px] h-[18px]" style={{ color: 'var(--brand-hex, #00B8D9)' }} />
+          <h3 className="flex-1 font-black text-[15px] m-0">Documentos legales</h3>
+          <button onClick={onClose} aria-label="Cerrar" className="lok-tap w-8 h-8 rounded-lg grid place-items-center shrink-0"
+            style={{ background: 'rgb(var(--brand, 0 184 217) / 0.08)', color: 'var(--text-secondary, #999)' }}>
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-2.5 pb-5">
+          {DOCS.map((d) => (
+            <a key={d.href} href={d.href}
+              className="lok-tap block w-full text-left px-3.5 py-3 rounded-xl font-semibold text-sm no-underline hover:text-brand"
+              style={{ color: 'var(--text-primary)' }}>
+              {d.label}
+            </a>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Palabra que rota en el título del hero — mismo recurso que usa Shopify en
 // su home ("Estrella de la IA" / "Marca reconocida" / "Imperio global"): da
@@ -1135,6 +1194,7 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
   // apenas pasa contenido por debajo (24px), mientras que el botón "volver
   // arriba" solo tiene sentido cuando ya te alejaste bastante del tope.
   const [lejosDelTope, setLejosDelTope] = useState(false);
+  const [legalSheetOpen, setLegalSheetOpen] = useState(false);
   const entrarRipple = useRipple();
   const volverArribaRipple = useRipple();
   // Cuánto del footer ya entró en pantalla: es lo que el botón flotante
@@ -1636,11 +1696,11 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
               {isDark ? <Sun className="w-[15px] h-[15px]" /> : <Moon className="w-[15px] h-[15px]" />}
             </button>
 
-            {/* KTRL con el mismo color que el logo LOKAL (text-ink-dim), no
-                al 50% como antes: son las dos marcas de la misma fila y una
-                se veía notoriamente más apagada que la otra. */}
+            {/* KTRL en texto principal (text-ink), no text-ink-dim: quedaba
+                gris y apagado al lado del logo LOKAL, que es negro/blanco
+                pleno en la misma fila. */}
             <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
-              className="lok-tap justify-self-end inline-flex items-center gap-1.5 text-ink-dim hover:text-brand transition-colors">
+              className="lok-tap justify-self-end inline-flex items-center gap-1.5 text-ink hover:text-brand transition-colors">
               <span className="text-[10px] font-semibold">Creado por</span>
               <KtrlMark style={{ height: 11, color: 'currentColor' }} />
             </a>
@@ -1649,17 +1709,19 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
           {/* Copyright + legales en la MISMA fila — antes iban en dos
               bloques apilados (mt-5 y mt-4) que estiraban el footer sin
               necesidad. En pantallas angostas vuelven a apilarse solos por
-              el flex-wrap, con los legales primero (son lo accionable). */}
-          <div className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-3">
-            {/* flex-wrap y justify-center: con "Quiénes somos" son cuatro
-                links y en pantallas angostas necesitan poder pasar a dos
-                líneas sin desbordar. */}
-            <nav className="order-1 sm:order-2 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-semibold"
+              el flex-wrap, con los legales primero (son lo accionable).
+              mt-4 (no mt-5): con los links agrupados detrás de "Legal" este
+              bloque quedó más angosto que antes, y el aire extra arriba
+              acentuaba la sensación de que "sobra espacio" contra la fila
+              ancha de logos. */}
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-3">
+            {/* Dos links, no cuatro: los 3 documentos legales se agrupan
+                detrás de "Legal" (ver SheetLegal) para que esta fila nunca
+                necesite pasar a una segunda línea en mobile. */}
+            <nav className="order-1 sm:order-2 flex items-center justify-center gap-x-5 text-xs font-semibold"
               style={{ color: 'var(--text-secondary, #999)' }}>
               <a href="/quienes-somos" className="lok-tap lok-link-btn hover:text-brand">Quiénes somos</a>
-              <a href="/terminos-y-condiciones" className="lok-tap lok-link-btn hover:text-brand">Términos</a>
-              <a href="/politica-de-privacidad" className="lok-tap lok-link-btn hover:text-brand">Privacidad</a>
-              <a href="/condiciones-para-comercios" className="lok-tap lok-link-btn hover:text-brand">Comercios</a>
+              <button onClick={() => setLegalSheetOpen(true)} className="lok-tap lok-link-btn hover:text-brand">Legal</button>
             </nav>
             <p className="order-2 sm:order-1 text-center text-[10px]" style={{ color: 'var(--text-secondary, #999)' }}>
               © {new Date().getFullYear()} LOKAL. Todos los derechos reservados.
@@ -1667,6 +1729,8 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
           </div>
         </div>
       </footer>
+
+      <SheetLegal open={legalSheetOpen} onClose={() => setLegalSheetOpen(false)} />
 
       {/* ── Volver arriba — aparece recién cuando ya scrolleaste lo
           suficiente como para que el header quede lejos. ── */}
