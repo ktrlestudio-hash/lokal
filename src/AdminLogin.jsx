@@ -65,6 +65,18 @@ export default function AdminLogin({ isDark, toggleTheme, onVolver }) {
           splash, y opacidades bajas para no competir con la card. */}
       <style>{`
         @keyframes lk-login-glow { 0%,100% { opacity: 0.6; transform: scale(1); } 50% { opacity: 0.9; transform: scale(1.06); } }
+        /* LogoFull recibe su tamaño como número en px (atributo width/height
+           del SVG), no un valor CSS — no admite clamp() directo. Se escala
+           por fuera con transform en vez de tocar el componente. El
+           contenedor ya lo centra con justify-center: con transform-origin
+           en el centro (no en un borde), el logo crece parejo hacia los
+           dos lados sin correrse de ese centro ya establecido. */
+        @media (min-width: 900px) {
+          .lok-login-logo { transform: scale(1.15); transform-origin: center; }
+        }
+        @media (min-width: 1400px) {
+          .lok-login-logo { transform: scale(1.3); }
+        }
       `}</style>
       <div className="absolute inset-x-0 top-0 pointer-events-none" style={{
         height: '60%',
@@ -79,7 +91,12 @@ export default function AdminLogin({ isDark, toggleTheme, onVolver }) {
       {/* flex-1 + centrado: la card se centra en el alto que queda libre
           entre el borde superior y el footer anclado abajo. */}
       <div className="relative flex-1 w-full flex items-center justify-center">
-      <div className="w-full max-w-sm">
+      {/* max-width con clamp, no max-w-sm fijo (384px): en una pantalla de
+          1920px la card ocupaba solo 20% del ancho, mismo problema que
+          tenía el splash de carga antes de escalarlo. De 384 a 460px según
+          el viewport — sigue siendo una card angosta (es un formulario de
+          un botón), pero con más presencia en pantallas grandes. */}
+      <div className="w-full" style={{ maxWidth: 'clamp(384px, 28vw, 460px)' }}>
         {/* Mismo tratamiento que las cards de la landing (CARD_TINTED en
             LandingScreen.jsx): una pizca de turquesa de marca en el fondo y
             en el borde, en vez de gris neutro. Los tokens globales son
@@ -91,8 +108,12 @@ export default function AdminLogin({ isDark, toggleTheme, onVolver }) {
             imponer un color propio encima. El turquesa va por debajo del
             blur, así tiñe sin tapar. */}
         <div
-          className="relative rounded-3xl shadow-2xl px-6 py-8 text-center"
+          className="relative rounded-3xl shadow-2xl text-center"
           style={{
+            // Padding con clamp, igual criterio que el ancho: una card más
+            // grande necesita más aire interno, no solo más espacio vacío
+            // alrededor.
+            padding: 'clamp(24px, 3vw, 36px) clamp(24px, 2.6vw, 32px)',
             background: isDark
               ? 'linear-gradient(160deg, rgba(255,255,255,.07), rgb(var(--brand, 0 184 217) / 0.06))'
               : 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.06), rgb(var(--brand, 0 184 217) / 0.015)), var(--surface-solid, #fff)',
@@ -150,12 +171,15 @@ export default function AdminLogin({ isDark, toggleTheme, onVolver }) {
             )}
           </div>
           <div className="mb-6 flex justify-center">
-            <LogoFull size={28} />
+            <LogoFull size={28} className="lok-login-logo" />
           </div>
-          <h1 className="text-xl font-black mb-2" style={{ color: 'var(--text-primary, #fff)' }}>
+          {/* clamp en título y logo: son los dos elementos que definían la
+              "sensación de tamaño" de la card, y quedaban idénticos en
+              1920px que en un celular aunque el contenedor sí escalara. */}
+          <h1 className="font-black mb-2" style={{ color: 'var(--text-primary, #fff)', fontSize: 'clamp(1.25rem, 1.6vw, 1.5rem)' }}>
             Panel de tienda
           </h1>
-          <p className="text-sm mb-8" style={{ color: 'var(--text-secondary, #999)' }}>
+          <p className="mb-8" style={{ color: 'var(--text-secondary, #999)', fontSize: 'clamp(.875rem, 1vw, .9375rem)' }}>
             Iniciá sesión con tu cuenta de Google para administrar tu tienda.
           </p>
 
@@ -176,7 +200,8 @@ export default function AdminLogin({ isDark, toggleTheme, onVolver }) {
           <button
             onClick={handleGoogle}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 bg-ink dark:bg-white hover:bg-ink/90 dark:hover:bg-white/90 text-white dark:text-[#18181b] font-bold py-3.5 px-6 rounded-2xl transition-all shadow-lg hover:shadow-xl disabled:opacity-60 active:scale-[0.98]"
+            className="w-full flex items-center justify-center gap-3 bg-ink dark:bg-white hover:bg-ink/90 dark:hover:bg-white/90 text-white dark:text-[#18181b] font-bold rounded-2xl transition-all shadow-lg hover:shadow-xl disabled:opacity-60 active:scale-[0.98]"
+            style={{ padding: 'clamp(14px, 1.4vw, 17px) clamp(24px, 2vw, 28px)', fontSize: 'clamp(.9375rem, 1vw, 1.0625rem)' }}
           >
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <GoogleIcon size={20} />}
             {loading ? 'Entrando...' : 'Continuar con Google'}
