@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Store, Shield, FileText, ShoppingBag, ChevronDown, Sun, Moon } from 'lucide-react';
+import { ArrowLeft, Store, Shield, FileText, ShoppingBag, ChevronDown, Sun, Moon, Heart, Instagram } from 'lucide-react';
 import { LogoFull, KtrlMark } from './Brand';
 
 // Mismo tratamiento de card que la landing (CARD_TINTED en LandingScreen):
@@ -142,8 +142,11 @@ function LegalLayout({ title, subtitle, icon: Icon, children, onBack, actualizad
             © {new Date().getFullYear()} LOKAL. Todos los derechos reservados.
           </p>
 
-          <nav className="mt-4 flex items-center justify-center gap-5 text-xs font-semibold"
+          {/* flex-wrap: con "Quiénes somos" son cuatro y en pantallas
+              angostas tienen que poder pasar a dos líneas. */}
+          <nav className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-semibold"
             style={{ color: 'var(--text-secondary, #999)' }}>
+            <button onClick={() => navigateLegal('nosotros')} className="lok-tap lok-link-btn hover:text-brand">Quiénes somos</button>
             <button onClick={() => navigateLegal('terminos')} className="lok-tap lok-link-btn hover:text-brand">Términos</button>
             <button onClick={() => navigateLegal('privacidad')} className="lok-tap lok-link-btn hover:text-brand">Privacidad</button>
             <button onClick={() => navigateLegal('comercios')} className="lok-tap lok-link-btn hover:text-brand">Comercios</button>
@@ -602,6 +605,148 @@ function ComerciosPage({ onBack }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL — renderiza la página legal correcta
 // ═══════════════════════════════════════════════════════════════════════════════
+// Ficha de quien está detrás del producto. Array y no un bloque suelto:
+// hoy hay una sola persona, y cuando el equipo crezca se agrega acá sin
+// tocar el layout (la grilla pasa sola a dos columnas en pantalla ancha).
+//
+// Sin foto todavía: en lugar de un placeholder gris o un avatar genérico de
+// stock, va la inicial sobre el color de marca — se lee intencional y no
+// como una imagen que faltó cargar.
+const PERSONAS = [
+  {
+    nombre: 'Katriel Martínez',
+    rol: 'Diseño y desarrollo',
+    inicial: 'K',
+    desc: 'Armo y mantengo LOKAL de punta a punta. Si escribís por un problema o una idea, me llega a mí.',
+    instagram: 'katriel.martinez',
+  },
+];
+
+function Personas() {
+  return (
+    <div className={`grid gap-3 mt-5 ${PERSONAS.length > 1 ? 'sm:grid-cols-2' : ''}`}>
+      {PERSONAS.map((p) => (
+        <div key={p.nombre} className="rounded-2xl border p-4 flex gap-4 items-start" style={CARD_TINTED}>
+          {/* Avatar: inicial sobre el color de marca. Cuando haya foto, acá
+              va un <img> con el mismo tamaño y radio. */}
+          <span className="w-14 h-14 rounded-2xl shrink-0 flex items-center justify-center"
+            style={{
+              background: 'var(--brand-hex, #00B8D9)',
+              color: '#fff',
+              fontSize: 22,
+              fontWeight: 900,
+              boxShadow: '0 4px 14px rgb(var(--brand, 0 184 217) / 0.35)',
+            }}>
+            {p.inicial}
+          </span>
+          <div className="min-w-0">
+            <p className="font-black text-[15px] leading-tight">{p.nombre}</p>
+            <p className="text-xs font-bold mb-1.5" style={{ color: 'var(--brand-hex, #00B8D9)' }}>{p.rol}</p>
+            <p className="text-sm leading-relaxed mb-2.5" style={{ color: 'var(--text-secondary, #999)' }}>
+              {p.desc}
+            </p>
+            {p.instagram && (
+              <a href={`https://instagram.com/${p.instagram}`} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-bold rounded-lg px-2.5 py-1.5 no-underline"
+                style={{
+                  background: 'rgb(var(--brand, 0 184 217) / 0.10)',
+                  color: 'var(--brand-hex, #00B8D9)',
+                }}>
+                <Instagram className="w-3.5 h-3.5" />
+                @{p.instagram}
+              </a>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// "Quiénes somos" vive con las legales y no en el header a propósito: quien
+// llega a la landing es un dueño de negocio evaluando una herramienta, y esa
+// pregunta la busca DESPUÉS de que le interesó el producto, no antes. En el
+// header competiría con "Entrar", que es la única acción que importa arriba.
+//
+// El contenido dice sólo lo que es verificable hoy: quién lo hace, por qué,
+// y qué se puede esperar. Sin métricas inventadas ni "miles de comercios
+// confían en nosotros" — el producto recién arranca y una cifra falsa se
+// nota más que no tener ninguna.
+function NosotrosPage({ onBack }) {
+  return (
+    <LegalLayout
+      title="Quiénes somos"
+      subtitle="Quién está detrás de LOKAL y para qué lo hicimos."
+      icon={Heart}
+      actualizado="julio 2026"
+      onBack={onBack}
+    >
+      <Highlight>
+        <strong>En una línea:</strong> LOKAL LINKS lo hace KTRL, un estudio de Bovril, Entre Ríos. Lo armamos porque en los pueblos hay muchísimos negocios buenos que no tienen dónde mostrar lo que venden — y contratar una página web no es una opción realista para la mayoría.
+      </Highlight>
+
+      <Section title="Por qué existe" abiertaPorDefecto>
+        <p>
+          Un comercio de barrio compite hoy con negocios que tienen web, catálogo online y presencia en redes. No porque vendan mejor, sino porque se los encuentra más fácil.
+        </p>
+        <p>
+          La opción que quedaba era publicar fotos sueltas en el estado de WhatsApp o en una historia que se borra en 24 horas. Cada cliente que pregunta "¿tenés tal cosa?" o "¿hasta qué hora abrís?" es una venta que cuesta más trabajo de lo que debería.
+        </p>
+        <p>
+          LOKAL LINKS es la respuesta simple a eso: una página con tus cosas, tu horario y tu ubicación, en un link que compartís donde quieras.
+        </p>
+      </Section>
+
+      <Section title="Qué nos importa">
+        <p>
+          <strong>Que lo puedas usar solo.</strong> Si necesitás que alguien te lo configure, fallamos. Todo se carga y se edita desde el celular, sin instalar nada.
+        </p>
+        <p>
+          <strong>Que sea tu página, no nuestra publicidad.</strong> Elegís el color, el orden y qué se muestra. Nuestra marca aparece al pie y nada más.
+        </p>
+        <p>
+          <strong>Que no te ate.</strong> No cobramos comisión por lo que vendés, no hay permanencia y te podés ir cuando quieras. Si sirve, te quedás porque sirve.
+        </p>
+        <p>
+          <strong>Que no te vendamos humo.</strong> Preferimos decirte que algo todavía no está antes que prometerlo. Lo que ves en la página es lo que hay.
+        </p>
+      </Section>
+
+      <Section title="Quién lo hace">
+        <p>
+          KTRL es un estudio chico de Bovril, Entre Ríos. Trabajamos con comercios de la zona, así que los problemas que resuelve LOKAL son los que vemos de cerca todos los días, no los que suponemos desde afuera.
+        </p>
+        <p>
+          Eso tiene una ventaja concreta para vos: si algo no funciona o te falta una función, hay alguien del otro lado que lo lee y te responde.
+        </p>
+        <Personas />
+      </Section>
+
+      <Section title="Hacia dónde va">
+        <p>
+          LOKAL LINKS es la primera pieza de algo más grande. La idea es que con el tiempo los comercios de una misma zona se puedan descubrir entre sí y que un vecino encuentre lo que busca cerca, sin depender de que ya conozca el negocio.
+        </p>
+        <p>
+          No ponemos fechas: preferimos sacar cada cosa cuando esté lista y funcione de verdad. Lo que sí podemos decir es que todo lo que agreguemos va a seguir la misma regla — que lo puedas usar solo, desde el celular, sin complicarte.
+        </p>
+      </Section>
+
+      <Section title="Cómo contactarnos">
+        <p>
+          Si tenés una duda, algo no te funciona o querés proponer una función, escribinos. Nos llega directo y contestamos.
+        </p>
+        <p>
+          Instagram:{' '}
+          <a href="https://instagram.com/katriel.martinez" target="_blank" rel="noopener noreferrer"
+            style={{ color: 'var(--brand-hex, #00B8D9)', fontWeight: 700 }}>
+            @katriel.martinez
+          </a>
+        </p>
+      </Section>
+    </LegalLayout>
+  );
+}
+
 export default function LegalPageView({ page, onNavigate, onBack, isDark, toggleTheme }) {
   // Expone la navegación y el tema al LegalLayout, que está tres niveles más
   // abajo. Mismo mecanismo que ya usaba navigateLegal, para no enhebrar las
@@ -613,5 +758,6 @@ export default function LegalPageView({ page, onNavigate, onBack, isDark, toggle
   if (page === 'terminos')   return <TerminosPage   onBack={onBack} />;
   if (page === 'privacidad') return <PrivacidadPage onBack={onBack} />;
   if (page === 'comercios')  return <ComerciosPage  onBack={onBack} />;
+  if (page === 'nosotros')   return <NosotrosPage   onBack={onBack} />;
   return null;
 }

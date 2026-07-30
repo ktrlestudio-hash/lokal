@@ -33,6 +33,7 @@ const LEGAL_PATHS = {
   '/terminos-y-condiciones': 'terminos',
   '/politica-de-privacidad': 'privacidad',
   '/condiciones-para-comercios': 'comercios',
+  '/quienes-somos': 'nosotros',
 };
 
 function pathToLegal(pathname) {
@@ -40,7 +41,7 @@ function pathToLegal(pathname) {
 }
 
 // Rutas reservadas del sistema — NO son slugs de tienda.
-const RESERVED = new Set(['admin', 'terminos-y-condiciones', 'politica-de-privacidad', 'condiciones-para-comercios', '']);
+const RESERVED = new Set(['admin', 'terminos-y-condiciones', 'politica-de-privacidad', 'condiciones-para-comercios', 'quienes-somos', '']);
 
 // Detecta /:tienda/o/:oferta (oferta individual). Devuelve {tiendaSlug,
 // ofertaSlug} o null. El separador /o/ distingue la oferta de futuras

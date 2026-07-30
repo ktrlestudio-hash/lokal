@@ -1651,8 +1651,12 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
               necesidad. En pantallas angostas vuelven a apilarse solos por
               el flex-wrap, con los legales primero (son lo accionable). */}
           <div className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-3">
-            <nav className="order-1 sm:order-2 flex items-center gap-5 text-xs font-semibold"
+            {/* flex-wrap y justify-center: con "Quiénes somos" son cuatro
+                links y en pantallas angostas necesitan poder pasar a dos
+                líneas sin desbordar. */}
+            <nav className="order-1 sm:order-2 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-semibold"
               style={{ color: 'var(--text-secondary, #999)' }}>
+              <a href="/quienes-somos" className="lok-tap lok-link-btn hover:text-brand">Quiénes somos</a>
               <a href="/terminos-y-condiciones" className="lok-tap lok-link-btn hover:text-brand">Términos</a>
               <a href="/politica-de-privacidad" className="lok-tap lok-link-btn hover:text-brand">Privacidad</a>
               <a href="/condiciones-para-comercios" className="lok-tap lok-link-btn hover:text-brand">Comercios</a>
