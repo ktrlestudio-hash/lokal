@@ -57,9 +57,6 @@ import { calcularBadges, BADGE_CONFIG } from './utils/productBadges';
 import ProductoFormComp from './components/ProductoForm';
 import ProductoSuccessModal from './components/ProductoSuccessModal';
 import DatePicker from './components/DatePicker';
-import HomeScreen from './screens/HomeScreen';
-import ProductDetailScreen from './screens/ProductDetailScreen';
-import TiendaDetailScreen from './screens/TiendaDetailScreen';
 import { CATEGORIES as BASE_CATEGORIES, getCategoryPath, getAllDescendants } from './categories';
 import CategoryIcon from './CategoryIcon';
 import { apiFetch } from './api';
@@ -154,7 +151,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   // cada una) y el selector de abajo deja elegir cuál ver.
   const ambosModulosActivos = isModuleActive(tiendaData, 'ofertas') && isModuleActive(tiendaData, 'catalogo');
 
-  const STORE_SCREENS = ['perfil', 'mensajes', 'productos', 'inicio', 'stats', 'suscripcion'];
+  const STORE_SCREENS = ['perfil', 'mensajes', 'productos', 'stats', 'suscripcion'];
   // Key por tienda (no global al navegador): sin el id, la última pantalla
   // visitada por UNA cuenta se filtraba a la sesión de cualquier otra
   // cuenta que abriera el panel en el mismo navegador (ej. probando varias
@@ -214,16 +211,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [msgFilter,        setMsgFilter]         = useState('todos'); // 'todos' | 'chats' | 'laborales'
   const [closedConvos,     setClosedConvos]      = useState(new Set()); // keys cerradas
   const [showClosed,       setShowClosed]        = useState(false);
-
-  // ── Vista inicio (marketplace read-only) ─────────────────────────────────
-  const [inicioOfertas,         setInicioOfertas]         = useState([]);
-  const [inicioTiendas,         setInicioTiendas]         = useState([]);
-  const [inicioLoadingOfertas,  setInicioLoadingOfertas]  = useState(false);
-  const [homeActiveCat,         setHomeActiveCat]         = useState(null);
-  const [inicioSubScreen,       setInicioSubScreen]       = useState(null); // null | 'producto' | 'tienda'
-  const [inicioSelectedProduct, setInicioSelectedProduct] = useState(null);
-  const [inicioSelectedTienda,  setInicioSelectedTienda]  = useState(null);
-  const [recentSearches,        setRecentSearches]        = useState([]);
 
   // ── Chat flotante (persiste entre pantallas) ──────────────────────────────
   const [floatingChats,   setFloatingChats]   = useState([]); // [{key, collapsed, msg, sending}]
@@ -608,22 +595,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   // Cargar inbox al entrar a mensajes
   useEffect(() => {
     if (screen === 'mensajes') fetchInbox();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen]);
-
-  // Cargar datos del marketplace al entrar a inicio
-  useEffect(() => {
-    if (screen !== 'inicio') return;
-    setInicioSubScreen(null);
-    if (inicioOfertas.length > 0 && inicioTiendas.length > 0) return; // ya cargado
-    setInicioLoadingOfertas(true);
-    Promise.all([
-      apiFetch(`${API_BASE}/ofertas`).then(r => r.ok ? r.json() : []).catch(() => []),
-      apiFetch(`${API_BASE}/tiendas-crud`).then(r => r.ok ? r.json() : []).catch(() => []),
-    ]).then(([ofertas, tiendas]) => {
-      setInicioOfertas(Array.isArray(ofertas) ? ofertas : []);
-      setInicioTiendas(Array.isArray(tiendas) ? tiendas : []);
-    }).finally(() => setInicioLoadingOfertas(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen]);
 
@@ -1335,77 +1306,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     />
   );
 
-  // ── Inicio (vista marketplace read-only) ──────────────────────────────────
-  const myStoreId = String(tienda?.id || tiendaData?.id || '');
-
-  const inicioNavigate = (dest) => {
-    if (dest === 'product-detail') setInicioSubScreen('producto');
-    else if (dest === 'tienda-detail') setInicioSubScreen('tienda');
-    else setInicioSubScreen(null);
-  };
-  const inicioGoBack = () => setInicioSubScreen(null);
-  const addRecentSearch = (q) => setRecentSearches(prev => [q, ...prev.filter(r => r !== q)].slice(0, 8));
-
-  const InicioScreen = () => {
-    const storeOwnContent = inicioOfertas.filter(o => String(o.tiendaId) === myStoreId);
-    const bannerMsg = storeOwnContent.length > 0
-      ? `Tus ${storeOwnContent.length} publicación${storeOwnContent.length > 1 ? 'es aparecen' : ' aparece'} en el feed`
-      : 'Tus publicaciones aparecerán acá cuando las crees';
-
-    const commonProps = {
-      visibleOfertas: inicioOfertas,
-      tiendas: inicioTiendas,
-      allCategories,
-      firebaseUser,
-      navigate: inicioNavigate,
-      goBack: inicioGoBack,
-      setSelectedProduct: setInicioSelectedProduct,
-      setSelectedTienda: setInicioSelectedTienda,
-      openChat: () => {},          // noop: tienda no chatea con otras tiendas desde acá
-      openNotifications: () => {},
-      unreadCount: 0,
-    };
-
-    return (
-      <div className="min-h-screen sa-page-bg pb-24 lg:pb-8">
-        {/* Banner "Vista marketplace" */}
-        <div className="bg-brand/8 dark:bg-brand/12 border-b border-brand/15 px-4 py-2.5 flex items-center gap-2.5 sticky top-0 z-20">
-          <div className="w-2 h-2 rounded-full bg-brand shrink-0" />
-          <p className="text-xs font-semibold text-brand-dark dark:text-brand">
-            Vista marketplace — {bannerMsg}
-          </p>
-        </div>
-
-        {inicioSubScreen === 'producto' && inicioSelectedProduct ? (
-          <ProductDetailScreen
-            {...commonProps}
-            oferta={inicioSelectedProduct}
-            navigateReplace={inicioNavigate}
-            mainScrollRef={{ current: null }}
-            setMapaFocusStore={() => {}} setMapaFocusProduct={() => {}} setMapaAutoRoute={() => {}}
-          />
-        ) : inicioSubScreen === 'tienda' && inicioSelectedTienda ? (
-          <TiendaDetailScreen
-            {...commonProps}
-            tienda={inicioSelectedTienda}
-            navigateReplace={inicioNavigate}
-          />
-        ) : (
-          <HomeScreen
-            {...commonProps}
-            homeActiveCat={homeActiveCat}
-            setHomeActiveCat={setHomeActiveCat}
-            loadingOfertas={inicioLoadingOfertas}
-            addRecentSearch={addRecentSearch}
-            recentSearches={recentSearches}
-            clearRecentSearches={() => setRecentSearches([])}
-            navigateSearch={() => {}}
-            VENTAJA_CONFIG={{}}
-          />
-        )}
-      </div>
-    );
-  };
 
   // ── Suscripción ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -3032,7 +2932,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           {screen === 'suscripcion' && SuscripcionScreen()}
           {screen === 'mi-pagina' && MiPaginaScreen()}
           {screen === 'perfil' && PerfilScreen()}
-          {screen === 'inicio' && InicioScreen()}
         </div>
         {BottomNav()}
         {moreSheetOpen && MoreSheet()}

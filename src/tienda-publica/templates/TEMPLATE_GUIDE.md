@@ -1,12 +1,12 @@
 # Guía para crear un template de TiendaPublica — LOKAL
 
-Pasale este archivo junto con `detail.jsx` como ejemplo y pedile el template que quieras.
+Pasale este archivo junto con `commerce-modern.jsx` como ejemplo y pedile el template que quieras.
 
 ---
 
 ## Qué es un template
 
-Un template es un único archivo `.jsx` que decide **cómo se ve la página pública de una tienda** (`/t/:slug`). Hay 4 actualmente: `detail`, `minimal`, `tarjetas`, `magazine`. Podés crear uno nuevo sin tocar nada más del sistema.
+Un template es un único archivo `.jsx` que decide **cómo se ve la página pública de una tienda** (`/:slug`). Hoy existe uno solo: `commerce-modern.jsx` (estilo Rappi/PedidosYa — hero, chips de categoría, catálogo agrupado, vista lista/grilla, carrito). Los templates `detail`/`minimal`/`tarjetas`/`magazine` que este documento describía se borraron en algún momento — quedaba desactualizado, no eran reales. Podés crear uno nuevo sin tocar nada más del sistema.
 
 ---
 
@@ -167,7 +167,7 @@ const wa = buildWhatsAppUrl(tienda, cart, note);
 
 ## Secciones atómicas reutilizables
 
-Podés importar y usar componentes ya construidos en vez de hacerlos desde cero:
+Podés importar y usar componentes ya construidos en vez de hacerlos desde cero — estos son los que existen hoy y sí están en uso real (varios "Hero"/"Contacto"/etc. genéricos que este documento mencionaba antes eran de templates ya borrados, se sacaron de acá):
 
 ```js
 import { MapaSection } from '../sections/MapaSection.jsx';
@@ -175,11 +175,15 @@ import { MapaSection } from '../sections/MapaSection.jsx';
 // Props: tienda, isDark
 // El mapa es clickeable y abre pantalla completa con "Cómo llegar"
 
-import { HeroSection } from '../sections/Hero.jsx';
-// Props: tienda, isDark, variant ('centered'|'split'|'minimal')
+import { HorariosSheet } from '../sections/HorariosSheet.jsx';
+// Bottom sheet con el horario completo de la tienda + estado abierto/cerrado
 
-import { ContactoSection } from '../sections/Contacto.jsx';
-// Props: tienda, isDark, variant ('minimal'|'cards')
+import { ShareSheet } from '../sections/ShareSheet.jsx';
+// Bottom sheet de compartir (copiar link, WhatsApp, Facebook, Instagram)
+
+import { TiendaFooter } from '../sections/TiendaFooter.jsx';
+import { TiendaNavBar } from '../sections/TiendaNavBar.jsx';
+// Footer y bottom-nav propios del modo standalone (/:slug público)
 ```
 
 ---
