@@ -11,6 +11,7 @@ import { isModuleActive, deriveColorPalette, getEstadoApertura } from './tienda-
 import { useGeolocation } from './hooks';
 import TransferenciaModal from './store/modals/TransferenciaModal';
 import { useProductosOfertas } from './store/hooks/useProductosOfertas';
+import { useInbox } from './store/hooks/useInbox';
 import {
   Store, Package, MessageSquare, Search, ArrowLeft, Globe, Home,
   Send, MapPin, CheckCircle, X, Loader2, AlertCircle,
@@ -179,8 +180,13 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [tienda, setTienda] = useState(null);
 
   // ── Inbox (mensajes directos de clientes) ─────────────────────────────────
-  const [inboxConvos,      setInboxConvos]      = useState([]);
-  const [inboxLoading,     setInboxLoading]      = useState(false);
+  // Estado + fetch en useInbox (Fase 3, mismo criterio que
+  // useProductosOfertas) — las mutaciones puntuales de una conversación
+  // siguen abajo, entrelazadas con estado de UI del formulario de chat.
+  const inbox = useInbox();
+  const inboxConvos = inbox.convos;
+  const setInboxConvos = inbox.setConvos;
+  const inboxLoading = inbox.loading;
   const [inboxSelectedKey, setInboxSelectedKey]  = useState(null);
   const [inboxReply,       setInboxReply]        = useState('');
   const [inboxInfoOpen,    setInboxInfoOpen]     = useState(false);
@@ -884,20 +890,9 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     }
   };
 
-  const fetchInbox = async () => {
+  const fetchInbox = () => {
     if (mockMode) return;
-    const storeId = tienda?.id || tiendaData?.id;
-    if (!storeId) return;
-    setInboxLoading(true);
-    try {
-      const res = await apiFetch(`${API_BASE}/messages?storeInbox=1&storeId=${storeId}`, { authRequired: true });
-      if (res.ok) {
-        const data = await res.json();
-        setInboxConvos(data.conversations || []);
-      }
-    } catch { /* silencioso */ } finally {
-      setInboxLoading(false);
-    }
+    inbox.fetchInbox(tienda?.id || tiendaData?.id);
   };
 
   // Archivos elegidos (por input o drag&drop) NO se suman directo al draft:
