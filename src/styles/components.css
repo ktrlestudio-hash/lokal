@@ -442,6 +442,8 @@
   gap: var(--space-4);
 }
 
+/* 768px = BP.md en src/tienda-publica/tokens.js — CSS puro no puede
+   importar el token JS, mantener sincronizado a mano si cambia. */
 @media (min-width: 768px) {
   .ui-grid-2 {
     grid-template-columns: repeat(2, 1fr);

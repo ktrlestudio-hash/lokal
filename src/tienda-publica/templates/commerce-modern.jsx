@@ -39,7 +39,7 @@ import { usePhotoSwipe, PhotoSwipeStyles, PhotoSwipeOverlay } from '../hooks/use
 import { trackPageview, trackClick, trackCompartir, trackBusqueda, useTiempoEnPagina } from '../track.js';
 import { OfertaQuickForm } from '../sections/OfertaQuickForm.jsx';
 import { TiendaStatsSheet } from '../sections/TiendaStatsSheet.jsx';
-import { FONT, RADIUS, SHADOW, TRANSITION } from '../tokens.js';
+import { FONT, RADIUS, SHADOW, TRANSITION, DESKTOP_QUERY } from '../tokens.js';
 import {
   nombreDe, fotoDe, descuentoPct, Precio, TituloDescripcion,
   ProductCardList, ProductCardVertical, OfertaMenuButton, QtyControl,
@@ -1217,7 +1217,7 @@ export function TemplateCommerceModern({
                para quedar fijo abajo con flexShrink:0). En horizontal se
                oculta entero: sus acciones ya están en el hero. */
             .cm-nav-mobile { display: contents; }
-            @media (min-width: 860px), (orientation: landscape) and (min-width: 700px) {
+            @media ${DESKTOP_QUERY} {
               .cm-nav-mobile { display: none; }
             }
           `}</style>
@@ -1251,7 +1251,7 @@ export function TemplateCommerceModern({
             /* En horizontal el nav no se monta (sus acciones subieron al
                hero), así que los FABs no tienen que dejarle lugar: sin esto
                quedaban flotando 92px por encima del borde, sobre nada. */
-            @media (min-width: 860px), (orientation: landscape) and (min-width: 700px) {
+            @media ${DESKTOP_QUERY} {
               :root { --cm-navbar-h: 0px; }
             }
             .cm-fab-add, .cm-fab-stats, .cm-fab-edit { transition: transform .12s cubic-bezier(0.34,1.56,0.64,1), filter .15s ease; }
@@ -1408,7 +1408,7 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
            oferta individual, para que pasar de una pantalla a la otra no
            mueva los controles de lugar. */
         .cm-acciones-tienda { display: none; }
-        @media (min-width: 860px), (orientation: landscape) and (min-width: 700px) {
+        @media ${DESKTOP_QUERY} {
           /* Ancladas a la ESQUINA de la ventana, no al final de la franja
              centrada del hero: .cm-hero-ed-inner tiene max-width 720px, así
              que dentro de esa caja los botones terminaban a mitad de camino

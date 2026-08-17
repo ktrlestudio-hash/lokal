@@ -25,7 +25,7 @@ import { HorariosSheet } from './sections/HorariosSheet.jsx';
 import { MapaModal } from './sections/MapaSection.jsx';
 import { usePhotoSwipe, PhotoSwipeStyles, PhotoSwipeOverlay } from './hooks/usePhotoSwipe.jsx';
 import { trackPageview, trackClick, trackCompartir } from './track.js';
-import { FONT } from './tokens.js';
+import { FONT, DESKTOP_QUERY } from './tokens.js';
 
 const F = { fontFamily: FONT.family };
 
@@ -248,7 +248,7 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
       // Solo aplica en el layout horizontal; en mobile vertical manda el
       // ancho. Misma condición que el CSS (ver .oi-acciones-desktop): un
       // celular apaisado también entra acá, aunque no llegue a 860px.
-      const esHorizontal = window.matchMedia('(min-width: 860px), (orientation: landscape) and (min-width: 700px)').matches;
+      const esHorizontal = window.matchMedia(DESKTOP_QUERY).matches;
       if (!esHorizontal) {
         cuerpo.style.removeProperty('--oi-alto-foto');
         cuerpo.style.removeProperty('--oi-ancho-foto');
@@ -363,7 +363,7 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
                  logo de la tienda. */
               .oi-header-info { padding: 30px var(--oi-margen) 18px; }
               .oi-main { padding: 12px var(--oi-margen) 24px; }
-              @media (min-width: 860px), (orientation: landscape) and (min-width: 700px) {
+              @media ${DESKTOP_QUERY} {
                 .oi-header-info, .oi-main { --oi-margen: 20px; }
               }
 
@@ -378,7 +378,7 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
                  orientación apaisada, así ese caso entra al layout
                  horizontal (foto por altura, acciones arriba) en vez de
                  quedar con una foto de 905px que no entra en pantalla. */
-              @media (min-width: 860px), (orientation: landscape) and (min-width: 700px) {
+              @media ${DESKTOP_QUERY} {
                 .oi-acciones-desktop { display: flex; }
                 .oi-nav-mobile { display: none; }
               }
@@ -402,7 +402,7 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
                  indicador, no como control). Se ocultan en táctil, donde el
                  swipe ya es el gesto natural. */
               .oi-flecha { display: none; }
-              @media (min-width: 860px), (orientation: landscape) and (min-width: 700px) {
+              @media ${DESKTOP_QUERY} {
                 .oi-flecha {
                   display: flex; align-items: center; justify-content: center;
                   position: absolute; top: 50%; transform: translateY(-50%);
@@ -440,7 +440,7 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
                  todo el ancho, como estaba. */
               .oi-header-fila { display: block; }
               .oi-header-lado { display: none; }
-              @media (min-width: 860px), (orientation: landscape) and (min-width: 700px) {
+              @media ${DESKTOP_QUERY} {
                 .oi-header-fila {
                   display: grid; grid-template-columns: 1fr auto 1fr;
                   align-items: center; gap: 16px;
@@ -603,7 +603,7 @@ export function OfertaIndividual({ tienda, oferta, isDark, toggleTheme, onVolver
                      (width:auto + object-fit:contain = entra entera, sin
                      recorte ni scroll). --oi-alto-foto lo calcula el JS
                      midiendo el espacio real disponible. */
-                  @media (min-width: 860px), (orientation: landscape) and (min-width: 700px) {
+                  @media ${DESKTOP_QUERY} {
                     .oi-cuerpo { max-width: none; position: relative; }
                     .oi-marco { margin-inline: 0; }
                     .oi-slide { padding-inline: 0; }

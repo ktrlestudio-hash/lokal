@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react';
+import { BP } from '../tokens.js';
 
 let PhotoSwipeLightboxPromise = null;
 function loadPhotoSwipe() {
@@ -63,7 +64,7 @@ const PSWP_UI_CSS = `
   }
   /* Desktop: flechas centradas verticalmente en vez de abajo (igual criterio
      que la referencia — abajo en mobile, a los costados en pantallas anchas). */
-  @media (min-width: 769px) {
+  @media (min-width: ${BP.md}px) {
     .pswp-ui-nav { bottom: auto; top: 50%; transform: translateY(-50%); }
     .pswp-ui-nav:active { transform: translateY(-50%) scale(0.93); }
   }

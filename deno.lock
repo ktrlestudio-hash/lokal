@@ -12,11 +12,16 @@
     "packageJson": {
       "dependencies": [
         "npm:@aws-sdk/client-s3@^3.600.0",
+        "npm:@eslint/js@^9.39.5",
         "npm:@vitejs/plugin-react@^4.3.1",
         "npm:autoprefixer@^10.4.19",
         "npm:clsx@^2.1.1",
+        "npm:eslint-plugin-react-hooks@^5.2.0",
+        "npm:eslint-plugin-react@^7.37.5",
+        "npm:eslint@^9.39.5",
         "npm:firebase@^10.14.1",
         "npm:framer-motion@^12.40.0",
+        "npm:globals@^15.15.0",
         "npm:leaflet@^1.9.4",
         "npm:lucide-react@0.400",
         "npm:motion@^12.40.0",
@@ -28,7 +33,8 @@
         "npm:react@^18.3.1",
         "npm:tailwind-merge@^3.6.0",
         "npm:tailwindcss@^3.4.6",
-        "npm:vite@^5.3.4"
+        "npm:vite@^5.3.4",
+        "npm:vitest@^2.1.9"
       ]
     }
   }

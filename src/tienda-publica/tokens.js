@@ -55,12 +55,24 @@ export const TRANSITION = {
   slow:   'all .35s cubic-bezier(0.16,1,0.3,1)',
 };
 
-// Breakpoints (para lógica JS de responsive)
+// Breakpoints (para lógica JS de responsive) — valores reales en uso hoy en
+// tienda-publica, no aspiracionales. `md: 768` unifica el off-by-one que
+// existía entre components.css (768px) y usePhotoSwipe.jsx (769px): no
+// había ninguna razón funcional para que difirieran, era inconsistencia.
 export const BP = {
   sm: 480,
   md: 768,
   lg: 1024,
 };
+
+// Patrón compuesto real de "desktop o celular apaisado" usado en
+// OfertaIndividual.jsx y commerce-modern.jsx (10+ repeticiones idénticas
+// antes de esto): arriba de 860px SIEMPRE es desktop; entre 700-860px solo
+// cuenta si el dispositivo está en horizontal (celular girado). Se define
+// una vez acá como string reusable tanto para CSS (@media) como para JS
+// (window.matchMedia) — antes cada ocurrencia repetía el string literal a
+// mano, con riesgo real de que una copia quedara desincronizada del resto.
+export const DESKTOP_QUERY = '(min-width: 860px), (orientation: landscape) and (min-width: 700px)';
 
 /**
  * Secciones disponibles con su config por defecto.
