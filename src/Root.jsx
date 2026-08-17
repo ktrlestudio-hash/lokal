@@ -2,6 +2,7 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { auth, onAuthStateChanged, getRedirectResult, signOut } from './firebase';
 import TiendaPublica from './TiendaPublica';
 import OfertaPublica from './OfertaPublica';
+import CarritoPublica from './CarritoPublica';
 import AdminLogin from './AdminLogin';
 import LegalPageView from './LegalPages';
 import LandingScreen from './LandingScreen';
@@ -54,6 +55,16 @@ function pathToOferta(pathname) {
   return null;
 }
 
+// Detecta /:tienda/c/:carrito (pedido individual, módulo "catalogo"). Mismo
+// shape que pathToOferta, separador /c/ en vez de /o/ — nunca colisionan.
+function pathToCarrito(pathname) {
+  const segs = pathname.replace(/^\/+|\/+$/g, '').split('/');
+  if (segs.length === 3 && segs[1] === 'c' && !RESERVED.has(segs[0]) && segs[0] && segs[2]) {
+    return { tiendaSlug: segs[0], carritoSlug: segs[2] };
+  }
+  return null;
+}
+
 // Detecta /:tienda (home de una tienda por su slug). Devuelve el slug o null
 // si la ruta es la raíz, una ruta reservada, o tiene más de 1 segmento.
 function pathToTiendaSlug(pathname) {
@@ -97,6 +108,7 @@ function AppLoader() {
 export default function Root() {
   const [legalPage, setLegalPage] = useState(() => pathToLegal(window.location.pathname));
   const [ofertaRoute, setOfertaRoute] = useState(() => pathToOferta(window.location.pathname));
+  const [carritoRoute, setCarritoRoute] = useState(() => pathToCarrito(window.location.pathname));
   // Oferta ya cargada en memoria (clic interno desde la tienda) — evita el
   // re-fetch: la tienda ya tenía el array completo de ofertas. Si es null y
   // hay ofertaRoute (link externo de WhatsApp/FB), OfertaPublica hace el
@@ -153,6 +165,7 @@ export default function Root() {
       // Al salir de la ruta de oferta (atrás), soltar la copia en memoria —
       // así una futura visita por link externo no reusa datos viejos.
       if (!nextOferta) setOfertaEnMemoria(null);
+      setCarritoRoute(pathToCarrito(window.location.pathname));
       // El resto de las rutas (raíz/landing, /:slug de tienda, /admin) se
       // resuelven leyendo location.pathname en el render, no desde estado:
       // sin este recheck, volver con el botón "atrás" cambiaba la URL pero
@@ -278,6 +291,27 @@ export default function Root() {
         // URL+memoria que ya usa el clic normal desde la tienda.
         onNavegarAOferta={desdeMemoria ? (nuevaOferta) => navegarAOferta(desdeMemoria.tienda, nuevaOferta) : null}
         isFirstLoad={IS_FIRST_LOAD}
+      />
+    );
+  }
+
+  // ── Pedido individual (/:tienda/c/:carrito) — link que reemplaza al
+  //    mensaje de texto plano a WhatsApp: acá el link ES el pedido, con su
+  //    propio OG dinámico (carrito-og edge function) y una vista donde el
+  //    vendedor puede confirmar/cancelar si es el dueño. ────────────────────
+  if (carritoRoute) {
+    const volverATienda = () => {
+      window.history.pushState({}, '', `/${carritoRoute.tiendaSlug}`);
+      setCarritoRoute(null);
+    };
+    return (
+      <CarritoPublica
+        tiendaSlug={carritoRoute.tiendaSlug}
+        carritoSlug={carritoRoute.carritoSlug}
+        firebaseUser={firebaseUser}
+        isDark={isDark}
+        toggleTheme={toggleTheme}
+        onVolver={volverATienda}
       />
     );
   }

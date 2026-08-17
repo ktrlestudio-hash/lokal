@@ -1,0 +1,11 @@
+# Headers de seguridad — portados de netlify.toml [[headers]] (mismos
+# valores, mismo motivo cada uno). El CSP dinámico (antes csp-headers.js,
+# una Edge Function de Netlify) NO está acá todavía: se migra en la etapa
+# de Fase 0 que porta las Edge Functions a Cloudflare — hasta entonces el
+# sitio corre sin CSP explícito, no sin headers de seguridad en general.
+/*
+  Permissions-Policy: camera=(), microphone=(), geolocation=(self)
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Cross-Origin-Opener-Policy: same-origin-allow-popups

@@ -46,8 +46,17 @@
   path = "/:tienda/o/:oferta"
   function = "oferta-og"
 
+# /:tienda/c/:carrito → Edge Function carrito-og: mismo patrón que
+# oferta-og, para un pedido armado desde el catálogo (módulo "catalogo").
+# El link que se comparte con el vendedor entra por acá — la preview ya
+# dice "Pedido de Juan — 3 productos — $4.500" en vez de ser un texto
+# suelto. 3 segmentos, mismo shape que /:tienda/o/:oferta, no colisiona.
+[[edge_functions]]
+  path = "/:tienda/c/:carrito"
+  function = "carrito-og"
+
 # /:slug → Edge Function tienda-og: mismo patrón que oferta-og, para el home
-# de la tienda (antes sin ningún OG dinámico). No colisiona con la de arriba
+# de la tienda (antes sin ningún OG dinámico). No colisiona con las de arriba
 # (3 segmentos vs 1, nunca matchean la misma URL). RESERVED dentro de la
 # función deja pasar /admin, legales y assets estáticos de raíz sin generar OG.
 [[edge_functions]]

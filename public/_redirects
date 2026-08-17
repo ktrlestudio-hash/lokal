@@ -1,0 +1,5 @@
+# Catch-all SPA — equivalente al [[redirects]] de netlify.toml.
+# Todo lo que no matchea un archivo estático real cae en index.html, y
+# Root.jsx resuelve la ruta del lado del cliente (tienda por slug, oferta
+# individual, carrito, legales, admin).
+/*    /index.html   200

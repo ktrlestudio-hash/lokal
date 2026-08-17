@@ -3,6 +3,11 @@ dist/
 .env
 .env.local
 .netlify/
+# Estado local de `wrangler pages dev` (simulación de R2/cache) — ya estaba
+# commiteado desde una sesión anterior, incluye blobs de datos simulados
+# que no son código del proyecto. Destrackeado el 2026-08-17 (ver git rm
+# --cached en el mismo commit que agrega esta línea).
+.wrangler/
 src/tienda-publica/referencia templete/
 # Material de referencia de diseño (páginas guardadas, capturas): 20 MB que
 # no son código del proyecto, mismo criterio que la carpeta de arriba.

@@ -10,10 +10,16 @@ import { X } from 'lucide-react';
 import { RADIUS, SHADOW } from '../tokens.js';
 
 export function Galeria({ tienda, variant = 'strip' }) {
+  // useState ANTES del early return de abajo: con el guard arriba del
+  // hook (como estaba), el hook simplemente no se llamaba cuando
+  // fotos.length < 2, violando las reglas de hooks (detectado por eslint
+  // react-hooks/rules-of-hooks). Este componente no tiene importadores
+  // reales hoy (ver TEMPLATE_GUIDE.md / plan de profesionalización, Fase
+  // 4 — vestigio de templates ya borrados), pero se corrige igual para no
+  // dejar un error real bloqueando el lint.
+  const [lightbox, setLightbox] = useState(null);
   const fotos = [tienda.logo, ...(tienda.galeria || []), ...(tienda.fotos || [])].filter(Boolean);
   if (fotos.length < 2) return null;
-
-  const [lightbox, setLightbox] = useState(null);
 
   const Lightbox = () => lightbox === null ? null : (
     <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>

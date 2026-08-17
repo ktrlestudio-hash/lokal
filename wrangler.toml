@@ -1,0 +1,15 @@
+# Config de Cloudflare Pages para LOKAL LINKS.
+# El binding R2 es lo único que Pages necesita declarar acá — el resto
+# (build command, output dir) se configura en el proyecto directamente o
+# se infiere del comando de deploy (`wrangler pages deploy dist`).
+name = "lokal-links"
+compatibility_date = "2026-08-17"
+pages_build_output_dir = "dist"
+
+# Mismo bucket real que ya usaban las Netlify Functions vía S3-compatible
+# API (lokal-storage, cuenta eae68bb30e6c36481e0b5f04c288c730) — acá se
+# accede nativo, sin credenciales S3 ni salir a la red pública. Las
+# functions lo reciben como env.LOKAL_BUCKET (ver functions/.netlify/functions/_lib/).
+[[r2_buckets]]
+binding = "LOKAL_BUCKET"
+bucket_name = "lokal-storage"

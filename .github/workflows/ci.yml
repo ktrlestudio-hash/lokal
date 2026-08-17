@@ -1,0 +1,34 @@
+name: CI
+
+# Fase 1 del plan de profesionalización: antes de esto no había NINGUNA
+# red de seguridad automatizada — cualquier cambio (incluida la migración
+# a Cloudflare y el refactor grande pendiente de StoreApp.jsx) se hacía a
+# ciegas. Corre en cada push y PR contra main; lint+test+build deben pasar
+# antes de fusionar cualquier cambio.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
