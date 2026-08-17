@@ -3,6 +3,10 @@ dist/
 .env
 .env.local
 .netlify/
+# Config local de Claude Code — permisos de sesión, puede contener secrets
+# pegados en comandos aprobados (ver limpieza de historial 2026-08-17: una
+# API key real quedó acá en 3 commits viejos, forzó un filter-branch).
+.claude/settings.local.json
 # Estado local de `wrangler pages dev` (simulación de R2/cache) — ya estaba
 # commiteado desde una sesión anterior, incluye blobs de datos simulados
 # que no son código del proyecto. Destrackeado el 2026-08-17 (ver git rm
