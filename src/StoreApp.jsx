@@ -12,6 +12,7 @@ import { useGeolocation } from './hooks';
 import TransferenciaModal from './store/modals/TransferenciaModal';
 import { useProductosOfertas } from './store/hooks/useProductosOfertas';
 import { useInbox } from './store/hooks/useInbox';
+import { useTiendaPatch } from './store/hooks/useTiendaPatch';
 import {
   Store, Package, MessageSquare, Search, ArrowLeft, Globe, Home,
   Send, MapPin, CheckCircle, X, Loader2, AlertCircle,
@@ -178,6 +179,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
   // Datos
   const [tienda, setTienda] = useState(null);
+  const tiendaPatch = useTiendaPatch({ tiendaId: tienda?.id || tiendaData?.id, setTienda, onTiendaUpdate });
 
   // ── Inbox (mensajes directos de clientes) ─────────────────────────────────
   // Estado + fetch en useInbox (Fase 3, mismo criterio que
@@ -623,19 +625,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     return cat;
   };
 
-  const persistTiendaPatch = async (patch) => {
-    const res = await apiFetch(`${API_BASE}/tiendas-crud`, {
-      method: 'PATCH',
-      authRequired: true,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: tienda?.id || tiendaData?.id, ...patch }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Error al guardar');
-    setTienda(data);
-    onTiendaUpdate(data);
-    return data;
-  };
+  const persistTiendaPatch = tiendaPatch;
 
   const buildMediaDraft = (section) => {
     if (section === 'foto') {
