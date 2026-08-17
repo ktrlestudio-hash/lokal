@@ -16,15 +16,17 @@ import { useTiendaPatch } from './store/hooks/useTiendaPatch';
 import { StorePageHeader as StorePageHeaderBase } from './store/components/StorePageHeader.jsx';
 import { StoreSidebar as StoreSidebarBase } from './store/components/StoreSidebar.jsx';
 import { StoreBottomNav as StoreBottomNavBase } from './store/components/StoreBottomNav.jsx';
+import { StoreMoreSheet as StoreMoreSheetBase } from './store/components/StoreMoreSheet.jsx';
+import { StoreCreateSheet as StoreCreateSheetBase } from './store/components/StoreCreateSheet.jsx';
 import {
   Store, Package, MessageSquare, Search, ArrowLeft, Globe, Home,
   Send, MapPin, CheckCircle, X, Loader2, AlertCircle,
   TrendingUp, Edit3, ChevronRight, Phone,
   RotateCcw, LogOut, Sun, Moon, AlertTriangle, ChevronDown, Camera,
-  Lock, CreditCard, Zap, CalendarDays, ShieldCheck, RefreshCw,
+  Lock, Zap, CalendarDays, ShieldCheck, RefreshCw,
   Plus, ToggleLeft, ToggleRight, Trash2,
   ExternalLink, Link2, Instagram, Save, Sparkles, Award, Lightbulb,
-  Tag, Gift, Wrench, Copy, Info, FlaskConical, Clock, Palette,
+  Tag, Gift, Wrench, Copy, Info, Clock, Palette,
   Archive, Paperclip, ShoppingBag, Building2,
   User, Hash, CalendarClock, MessageCircle, ChevronLeft,
   LayoutGrid, LayoutList, ArrowUpDown, SlidersHorizontal, ListFilter, Navigation, EyeOff
@@ -5657,123 +5659,33 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   };
 
   // ── "Más" bottom sheet ─────────────────────────────────────────────────────
+  // MoreSheet vive en src/store/components/StoreMoreSheet.jsx (Fase 3).
   const MoreSheet = () => (
-    <div className="lg:hidden fixed inset-0 z-[4400] flex flex-col justify-end" onClick={() => setMoreSheetOpen(false)}>
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-      <div className="relative bg-surface-card rounded-t-3xl px-4 pt-3 pb-4 shadow-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 5.5rem)', animation: 'sheet-up .22s ease' }} onClick={e => e.stopPropagation()}>
-        <div className="w-10 h-1 rounded-full bg-surface-card-2 dark:bg-white/15 mx-auto mb-4" />
-        <div className="flex items-center gap-3 px-1 mb-3">
-          <div className="w-11 h-11 bg-primary/10 rounded-2xl overflow-hidden flex items-center justify-center shrink-0">
-            {firebaseUser?.photoURL ? <img src={firebaseUser.photoURL} alt="" className="w-full h-full object-cover" /> : <span className="text-lg font-bold text-primary">{(firebaseUser?.displayName || 'U')[0].toUpperCase()}</span>}
-          </div>
-          <div className="min-w-0">
-            <p className="font-bold text-sm truncate">{firebaseUser?.displayName || 'Usuario'}</p>
-            <p className="text-xs text-ink-dim truncate">{tiendaInfo.nombre}</p>
-          </div>
-        </div>
-        <div className="space-y-0.5">
-          {[
-            // "Inicio (marketplace)" se sacó: es el feed multi-tienda del
-            // sitio público, no aplica a la gestión de un mono-negocio.
-            // Estadísticas y Suscripción ya no van gateadas por isEmpresa
-            // (ver navItems del sidebar) — visibles para todo plan/rubro.
-            { label: 'Estadísticas', icon: TrendingUp, action: () => { navigateTo('stats'); setMoreSheetOpen(false); } },
-            { label: 'Suscripción', icon: CreditCard, action: () => { navigateTo('suscripcion'); setMoreSheetOpen(false); } },
-            { label: 'Diseño de página', icon: Palette, action: () => { setPaginaForm({ template: tiendaData?.pagina?.template || 'commerce-modern', color: tiendaData?.pagina?.color || '#e4002b', modoOscuro: tiendaData?.pagina?.modoOscuro || false }); setPublicPageForm({ slug: tiendaData?.slug || '', tagline: tiendaData?.tagline || '', whatsapp: tiendaData?.whatsapp || tiendaData?.telefono || '', instagram: tiendaData?.instagram || '' }); setPublicPageError(null); setScreen('mi-pagina'); setMoreSheetOpen(false); } },
-            isAdmin ? { label: 'Panel Admin', icon: ShieldCheck, action: () => { onOpenAdmin?.(); setMoreSheetOpen(false); } } : null,
-          ].filter(Boolean).map(({ label, icon: Icon, action }) => (
-            <button key={label} onClick={action} className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-surface-card-2 dark:hover:bg-white/5 transition-colors text-left">
-              <Icon className="w-5 h-5 text-ink-dim shrink-0" />
-              <span className="font-semibold text-sm">{label}</span>
-            </button>
-          ))}
-          <div className="border-t border-slate-100 dark:border-white/8 my-2" />
-          {isAdmin && (
-            <button onClick={() => { toggleMockMode(); setMoreSheetOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-3 rounded-2xl transition-colors ${mockMode ? 'bg-violet-50 dark:bg-violet-500/10 text-violet-600' : 'hover:bg-surface-card-2 dark:hover:bg-white/5 text-ink-dim'}`}>
-              <FlaskConical className="w-5 h-5 shrink-0" />
-              <span className="font-semibold text-sm">{mockMode ? 'Mock ON — desactivar' : 'Datos mock'}</span>
-            </button>
-          )}
-          <button onClick={toggleTheme} className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-surface-card-2 dark:hover:bg-white/5 transition-colors">
-            {isDark ? <Sun className="w-5 h-5 text-amber-400 shrink-0" /> : <Moon className="w-5 h-5 text-ink-dim shrink-0" />}
-            <span className="font-semibold text-sm">{isDark ? 'Modo claro' : 'Modo oscuro'}</span>
-          </button>
-          <button onClick={onLogout} className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-rose-50 dark:hover:bg-rose-500/10 text-rose-500 transition-colors">
-            <LogOut className="w-5 h-5 shrink-0" />
-            <span className="font-semibold text-sm">Cerrar sesión</span>
-          </button>
-        </div>
-      </div>
-    </div>
+    <StoreMoreSheetBase
+      onClose={() => setMoreSheetOpen(false)}
+      firebaseUser={firebaseUser} tiendaInfo={tiendaInfo} tiendaData={tiendaData}
+      navigateTo={navigateTo} setPaginaForm={setPaginaForm} setPublicPageForm={setPublicPageForm}
+      setPublicPageError={setPublicPageError} setScreen={setScreen}
+      isAdmin={isAdmin} onOpenAdmin={onOpenAdmin} mockMode={mockMode} toggleMockMode={toggleMockMode}
+      isDark={isDark} toggleTheme={toggleTheme} onLogout={onLogout}
+    />
   );
 
-  // ── "Crear" bottom sheet ───────────────────────────────────────────────────
-  const CreateSheet = () => {
-    if (!createSheetOpen && !createSheetClosing) return null;
-    const activeProducts = misProductosSinFiltrar.filter(o => o.activa !== false && o.visible !== false).length;
-    const atProductLimit = activeProducts >= productLimit;
-    const usaCatalogo = isModuleActive(tiendaData, 'catalogo');
-    const opts = [
-      {
-        icon: Tag,
-        color: atProductLimit ? 'bg-surface-card-2 dark:bg-white/8 text-ink-dim' : 'bg-primary/10 text-primary',
-        title: usaCatalogo ? 'Nuevo producto' : 'Nueva oferta',
-        desc: atProductLimit
-          ? `Límite alcanzado: ${productLimit} ${usaCatalogo ? 'productos' : 'ofertas'} (${isEmprendimiento ? 'upgrade a Empresa' : 'upgrade a Premium'})`
-          : usaCatalogo ? 'Publicá un producto en tu vitrina' : 'Publicá una oferta con foto',
-        locked: atProductLimit,
-        action: () => {
-          if (atProductLimit) return;
-          closeCreateSheet();
-          if (usaCatalogo) {
-            setProductoEditing(null);
-            setProductoForm({ titulo: '', descripcion: '', precio: '', precioOriginal: '', badgesForzados: null, financiacion: '', stock: '1', condicion: 'nuevo', categoryId: null, contactoWhatsapp: '' });
-            setProductoFotoFiles([]);
-            setProductoFotoPreviews([]);
-            setProductoSaveErr(null);
-            setProductoAttributes({});
-            setProductoShowForm(true);
-          } else {
-            setOfertaEditing(null);
-            setOfertaForm({ nombre: '', expireAt: '', visible: true });
-            setOfertaFotoFile(null);
-            setOfertaFotoPreview(null);
-                  setOfertaShowForm(true);
-          }
-        }
-      },
-      // "Búsqueda laboral — Próximamente disponible" se saca: era una card
-      // bloqueada que no hacía nada y ocupaba la mitad del sheet. Cuando el
-      // módulo exista se vuelve a sumar acá.
-    ];
-    return (
-      <div className="lg:hidden fixed inset-0 z-[4000] flex flex-col justify-end" onClick={closeCreateSheet}>
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" style={{ animation: createSheetClosing ? 'backdrop-out .22s ease forwards' : 'backdrop-in .22s ease' }} />
-        <div className="relative bg-surface-card rounded-t-3xl px-4 pt-3 shadow-2xl" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 6rem)', animation: createSheetClosing ? 'sheet-down .22s ease forwards' : 'sheet-up .22s ease' }} onClick={e => e.stopPropagation()}>
-          <div className="w-10 h-1 rounded-full bg-surface-card-2 dark:bg-white/15 mx-auto mb-4" />
-          <p className="font-bold text-base px-1 mb-3">¿Qué querés crear?</p>
-          <div className="space-y-2 pb-2">
-            {opts.map(opt => {
-              const Icon = opt.icon;
-              return (
-                <button key={opt.title} onClick={opt.locked ? undefined : opt.action} disabled={opt.locked}
-                  className={`w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-left transition-colors ${opt.locked ? 'border-slate-100 dark:border-white/8 opacity-50 cursor-not-allowed' : 'border-slate-100 dark:border-white/8 hover:border-primary hover:bg-primary/5'}`}>
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${opt.color}`}>
-                    <Icon className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-sm">{opt.title}</p>
-                    <p className="text-xs text-ink-dim">{opt.desc}</p>
-                  </div>
-                  {opt.locked && <span className="ml-auto text-xs bg-surface-card-2 dark:bg-white/10 text-ink-dim px-2 py-1 rounded-lg font-semibold">Pronto</span>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    );
-  };
+  // CreateSheet vive en src/store/components/StoreCreateSheet.jsx (Fase 3).
+  const CreateSheet = () => (
+    <StoreCreateSheetBase
+      createSheetOpen={createSheetOpen} createSheetClosing={createSheetClosing} closeCreateSheet={closeCreateSheet}
+      misProductosSinFiltrar={misProductosSinFiltrar} productLimit={productLimit}
+      tiendaData={tiendaData} isEmprendimiento={isEmprendimiento}
+      setProductoEditing={setProductoEditing} setProductoForm={setProductoForm}
+      setProductoFotoFiles={setProductoFotoFiles} setProductoFotoPreviews={setProductoFotoPreviews}
+      setProductoSaveErr={setProductoSaveErr} setProductoAttributes={setProductoAttributes}
+      setProductoShowForm={setProductoShowForm}
+      setOfertaEditing={setOfertaEditing} setOfertaForm={setOfertaForm}
+      setOfertaFotoFile={setOfertaFotoFile} setOfertaFotoPreview={setOfertaFotoPreview}
+      setOfertaShowForm={setOfertaShowForm}
+    />
+  );
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
