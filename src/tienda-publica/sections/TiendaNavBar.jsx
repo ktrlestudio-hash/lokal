@@ -5,15 +5,14 @@
  * existe bottom-nav global fuera de una sesión logueada, así que esta es la
  * única barra.
  *
- * Orden: Mapa · Compartir (centro, elevado) · Horarios. Ya no hay Carrito
- * (la vista pública es una galería de ofertas tipo flyer, sin carrito) ni
- * Descubrir (era el árbol de preguntas del catálogo con selector de
- * cantidad, ligado al flujo de compra que se quitó). Compartir es la acción
- * principal de esta vista — toma el lugar central elevado que antes ocupaba
- * Descubrir.
+ * Orden: Mapa · Compartir/Carrito (centro, elevado) · Horarios. El centro es
+ * Carrito con contador cuando el módulo Catálogo tiene carrito activo
+ * (carritoCount viene definido) — Compartir sigue disponible desde el botón
+ * flotante del hero, no se pierde. Sin esto, el centro vuelve a ser
+ * Compartir (tiendas sin catálogo, o el propio dueño viendo su tienda).
  */
 import React from 'react';
-import { MapPin, Clock, Share2 } from 'lucide-react';
+import { MapPin, Clock, Share2, ShoppingCart } from 'lucide-react';
 import { RADIUS, FONT } from '../tokens.js';
 
 const F = { fontFamily: FONT.family };
@@ -48,7 +47,8 @@ function NavItem({ Icon, label, onClick }) {
 // justo antes de esta barra, en vez de seguir hasta el final absoluto del
 // documento con la barra flotando (fixed) tapando esa franja sin que nada
 // la empuje a la vista.
-export function TiendaNavBar({ onAbrirMapa, onAbrirHorarios, onCompartir }) {
+export function TiendaNavBar({ onAbrirMapa, onAbrirHorarios, onCompartir, onAbrirCarrito, carritoCount }) {
+  const conCarrito = onAbrirCarrito != null;
   return (
     <div style={{
       flexShrink: 0, zIndex: 250,
@@ -81,21 +81,27 @@ export function TiendaNavBar({ onAbrirMapa, onAbrirHorarios, onCompartir }) {
       <div style={{ display: 'flex', alignItems: 'flex-end', padding: '8px 4px 12px', maxWidth: 460, margin: '0 auto' }}>
         <NavItem Icon={MapPin} label="Mapa" onClick={onAbrirMapa} />
 
-        {/* Compartir — central elevado, mismo tamaño/sombra que el botón
-            central de Home (56px, sombra con el color de marca, no negro
-            genérico). Acción principal de la vista pública de ofertas.
-            Hover con brightness (mismo espíritu que el FAB "Crear" del
-            admin, que cambia de color/rota al interactuar). */}
-        <button className="tp-nav-share" onClick={onCompartir} style={{
+        {/* Central elevado, mismo tamaño/sombra que el botón central de Home
+            (56px, sombra con el color de marca, no negro genérico). Carrito
+            con contador cuando hay catálogo con carrito activo; si no,
+            Compartir sigue siendo la acción principal de la vista de
+            ofertas. Hover con brightness (mismo espíritu que el FAB "Crear"
+            del admin, que cambia de color/rota al interactuar). */}
+        <button className="tp-nav-share" onClick={conCarrito ? onAbrirCarrito : onCompartir} style={{
           flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
           background: 'none', border: 'none', cursor: 'pointer', marginTop: -14,
         }}>
           {/* rounded-2xl (16px) — el central de BottomNav global es w-14 h-14
               rounded-2xl, NO circular (RADIUS.xl/28px era demasiado redondo). */}
-          <div className="tp-nav-share-icon" style={{ width: 56, height: 56, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--tp-primary)', boxShadow: '0 4px 18px color-mix(in srgb, var(--tp-primary) 45%, transparent)', transition: 'filter .15s ease' }}>
-            <Share2 size={22} style={{ color: 'var(--tp-on-primary)' }} />
+          <div className="tp-nav-share-icon" style={{ position: 'relative', width: 56, height: 56, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--tp-primary)', boxShadow: '0 4px 18px color-mix(in srgb, var(--tp-primary) 45%, transparent)', transition: 'filter .15s ease' }}>
+            {conCarrito ? <ShoppingCart size={22} style={{ color: 'var(--tp-on-primary)' }} /> : <Share2 size={22} style={{ color: 'var(--tp-on-primary)' }} />}
+            {conCarrito && carritoCount > 0 && (
+              <span style={{ position: 'absolute', top: -4, right: -4, minWidth: 20, height: 20, padding: '0 5px', borderRadius: RADIUS.full, background: 'var(--tp-secondary, #ef4444)', color: '#fff', fontSize: 11, fontWeight: 800, display: 'grid', placeItems: 'center', border: '2px solid var(--tp-surface)' }}>
+                {carritoCount > 99 ? '99+' : carritoCount}
+              </span>
+            )}
           </div>
-          <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--tp-text-muted)', marginTop: 4, ...F }}>Compartir</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--tp-text-muted)', marginTop: 4, ...F }}>{conCarrito ? 'Carrito' : 'Compartir'}</span>
         </button>
 
         <NavItem Icon={Clock} label="Horarios" onClick={onAbrirHorarios} />

@@ -399,7 +399,7 @@ export default function CategoryPicker({
                   }`}
               >
                 <Check className="w-3.5 h-3.5 shrink-0" />
-                <span>Seleccionar "<strong>{breadcrumb[breadcrumb.length - 1].name}</strong>"</span>
+                <span>Seleccionar &quot;<strong>{breadcrumb[breadcrumb.length - 1].name}</strong>&quot;</span>
               </button>
             </div>
           )}
@@ -409,7 +409,7 @@ export default function CategoryPicker({
             {/* hint cuando hay resultados de búsqueda con taxonomy */}
             {query && visibleCategories.length > 0 && (
               <p className="text-xs text-ink-dim px-2 pb-1">
-                {visibleCategories.length} resultado{visibleCategories.length !== 1 ? 's' : ''} para "<span className="font-medium">{query}</span>"
+                {visibleCategories.length} resultado{visibleCategories.length !== 1 ? 's' : ''} para &quot;<span className="font-medium">{query}</span>&quot;
               </p>
             )}
 

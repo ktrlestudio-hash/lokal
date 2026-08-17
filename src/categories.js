@@ -75,6 +75,170 @@ export const CATEGORIES = [
 
   // ── Otros ────────────────────────────────────────────────────────────────
   { id: 'otros_varios', name: 'Varios', parentId: 'otros' },
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Resto del árbol — portado del proyecto padre (ecosistema LOKAL\LOKAL,
+  // src/categories.js), que ya tenía 27 raíces multi-rubro con 3 niveles de
+  // profundidad. Las 12 raíces de arriba (hamburguesas..otros) son el
+  // desglose fino de MENÚ PARA COMER (LOKAL LINKS nació mono-rubro
+  // "ofertas" de gastronomía) — lo de abajo cubre el resto de rubros
+  // (kiosco/despensa vía 'alimentos', ferretería, ropa, etc.) para cuando
+  // una tienda no sea de comida. Dos ids chocaban entre ambos árboles y se
+  // renombraron para poder convivir sin pisarse:
+  //   'bebidas' (raíz de alimentos/almacén) → 'bebidas_almacen'
+  //     (el 'bebidas' de gastronomía arriba — gaseosas/cervezas/jugos —
+  //     queda intacto con su id original)
+  //   'otros' (raíz genérica del árbol grande) → 'otros_general'
+  //     (el 'otros' de gastronomía arriba, con su hijo 'otros_varios',
+  //     queda intacto)
+  // ════════════════════════════════════════════════════════════════════════
+  { id: 'electronica',       name: 'Electrónica y Tecnología',  shortName: 'Tecno',    icon: 'Smartphone',   parentId: null },
+  { id: 'electrodomesticos', name: 'Electrodomésticos',         shortName: 'Electro',  icon: 'Refrigerator', parentId: null },
+  { id: 'computacion',       name: 'Computación',               shortName: 'PC',       icon: 'Laptop',       parentId: null },
+  { id: 'hogar',             name: 'Hogar y Muebles',           shortName: 'Hogar',    icon: 'Sofa',         parentId: null },
+  { id: 'construccion',      name: 'Construcción y Materiales', shortName: 'Obra',     icon: 'HardHat',      parentId: null },
+  { id: 'ferreteria',        name: 'Ferretería y Herramientas', shortName: 'Ferret.',   icon: 'Wrench',       parentId: null },
+  { id: 'ropa',              name: 'Ropa y Accesorios',         shortName: 'Ropa',     icon: 'Shirt',        parentId: null },
+  { id: 'calzado',           name: 'Calzado',                   shortName: 'Calzado',  icon: 'Footprints',   parentId: null },
+  { id: 'deportes',          name: 'Deportes y Fitness',        shortName: 'Deporte',  icon: 'Dumbbell',     parentId: null },
+  { id: 'automotores',       name: 'Automotores y Repuestos',   shortName: 'Autos',    icon: 'Car',          parentId: null },
+  { id: 'alimentos',         name: 'Alimentos y Bebidas',       shortName: 'Comida',   icon: 'ShoppingCart', parentId: null },
+  { id: 'salud',             name: 'Salud y Belleza',           shortName: 'Salud',    icon: 'Heart',        parentId: null },
+  { id: 'mascotas',          name: 'Mascotas',                  shortName: 'Mascotas', icon: 'PawPrint',     parentId: null },
+  { id: 'juguetes',          name: 'Juguetes y Hobbies',        shortName: 'Juguetes', icon: 'Gamepad2',     parentId: null },
+  { id: 'libros',            name: 'Libros y Revistas',         shortName: 'Libros',   icon: 'BookOpen',     parentId: null },
+  { id: 'servicios',         name: 'Servicios',                 shortName: 'Servicios',icon: 'Settings2',    parentId: null },
+  { id: 'otros_general',     name: 'Otros',                     shortName: 'Otros',    icon: 'Package',      parentId: null },
+
+  // ── Electrónica ───────────────────────────────────────────────────────────
+  { id: 'celulares',      name: 'Celulares y Smartphones',   icon: 'Smartphone', parentId: 'electronica' },
+  { id: 'tablets',        name: 'Tablets',                   icon: 'Tablet',     parentId: 'electronica' },
+  { id: 'audio',          name: 'Audio y Sonido',            icon: 'Headphones', parentId: 'electronica' },
+  { id: 'tv_video',       name: 'TV y Video',                icon: 'Tv',         parentId: 'electronica' },
+  { id: 'fotografia',     name: 'Fotografía y Video',        icon: 'Camera',     parentId: 'electronica' },
+  { id: 'gaming',         name: 'Gaming y Consolas',         icon: 'Gamepad2',   parentId: 'electronica' },
+  { id: 'smartwatches',   name: 'Smartwatches y Wearables',  icon: 'Watch',      parentId: 'electronica' },
+  { id: 'accesorios_cel', name: 'Accesorios para celulares', icon: 'Plug2',      parentId: 'electronica' },
+
+  // Celulares → marcas
+  { id: 'iphone',    name: 'iPhone (Apple)',  parentId: 'celulares' },
+  { id: 'samsung_cel',name: 'Samsung',        parentId: 'celulares' },
+  { id: 'motorola',  name: 'Motorola',        parentId: 'celulares' },
+  { id: 'xiaomi',    name: 'Xiaomi',          parentId: 'celulares' },
+  { id: 'otros_cel', name: 'Otros celulares', parentId: 'celulares' },
+
+  // Audio
+  { id: 'auriculares', name: 'Auriculares',          parentId: 'audio' },
+  { id: 'parlantes',   name: 'Parlantes',             parentId: 'audio' },
+  { id: 'eq_sonido',   name: 'Equipos de sonido',    parentId: 'audio' },
+  { id: 'micros',      name: 'Micrófonos',            parentId: 'audio' },
+
+  // TV y Video
+  { id: 'televisores',  name: 'Televisores',   parentId: 'tv_video' },
+  { id: 'proyectores',  name: 'Proyectores',   parentId: 'tv_video' },
+  { id: 'streaming',    name: 'Streaming (Chromecast, Fire TV…)', parentId: 'tv_video' },
+
+  // Gaming
+  { id: 'consolas',      name: 'Consolas',              parentId: 'gaming' },
+  { id: 'juegos_video',  name: 'Videojuegos',            parentId: 'gaming' },
+  { id: 'perifericos',   name: 'Periféricos gamer',      parentId: 'gaming' },
+
+  // ── Computación ───────────────────────────────────────────────────────────
+  { id: 'notebooks',     name: 'Notebooks y Laptops',   parentId: 'computacion' },
+  { id: 'pcs',           name: 'PCs de escritorio',     parentId: 'computacion' },
+  { id: 'monitores',     name: 'Monitores',              parentId: 'computacion' },
+  { id: 'componentes',   name: 'Componentes (placas, RAM…)', parentId: 'computacion' },
+  { id: 'impresoras',    name: 'Impresoras y Scanners',  parentId: 'computacion' },
+  { id: 'redes',         name: 'Redes y Conectividad',   parentId: 'computacion' },
+  { id: 'acc_pc',        name: 'Accesorios PC',          parentId: 'computacion' },
+
+  // ── Electrodomésticos ─────────────────────────────────────────────────────
+  { id: 'cocina_electro',  name: 'Cocina',                parentId: 'electrodomesticos' },
+  { id: 'frio',            name: 'Frío (heladeras, freezer)', parentId: 'electrodomesticos' },
+  { id: 'lavado',          name: 'Lavado y Secado',       parentId: 'electrodomesticos' },
+  { id: 'climatizacion',   name: 'Climatización (AA, estufas)', parentId: 'electrodomesticos' },
+  { id: 'aspiradoras',     name: 'Aspiradoras y Limpieza',parentId: 'electrodomesticos' },
+  { id: 'planchado',       name: 'Planchado y Costura',   parentId: 'electrodomesticos' },
+
+  // Cocina
+  { id: 'microondas',   name: 'Microondas',    parentId: 'cocina_electro' },
+  { id: 'licuadoras',   name: 'Licuadoras y Procesadoras', parentId: 'cocina_electro' },
+  { id: 'cafeteras',    name: 'Cafeteras',     parentId: 'cocina_electro' },
+  { id: 'hornos',       name: 'Hornos eléctricos', parentId: 'cocina_electro' },
+  { id: 'freidoras',    name: 'Freidoras de aire', parentId: 'cocina_electro' },
+
+  // ── Hogar y Muebles ───────────────────────────────────────────────────────
+  { id: 'muebles',       name: 'Muebles',          parentId: 'hogar' },
+  { id: 'iluminacion',   name: 'Iluminación',       parentId: 'hogar' },
+  { id: 'decoracion',    name: 'Decoración',        parentId: 'hogar' },
+  { id: 'textiles',      name: 'Textiles del hogar',parentId: 'hogar' },
+  { id: 'jardin',        name: 'Jardín y Exterior', parentId: 'hogar' },
+  { id: 'cocina_hogar',  name: 'Utensilios de cocina', parentId: 'hogar' },
+  { id: 'bano',          name: 'Baño y Sanitarios', parentId: 'hogar' },
+
+  // ── Construcción ──────────────────────────────────────────────────────────
+  { id: 'materiales_const', name: 'Materiales (cemento, ladrillos)', parentId: 'construccion' },
+  { id: 'hierro_acero',     name: 'Hierro y Acero',                  parentId: 'construccion' },
+  { id: 'madera',           name: 'Madera y Tableros',               parentId: 'construccion' },
+  { id: 'pintura_const',    name: 'Pintura y Revestimientos',        parentId: 'construccion' },
+  { id: 'pisos',            name: 'Pisos y Cerámicos',               parentId: 'construccion' },
+  { id: 'plomeria',         name: 'Plomería y Sanitarios',           parentId: 'construccion' },
+  { id: 'electricidad',     name: 'Electricidad y Cables',           parentId: 'construccion' },
+
+  // ── Ferretería ────────────────────────────────────────────────────────────
+  { id: 'herr_electricas',  name: 'Herramientas eléctricas',  parentId: 'ferreteria' },
+  { id: 'herr_manuales',    name: 'Herramientas manuales',    parentId: 'ferreteria' },
+  { id: 'fijaciones',       name: 'Fijaciones y Tornillos',   parentId: 'ferreteria' },
+  { id: 'seguridad',        name: 'Seguridad y Cerraduras',   parentId: 'ferreteria' },
+  { id: 'soldadura',        name: 'Soldadura',                parentId: 'ferreteria' },
+
+  // ── Ropa ──────────────────────────────────────────────────────────────────
+  { id: 'ropa_hombre',   name: 'Hombre',           parentId: 'ropa' },
+  { id: 'ropa_mujer',    name: 'Mujer',             parentId: 'ropa' },
+  { id: 'ropa_ninos',    name: 'Niños y Bebés',     parentId: 'ropa' },
+  { id: 'accesorios_ropa', name: 'Accesorios',      parentId: 'ropa' },
+  { id: 'bolsas',        name: 'Bolsas y Carteras', parentId: 'ropa' },
+  { id: 'joyeria',       name: 'Joyería y Bisutería', parentId: 'ropa' },
+
+  // ── Deportes ──────────────────────────────────────────────────────────────
+  { id: 'gym',          name: 'Gym y Fitness',      parentId: 'deportes' },
+  { id: 'ciclismo',     name: 'Ciclismo',            parentId: 'deportes' },
+  { id: 'futbol',       name: 'Fútbol',              parentId: 'deportes' },
+  { id: 'running',      name: 'Running',             parentId: 'deportes' },
+  { id: 'natacion',     name: 'Natación',            parentId: 'deportes' },
+  { id: 'otros_dep',    name: 'Otros deportes',      parentId: 'deportes' },
+
+  // ── Automotores ───────────────────────────────────────────────────────────
+  { id: 'repuestos',    name: 'Repuestos y Partes',  parentId: 'automotores' },
+  { id: 'acc_auto',     name: 'Accesorios para autos', parentId: 'automotores' },
+  { id: 'neumaticos',   name: 'Neumáticos y Llantas', parentId: 'automotores' },
+  { id: 'motos',        name: 'Motos y Accesorios',  parentId: 'automotores' },
+  { id: 'lubricantes',  name: 'Lubricantes y Fluidos', parentId: 'automotores' },
+
+  // ── Alimentos (almacén/despensa/kiosco) ─────────────────────────────────
+  { id: 'alimentos_secos', name: 'Alimentos secos y envasados', parentId: 'alimentos' },
+  { id: 'bebidas_almacen', name: 'Bebidas',                      parentId: 'alimentos' },
+  { id: 'frescos',         name: 'Frescos (lácteos, carnes)',    parentId: 'alimentos' },
+  { id: 'panificados',     name: 'Panificados',                   parentId: 'alimentos' },
+  { id: 'limpieza',        name: 'Limpieza del hogar',            parentId: 'alimentos' },
+  { id: 'higiene',         name: 'Higiene personal',             parentId: 'alimentos' },
+
+  // ── Salud ─────────────────────────────────────────────────────────────────
+  { id: 'medicamentos',   name: 'Medicamentos y Vitaminas', parentId: 'salud' },
+  { id: 'cuidado_pers',   name: 'Cuidado personal',         parentId: 'salud' },
+  { id: 'perfumes',       name: 'Perfumes y Fragancias',    parentId: 'salud' },
+  { id: 'optica',         name: 'Óptica',                   parentId: 'salud' },
+
+  // ── Mascotas ──────────────────────────────────────────────────────────────
+  { id: 'perros',     name: 'Perros',            parentId: 'mascotas' },
+  { id: 'gatos',      name: 'Gatos',             parentId: 'mascotas' },
+  { id: 'otros_masc', name: 'Otras mascotas',    parentId: 'mascotas' },
+
+  // ── Servicios ─────────────────────────────────────────────────────────────
+  { id: 'serv_tecnico',  name: 'Servicio técnico',    parentId: 'servicios' },
+  { id: 'serv_const',    name: 'Construcción y reforma', parentId: 'servicios' },
+  { id: 'serv_limpieza', name: 'Limpieza',             parentId: 'servicios' },
+  { id: 'serv_mudanza',  name: 'Mudanzas y fletes',    parentId: 'servicios' },
 ];
 
 // ─── Atributos sugeridos por categoría ───────────────────────────────────────

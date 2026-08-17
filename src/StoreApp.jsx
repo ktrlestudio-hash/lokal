@@ -19,7 +19,7 @@ import {
   Lock, CreditCard, Zap, CalendarDays, ShieldCheck, RefreshCw,
   Plus, ToggleLeft, ToggleRight, Trash2,
   ExternalLink, Link2, Instagram, Save, Sparkles, Award, Lightbulb,
-  Tag, Gift, Wrench, Copy, Menu, Info, Infinity, FlaskConical, Clock, Palette,
+  Tag, Gift, Wrench, Copy, Menu, Info, FlaskConical, Clock, Palette,
   PanelLeft, Archive, Paperclip, ShoppingBag, Building2,
   User, Hash, CalendarClock, MessageCircle, ChevronLeft,
   LayoutGrid, LayoutList, ArrowUpDown, SlidersHorizontal, ListFilter, Navigation, EyeOff
@@ -45,6 +45,7 @@ function diasRestantes(tiendaData) {
 import { LogoBadge, LogoFull, KtrlMark } from './Brand';
 import CategoryPicker from './CategoryPicker';
 import { VENTAJA_CONFIG } from './utils/ventajaConfig';
+import { calcularBadges, BADGE_CONFIG } from './utils/productBadges';
 import ProductoFormComp from './components/ProductoForm';
 import ProductoSuccessModal from './components/ProductoSuccessModal';
 import DatePicker from './components/DatePicker';
@@ -137,6 +138,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const productLimit = isEmprendimiento ? 5 : (isBasico ? 20 : Infinity);
   const galleryLimit = isEmprendimiento ? 3 : (isBasico ? 6 : 10);
 
+  // Antes la pantalla "productos" del nav renderizaba SOLO Ofertas o SOLO
+  // Catálogo según isModuleActive('catalogo') — una tienda con los dos
+  // módulos activos no tenía forma de administrar el que perdía ese
+  // if/else. Con ambosModulosActivos, OfertasScreen/ProductosScreen se
+  // filtran entre sí por tipo (ver el shadowing de misProductos dentro de
+  // cada una) y el selector de abajo deja elegir cuál ver.
+  const ambosModulosActivos = isModuleActive(tiendaData, 'ofertas') && isModuleActive(tiendaData, 'catalogo');
+
   const STORE_SCREENS = ['perfil', 'mensajes', 'productos', 'inicio', 'stats', 'suscripcion'];
   // Key por tienda (no global al navegador): sin el id, la última pantalla
   // visitada por UNA cuenta se filtraba a la sesión de cualquier otra
@@ -145,6 +154,16 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const storeScreenKey = tiendaData?.id ? `lokal-store-screen-${tiendaData.id}` : null;
   const savedScreen = storeScreenKey ? localStorage.getItem(storeScreenKey) : null;
   const [screen, setScreen] = useState(STORE_SCREENS.includes(savedScreen) ? savedScreen : 'perfil');
+
+  // Sub-selector DENTRO de la pantalla "productos", solo relevante cuando
+  // la tienda tiene los módulos 'ofertas' Y 'catalogo' activos a la vez —
+  // antes de esto, la pantalla renderizaba SOLO Ofertas o SOLO Catálogo
+  // según isModuleActive('catalogo'), así que una tienda con ambos módulos
+  // no tenía forma de administrar el que perdía el if/else (ver
+  // plan de profesionalización, Fase 2). 'ofertas' por default: es la
+  // vista más simple, coherente con que LOKAL LINKS nace mono-rubro
+  // 'ofertas' y el catálogo es el módulo que se agrega encima.
+  const [subScreenProductos, setSubScreenProductos] = useState('ofertas');
 
   // Mock test mode (solo admins)
   const [mockMode, setMockMode] = useState(false);
@@ -231,7 +250,13 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
   // Productos
   const PROD_CACHE_KEY = `productos-${tiendaData?.id || 'store'}`;
-  const [misProductos, setMisProductos] = useState(() => cacheGet(PROD_CACHE_KEY) || []);
+  // misProductosSinFiltrar (no "misProductos" a secas): el nombre corto
+  // queda reservado para la versión filtrada por tipo que declaran
+  // OfertasScreen/ProductosScreen dentro de sí mismas (shadowing local) —
+  // ver el comentario ahí. Todo lo demás en este componente (badge del
+  // nav, búsqueda de ítems en Mensajes, menciones) sigue leyendo la lista
+  // COMPLETA acá, sin filtrar, que es lo que necesitan.
+  const [misProductosSinFiltrar, setMisProductos] = useState(() => cacheGet(PROD_CACHE_KEY) || []);
   const [loadingProductos, setLoadingProductos] = useState(false);
 
   // Página pública — edición inline
@@ -341,9 +366,10 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [prodDetailDraft,       setProdDetailDraft]       = useState('');
   const [prodDetailSaving,      setProdDetailSaving]      = useState(false);
   const [prodDetailPhotoConfirm,setProdDetailPhotoConfirm]= useState(null);
+  const [quickPriceOpen, setQuickPriceOpen] = useState(false); // edición rápida en cadena (precio rápido)
   const [productoShowForm, setProductoShowForm] = useState(false);
   const [productoEditing, setProductoEditing] = useState(null);
-  const [productoForm, setProductoForm] = useState({ titulo: '', descripcion: '', precio: '', precioOriginal: '', ventaja: [], financiacion: '', stock: '1', condicion: 'nuevo', categoryId: null, contactoWhatsapp: '' });
+  const [productoForm, setProductoForm] = useState({ titulo: '', descripcion: '', precio: '', precioOriginal: '', badgesForzados: null, financiacion: '', stock: '1', condicion: 'nuevo', categoryId: null, contactoWhatsapp: '' });
   const [productoCategoryId, setProductoCategoryId] = useState(null); // legacy alias — usar productoForm.categoryId
   const [productoAttributes, setProductoAttributes] = useState({});
   const [productoFotoFiles, setProductoFotoFiles] = useState([]);
@@ -1203,32 +1229,20 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     </div>
   );
 
-  const VENTAJA_TIPS = {
-    precio:         'Tu precio es menor o más conveniente que el de la competencia.',
-    disponibilidad: 'El producto está en stock y disponible para entrega o retiro inmediato.',
-    financiacion:   'Ofrecés cuotas, pago en efectivo diferido u otra forma de financiamiento.',
-    combo:          'Incluís un pack, regalo o producto adicional junto con el producto principal.',
-  };
-
   const closeCreateSheet = () => { setCreateSheetClosing(true); setTimeout(() => { setCreateSheetOpen(false); setCreateSheetClosing(false); }, 220); };
 
-  const VENTAJA_OPTS = Object.entries(VENTAJA_CONFIG).map(([id, v]) => ({
-    id, label: v.label, Icon: v.Icon, tip: VENTAJA_TIPS[id] ?? '',
-    activeClass: `${v.color} text-white border-transparent`,
-    badgeClass: `${v.pastel} ${v.iconColor}`,
-    iconClass: v.iconColor,
-  }));
-
-  const AdvantageBadge = ({ value, compact = false }) => {
-    const meta = VENTAJA_OPTS.find(item => item.id === value);
-    if (!meta) return null;
-    const Icon = meta.Icon;
-    return (
-      <span className={`inline-flex items-center gap-1.5 rounded-lg font-bold ${meta.badgeClass} ${compact ? 'px-2 py-1 text-[10px]' : 'px-2.5 py-1 text-xs'}`}>
-        <Icon className={compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
-        <span>{meta.label}</span>
-      </span>
-    );
+  // Un solo badge visible en las cards chicas de la grilla/lista (mismo
+  // criterio que el sistema viejo VENTAJA_OPTS/AdvantageBadge, que ya no
+  // se usa en ningún lado — ver productBadges.js para el reemplazo
+  // completo). "Oferta" gana sobre "Nuevo"/"Últimos días" cuando hay más
+  // de uno: es la señal con más impacto en la decisión de compra.
+  const ORDEN_PRIORIDAD_BADGE = ['oferta', 'nuevo', 'por_vencer'];
+  const primerBadge = (o) => {
+    const activos = calcularBadges(o);
+    const id = ORDEN_PRIORIDAD_BADGE.find((b) => activos.includes(b)) || activos[0];
+    if (!id) return null;
+    const cfg = BADGE_CONFIG[id];
+    return { id, label: cfg.label, Icon: cfg.Icon, badgeClass: `${cfg.pastel} ${cfg.iconColor}`, iconClass: cfg.iconColor };
   };
 
   // ── PaywallModal ──────────────────────────────────────────────────────────
@@ -1269,7 +1283,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       // "Inicio" (feed marketplace multi-tienda) se sacó: no aplica a la
       // gestión de un mono-negocio.
       ...(isModuleActive(tiendaData, 'mensajes') ? [{ label: 'Mensajes', icon: MessageSquare, id: 'mensajes' }] : []),
-      { label: isModuleActive(tiendaData, 'catalogo') ? 'Mis productos' : 'Ofertas', icon: Zap, id: 'productos', badge: misProductos.filter(o => o.activa !== false && o.visible !== false).length || null },
+      { label: isModuleActive(tiendaData, 'catalogo') ? 'Mis productos' : 'Ofertas', icon: Zap, id: 'productos', badge: misProductosSinFiltrar.filter(o => o.activa !== false && o.visible !== false).length || null },
       // Estadísticas y Suscripción: transversales a todo plan/rubro (la
       // suscripción es 1 mes gratis + monto por rubro que fija el admin
       // general). Antes gateadas con isEmpresa, lo que las ocultaba a las
@@ -1975,7 +1989,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
                         let attContent = null;
                         if (att.type === 'product' || att.type === 'producto') {
-                          const fullProd = misProductos.find(p => String(p.id) === String(att.productoId));
+                          const fullProd = misProductosSinFiltrar.find(p => String(p.id) === String(att.productoId));
                           const foto = att.foto || fullProd?.fotos?.[0] || fullProd?.foto || fullProd?.imageUrl || null;
                           const nombre = att.nombre || fullProd?.titulo || fullProd?.nombre || 'Producto';
                           const precio = att.precio ?? fullProd?.precio ?? null;
@@ -2113,7 +2127,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                       {msg.attachment && !isStore && (() => {
                         const att = msg.attachment;
                         if (att.type === 'product' || att.type === 'producto') {
-                          const fullProd = misProductos.find(p => String(p.id) === String(att.productoId));
+                          const fullProd = misProductosSinFiltrar.find(p => String(p.id) === String(att.productoId));
                           const foto = att.foto || fullProd?.fotos?.[0] || fullProd?.foto || fullProd?.imageUrl || null;
                           const nombre = att.nombre || fullProd?.titulo || fullProd?.nombre || 'Producto';
                           const precio = att.precio ?? fullProd?.precio ?? null;
@@ -2379,7 +2393,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             // Opciones de productos/ofertas (hasta 20 más recientes) — tolera
             // ambos modelos de datos: catálogo (titulo/precio/fotos[]) y
             // ofertas (nombre/imageUrl), según qué módulo tenga activo la tienda.
-            const prodOpts = (misProductos || []).slice(0, 20).map(p => ({
+            const prodOpts = (misProductosSinFiltrar || []).slice(0, 20).map(p => ({
               id: `prod-${p.id}`,
               icon: ShoppingBag,
               label: p.titulo || p.nombre || 'Producto',
@@ -3521,7 +3535,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             {!aiData && !aiLoading && !aiError && (
               <div className="text-center py-6 text-ink-dim">
                 <Lightbulb className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">Presioná "Analizar" para obtener consejos personalizados sobre tu tienda</p>
+                <p className="text-sm">Presioná &quot;Analizar&quot; para obtener consejos personalizados sobre tu tienda</p>
               </div>
             )}
 
@@ -3651,7 +3665,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
             <div>
               <strong>Demasiados rubros.</strong> Elegir menos categorías ayuda a que tu tienda aparezca más relevante para los clientes correctos.
-              Si vendés de todo, considerá elegir solo <strong>"Multirubro"</strong>.
+              Si vendés de todo, considerá elegir solo <strong>&quot;Multirubro&quot;</strong>.
             </div>
           </div>
         )}
@@ -3998,8 +4012,15 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   // sigue teniendo UN solo lugar real de edición; este componente solo
   // cambia CÓMO se ve ese lugar, no agrega una ruta nueva.
   const FieldEditorSheet = () => {
+    // useState ANTES del early return: fieldEditor pasa de null a un
+    // objeto y viceversa en cada apertura/cierre — con el guard arriba del
+    // hook (como estaba antes), este hook simplemente no se llamaba en los
+    // renders donde fieldEditor es null, lo que viola las reglas de hooks
+    // (detectado por eslint react-hooks/rules-of-hooks). El valor inicial
+    // cae a {} cuando no hay editor abierto, sin efecto real porque el
+    // return null de abajo igual no renderiza nada que lo use.
+    const [localValues, setLocalValues] = useState(fieldEditor?.values ?? {});
     if (!fieldEditor) return null;
-    const [localValues, setLocalValues] = useState(fieldEditor.values);
     const setField = (key, value) => setLocalValues(v => ({ ...v, [key]: value }));
 
     return (
@@ -4132,7 +4153,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           titulo: productoForm.titulo.trim(), descripcion: productoForm.descripcion.trim(), fotos,
           precio: productoForm.precio ? Number(productoForm.precio) : null,
           precioOriginal: productoForm.precioOriginal ? Number(productoForm.precioOriginal) : null,
-          ventaja: productoForm.ventaja, financiacion: productoForm.financiacion.trim() || null,
+          badgesForzados: productoForm.badgesForzados, financiacion: productoForm.financiacion.trim() || null,
           stock: productoForm.stock ? Number(productoForm.stock) : null,
           condicion: productoForm.condicion || 'nuevo',
           categoryId: productoForm.categoryId || null,
@@ -4160,7 +4181,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       const p = productoSuccess;
       setProductoSuccess(null);
       setProductoEditing(p);
-      setProductoForm({ titulo: p.titulo, descripcion: p.descripcion || '', precio: p.precio || '', precioOriginal: p.precioOriginal || '', ventaja: Array.isArray(p.ventaja) ? p.ventaja : p.ventaja ? [p.ventaja] : [], financiacion: p.financiacion || '', stock: p.stock ?? '1', condicion: p.condicion || 'nuevo', categoryId: p.categoryId || null, contactoWhatsapp: p.contactoWhatsapp || '' });
+      setProductoForm({ titulo: p.titulo, descripcion: p.descripcion || '', precio: p.precio || '', precioOriginal: p.precioOriginal || '', badgesForzados: p.badgesForzados || null, financiacion: p.financiacion || '', stock: p.stock ?? '1', condicion: p.condicion || 'nuevo', categoryId: p.categoryId || null, contactoWhatsapp: p.contactoWhatsapp || '' });
       setProductoFotoFiles([]); setProductoFotoPreviews(p.fotos || []);
       setProductoSaveErr(null); setProductoAttributes(p.attributes || {});
     };
@@ -4375,6 +4396,20 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   };
 
   const OfertasScreen = () => {
+    // Shadowing intencional de misProductos (el estado real, sin filtrar,
+    // sigue existiendo afuera de esta función — el badge del nav y la
+    // búsqueda de ítems en Mensajes lo necesitan completo). Cuando la
+    // tienda tiene AMBOS módulos activos ('ofertas' y 'catalogo'), sin
+    // este filtro esta pantalla y ProductosScreen mostraban exactamente
+    // los mismos ítems duplicados (comparten backend, ver ofertas.js) — el
+    // discriminador es el mismo que ya usa carrito.js para separar
+    // "producto de catálogo real" de "oferta simple": si tiene precio
+    // numérico, es del catálogo. Con un solo módulo activo, este filtro no
+    // cambia nada (ambosModulosActivos da false y misProductos pasa igual).
+    const misProductos = ambosModulosActivos
+      ? misProductosSinFiltrar.filter(o => typeof o.precio !== 'number')
+      : misProductosSinFiltrar;
+
     const openNew = () => {
       setOfertaEditing(null);
       setOfertaForm({ nombre: '', expireAt: '', visible: true });
@@ -4658,6 +4693,15 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   // ver OfertasScreen más abajo — mismo patrón que MODULES.catalogo vs
   // MODULES.ofertas en netlify/functions/_lib/modules.js.
   const ProductosScreen = () => {
+    // Shadowing simétrico al de OfertasScreen (ver comentario ahí): con
+    // ambos módulos activos, esta pantalla solo muestra ítems CON precio
+    // (productos de catálogo reales) — sin este filtro, mostraba también
+    // las ofertas simples sin precio, duplicando exactamente lo que ya
+    // aparece en OfertasScreen.
+    const misProductos = ambosModulosActivos
+      ? misProductosSinFiltrar.filter(o => typeof o.precio === 'number')
+      : misProductosSinFiltrar;
+
     const showForm = productoShowForm;
     const setShowForm = setProductoShowForm;
     const editingProducto = productoEditing;
@@ -4681,7 +4725,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         return;
       }
       setEditingProducto(null);
-      setForm({ titulo: '', descripcion: '', precio: '', precioOriginal: '', ventaja: [], financiacion: '', stock: '1', condicion: 'nuevo', categoryId: null, contactoWhatsapp: '' });
+      setForm({ titulo: '', descripcion: '', precio: '', precioOriginal: '', badgesForzados: null, financiacion: '', stock: '1', condicion: 'nuevo', categoryId: null, contactoWhatsapp: '' });
       setFotoFiles([]); setFotoPreviews([]);
       setSaveErr(null); setProductoAttributes({});
       setShowForm(true);
@@ -4689,7 +4733,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
     const openEdit = (o) => {
       setEditingProducto(o);
-      setForm({ titulo: o.titulo, descripcion: o.descripcion || '', precio: o.precio || '', precioOriginal: o.precioOriginal || '', ventaja: Array.isArray(o.ventaja) ? o.ventaja : o.ventaja ? [o.ventaja] : [], financiacion: o.financiacion || '', stock: o.stock ?? '1', condicion: o.condicion || 'nuevo', categoryId: o.categoryId || null, contactoWhatsapp: o.contactoWhatsapp || '' });
+      setForm({ titulo: o.titulo, descripcion: o.descripcion || '', precio: o.precio || '', precioOriginal: o.precioOriginal || '', badgesForzados: o.badgesForzados || null, financiacion: o.financiacion || '', stock: o.stock ?? '1', condicion: o.condicion || 'nuevo', categoryId: o.categoryId || null, contactoWhatsapp: o.contactoWhatsapp || '' });
       setFotoFiles([]); setFotoPreviews(o.fotos || []);
       setSaveErr(null); setProductoAttributes(o.attributes || {});
       setShowForm(true);
@@ -4729,7 +4773,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           fotos,
           precio: form.precio ? Number(form.precio) : null,
           precioOriginal: form.precioOriginal ? Number(form.precioOriginal) : null,
-          ventaja: form.ventaja,
+          badgesForzados: form.badgesForzados,
           financiacion: form.financiacion.trim() || null,
           stock: form.stock ? Number(form.stock) : null,
         };
@@ -4823,7 +4867,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
     // Card grilla
     const GridCard = ({ o }) => {
-      const vc = o.ventaja ? (Array.isArray(o.ventaja) ? VENTAJA_OPTS.find(x => x.id === o.ventaja[0]) : VENTAJA_OPTS.find(x => x.id === o.ventaja)) : null;
+      const vc = primerBadge(o);
       const img = o.fotos?.[0];
       const sinStock = o.stock != null && Number(o.stock) === 0;
       return (
@@ -4880,7 +4924,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
     // Card lista
     const ListCard = ({ o }) => {
-      const vc = o.ventaja ? (Array.isArray(o.ventaja) ? VENTAJA_OPTS.find(x => x.id === o.ventaja[0]) : VENTAJA_OPTS.find(x => x.id === o.ventaja)) : null;
+      const vc = primerBadge(o);
       const img = o.fotos?.[0];
       const sinStock = o.stock != null && Number(o.stock) === 0;
       return (
@@ -4939,7 +4983,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       if (!prodDetail) return null;
       const o = prodDetail;
       const fotos = o.fotos?.length ? o.fotos : [];
-      const vc = o.ventaja ? (Array.isArray(o.ventaja) ? VENTAJA_OPTS.find(x => x.id === o.ventaja[0]) : VENTAJA_OPTS.find(x => x.id === o.ventaja)) : null;
+      const vc = primerBadge(o);
 
       const saveField = async (field, value) => {
         const parsed = field === 'precio' || field === 'precioOriginal' ? (value ? Number(value) : null) : value.trim() || null;
@@ -5159,6 +5203,11 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           actionSlot={(
             <>
               {loadingProductos && <Loader2 className="w-4 h-4 animate-spin text-ink-dim shrink-0" />}
+              {activos.length > 0 && (
+                <button onClick={() => setQuickPriceOpen(true)} className="flex items-center gap-1.5 bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-ink dark:text-ink-dim hover:text-brand text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0" title="Editar precios uno por uno">
+                  <Zap className="w-4 h-4" /><span className="hidden sm:inline">Precio rápido</span>
+                </button>
+              )}
               {/* Solo desktop: en móvil el FAB del bottom-nav ya crea */}
               <button onClick={openNew} className="hidden lg:flex items-center gap-1.5 bg-brand hover:bg-brand-light text-white text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0 shadow-sm shadow-brand/20">
                 <Plus className="w-4 h-4" /><span className="hidden sm:inline">Nuevo</span>
@@ -5166,6 +5215,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             </>
           )}
         />
+
+        {quickPriceOpen && (
+          <QuickPriceEditor
+            productos={activos}
+            onClose={() => setQuickPriceOpen(false)}
+            onSaved={(id, patch) => setMisProductos(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p))}
+          />
+        )}
 
         {loadingProductos && misProductos.length === 0 ? (
           <div className="flex-1 overflow-y-auto no-scrollbar p-4 pb-24 lg:pb-4">
@@ -5470,8 +5527,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       // — Contenido — el paso que de verdad hace que la tienda sirva de
       // algo; antes existía SOLO en el cálculo del %, invisible como fila.
       usaCatalogoPerfil
-        ? { key: 'primer-producto', group: 'contenido', icon: Package, done: misProductos.length > 0, label: 'Primer producto', action: () => navigateTo('productos') }
-        : { key: 'primera-oferta',  group: 'contenido', icon: Tag,     done: misProductos.length > 0, label: 'Primera oferta',  action: () => navigateTo('productos') },
+        ? { key: 'primer-producto', group: 'contenido', icon: Package, done: misProductosSinFiltrar.length > 0, label: 'Primer producto', action: () => navigateTo('productos') }
+        : { key: 'primera-oferta',  group: 'contenido', icon: Tag,     done: misProductosSinFiltrar.length > 0, label: 'Primera oferta',  action: () => navigateTo('productos') },
       // — Personalización — opcional, estético. Antes vivía enterrada en un
       // acordeón de "Editar diseño" poco descubierto (hallazgo B4).
       { key: 'color', group: 'custom', icon: Palette, done: !!(tiendaInfo.pagina?.color && tiendaInfo.pagina.color !== '#e4002b'), label: 'Color de marca', action: () => navigateTo('mi-pagina') },
@@ -6002,7 +6059,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   // ── "Crear" bottom sheet ───────────────────────────────────────────────────
   const CreateSheet = () => {
     if (!createSheetOpen && !createSheetClosing) return null;
-    const activeProducts = misProductos.filter(o => o.activa !== false && o.visible !== false).length;
+    const activeProducts = misProductosSinFiltrar.filter(o => o.activa !== false && o.visible !== false).length;
     const atProductLimit = activeProducts >= productLimit;
     const usaCatalogo = isModuleActive(tiendaData, 'catalogo');
     const opts = [
@@ -6019,7 +6076,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           closeCreateSheet();
           if (usaCatalogo) {
             setProductoEditing(null);
-            setProductoForm({ titulo: '', descripcion: '', precio: '', precioOriginal: '', ventaja: [], financiacion: '', stock: '1', condicion: 'nuevo', categoryId: null, contactoWhatsapp: '' });
+            setProductoForm({ titulo: '', descripcion: '', precio: '', precioOriginal: '', badgesForzados: null, financiacion: '', stock: '1', condicion: 'nuevo', categoryId: null, contactoWhatsapp: '' });
             setProductoFotoFiles([]);
             setProductoFotoPreviews([]);
             setProductoSaveErr(null);
@@ -6145,7 +6202,33 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         }}>
           {screen === 'mensajes' && isModuleActive(tiendaData, 'mensajes') && MensajesScreen()}
           {screen === 'stats' && StatsScreen()}
-          {screen === 'productos' && (isModuleActive(tiendaData, 'catalogo') ? ProductosScreen() : OfertasScreen())}
+          {screen === 'productos' && (
+            ambosModulosActivos ? (
+              <>
+                {/* Selector Ofertas/Catálogo — SOLO aparece con los 2 módulos
+                    activos a la vez (ver ambosModulosActivos arriba). Antes
+                    esta pantalla renderizaba directo una de las dos según
+                    isModuleActive('catalogo'), así que una tienda con ambos
+                    módulos no tenía forma de administrar el que perdía el
+                    if/else — el otro simplemente no existía en el nav. */}
+                <div className="flex items-center gap-1.5 px-4 pt-3 pb-1 lg:px-6 lg:pt-4">
+                  {[['ofertas', 'Ofertas', Tag], ['catalogo', 'Catálogo', Package]].map(([key, label, Icon]) => (
+                    <button
+                      key={key}
+                      onClick={() => setSubScreenProductos(key)}
+                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-bold transition-colors ${subScreenProductos === key ? 'bg-brand text-white' : 'text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8'}`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {subScreenProductos === 'catalogo' ? ProductosScreen() : OfertasScreen()}
+              </>
+            ) : (
+              isModuleActive(tiendaData, 'catalogo') ? ProductosScreen() : OfertasScreen()
+            )
+          )}
           {screen === 'suscripcion' && SuscripcionScreen()}
           {screen === 'mi-pagina' && MiPaginaScreen()}
           {screen === 'perfil' && PerfilScreen()}
@@ -6338,5 +6421,111 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       </div>
     </div>
     </>
+  );
+}
+
+// ── QuickPriceEditor — edición rápida en cadena: un producto a la vez,
+// precio en foco grande, editar+Enter o Siguiente para saltear sin tocar
+// nada. Pensado para cargar precios de varios productos seguidos sin volver
+// a la grilla entre uno y otro (pedido explícito de la Fase 2 del plan).
+// Reusa el mismo endpoint/patrón PATCH-de-un-campo que ProductoDetail.
+function QuickPriceEditor({ productos, onClose, onSaved }) {
+  const [idx, setIdx] = useState(0);
+  const [precio, setPrecio] = useState('');
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef(null);
+
+  const total = productos.length;
+  const actual = productos[idx];
+  const esUltimo = idx >= total - 1;
+
+  // Solo re-sincroniza al cambiar de producto (idx) — depender de
+  // actual.precio resetearía el input mientras el usuario está escribiendo.
+  useEffect(() => {
+    setPrecio(actual?.precio != null ? String(actual.precio) : '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idx, actual?.id]);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [idx]);
+
+  if (!actual) return null;
+
+  const avanzar = () => {
+    if (esUltimo) { onClose(); return; }
+    setIdx(i => i + 1);
+  };
+
+  const guardarYAvanzar = async () => {
+    const nuevo = precio.trim() === '' ? null : Number(precio);
+    if (nuevo === (actual.precio ?? null)) { avanzar(); return; }
+    setSaving(true);
+    try {
+      const res = await apiFetch(`${API_BASE}/ofertas`, {
+        method: 'PATCH', authRequired: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: actual.id, precio: nuevo }),
+      });
+      if (res.ok) onSaved(actual.id, { precio: nuevo });
+      haptic('success');
+    } catch { /* silencioso — el producto sigue con su precio anterior */ }
+    finally { setSaving(false); avanzar(); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[6500] flex items-end lg:items-center justify-center" onClick={onClose}>
+      <div className="bg-surface-card rounded-t-3xl lg:rounded-3xl w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-white/10">
+          <div>
+            <h2 className="font-bold text-base flex items-center gap-1.5"><Zap className="w-4 h-4 text-brand" />Precio rápido</h2>
+            <p className="text-xs text-ink-dim mt-0.5">{idx + 1} de {total}</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 shrink-0 rounded-xl hover:bg-surface-card-2 dark:hover:bg-white/10 flex items-center justify-center">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-5 pt-2">
+          <div className="h-1 bg-surface-card-2 dark:bg-white/10 rounded-full overflow-hidden">
+            <div className="h-full bg-brand rounded-full transition-all" style={{ width: `${((idx + 1) / total) * 100}%` }} />
+          </div>
+        </div>
+
+        <div className="px-5 py-6 flex flex-col items-center gap-4">
+          <div className="w-16 h-16 rounded-2xl overflow-hidden bg-surface-card-2 dark:bg-white/8 shrink-0">
+            {actual.fotos?.[0]
+              ? <img src={actual.fotos[0]} alt="" className="w-full h-full object-cover" />
+              : <div className="w-full h-full flex items-center justify-center"><Package className="w-6 h-6 text-ink-dim" /></div>}
+          </div>
+          <p className="font-bold text-sm text-center leading-snug">{actual.titulo}</p>
+
+          <div className="w-full flex items-center bg-surface-card-2 dark:bg-white/5 rounded-2xl border-2 border-brand/30 focus-within:border-brand transition-colors px-4">
+            <span className="text-2xl font-black text-ink-dim">$</span>
+            <input
+              ref={inputRef}
+              type="text" inputMode="numeric"
+              value={precio}
+              onChange={e => setPrecio(e.target.value.replace(/[^\d]/g, ''))}
+              onKeyDown={e => { if (e.key === 'Enter') guardarYAvanzar(); }}
+              placeholder="0"
+              className="flex-1 bg-transparent px-2 py-4 text-3xl font-black text-center outline-none"
+            />
+          </div>
+        </div>
+
+        <div className="px-5 pb-5 pt-1 flex gap-2">
+          <button onClick={avanzar} disabled={saving}
+            className="flex-1 py-3 rounded-2xl border-2 border-slate-200 dark:border-white/10 text-ink-dim dark:text-ink-dim font-bold text-sm hover:bg-surface-card-2 dark:hover:bg-white/5 transition-colors disabled:opacity-50">
+            Saltear
+          </button>
+          <button onClick={guardarYAvanzar} disabled={saving}
+            className="flex-1 py-3 rounded-2xl bg-brand hover:bg-brand-light text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-60">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (esUltimo ? 'Guardar y terminar' : 'Guardar y siguiente')}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

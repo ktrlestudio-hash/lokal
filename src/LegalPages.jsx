@@ -442,7 +442,7 @@ function TerminosPage({ onBack }) {
           En ningún caso LOKAL será responsable por daños directos, indirectos, incidentales o consecuentes derivados del uso de la plataforma, incluyendo pero no limitado a: pérdidas económicas, incumplimiento de acuerdos privados entre un negocio y sus clientes, o productos y servicios que no cumplan expectativas.
         </p>
         <p>
-          El servicio se ofrece "tal como está" y puede presentar interrupciones ocasionales por mantenimiento o causas fuera de nuestro control.
+          El servicio se ofrece &quot;tal como está&quot; y puede presentar interrupciones ocasionales por mantenimiento o causas fuera de nuestro control.
         </p>
       </Section>
 
@@ -542,7 +542,7 @@ function PrivacidadPage({ onBack }) {
           'Oponerte al tratamiento de tus datos en ciertos casos.',
         ]} />
         <p className="mt-3">
-          Para ejercer cualquiera de estos derechos, escribinos a <strong className="text-ink">hola@lokal.com.ar</strong> con el asunto "Datos personales". Respondemos en un plazo máximo de 10 días hábiles.
+          Para ejercer cualquiera de estos derechos, escribinos a <strong className="text-ink">hola@lokal.com.ar</strong> con el asunto &quot;Datos personales&quot;. Respondemos en un plazo máximo de 10 días hábiles.
         </p>
         <p>
           El organismo de control en Argentina es la <strong className="text-ink">Agencia de Acceso a la Información Pública (AAIP)</strong>, ante quien podés presentar una denuncia si considerás que tus derechos no fueron respetados.
@@ -795,7 +795,7 @@ function NosotrosPage({ onBack }) {
                 Un comercio de barrio compite hoy con negocios que tienen web, catálogo online y presencia en redes. No porque vendan mejor, sino porque se los encuentra más fácil.
               </p>
               <p>
-                La opción que quedaba era publicar fotos sueltas en el estado de WhatsApp o en una historia que se borra en 24 horas. Cada cliente que pregunta "¿tenés tal cosa?" o "¿hasta qué hora abrís?" es una venta que cuesta más trabajo de lo que debería.
+                La opción que quedaba era publicar fotos sueltas en el estado de WhatsApp o en una historia que se borra en 24 horas. Cada cliente que pregunta &quot;¿tenés tal cosa?&quot; o &quot;¿hasta qué hora abrís?&quot; es una venta que cuesta más trabajo de lo que debería.
               </p>
               <p>
                 LOKAL LINKS es la respuesta simple a eso: una página con tus cosas, tu horario y tu ubicación, en un link que compartís donde quieras.

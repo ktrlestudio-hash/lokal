@@ -24,9 +24,11 @@ import {
   Loader2, RotateCw, User,
 } from 'lucide-react';
 
+import { LogoSymbol } from '../../Brand.jsx';
 import { MapaSection, MapaModal } from '../sections/MapaSection.jsx';
 import { HorariosSheet } from '../sections/HorariosSheet.jsx';
 import { FiltrosSheet, OrdenarSheet } from '../sections/FiltrosOrdenSheet.jsx';
+import { CarritoSheet } from '../sections/CarritoSheet.jsx';
 import { TiendaNavBar } from '../sections/TiendaNavBar.jsx';
 import { TiendaFooter } from '../sections/TiendaFooter.jsx';
 import { ShareSheet } from '../sections/ShareSheet.jsx';
@@ -40,11 +42,12 @@ import { TiendaStatsSheet } from '../sections/TiendaStatsSheet.jsx';
 import { FONT, RADIUS, SHADOW, TRANSITION } from '../tokens.js';
 import {
   nombreDe, fotoDe, descuentoPct, Precio, TituloDescripcion,
-  ProductCardList, ProductCardVertical, OfertaMenuButton,
+  ProductCardList, ProductCardVertical, OfertaMenuButton, QtyControl,
   CM_LIST_H, CM_LIST_SIDE, CM_VERT_W, CM_VERT_IMG, CM_VERT_BODY,
   iconoDeCategoria, esCategoriaVertical,
 } from '../components/ProductCards.jsx';
 import { OfertaAdminSheet } from '../sections/OfertaAdminSheet.jsx';
+import { calcularBadges, BADGE_CONFIG } from '../../utils/productBadges.js';
 
 const F = { fontFamily: FONT.family };
 
@@ -371,6 +374,22 @@ export function TemplateCommerceModern({
   const [layout, setLayout] = useState('lista');
   const searchInputRef = useRef(null);
 
+  // ── Carrito — reemplaza el patrón viejo de "armar un mensaje y mandarlo
+  // por WhatsApp": acá se arma un pedido con link propio (POST /carrito, ya
+  // construido en el backend) en vez de texto plano. Estado local simple
+  // {ofertaId: qty} — se resetea si se recarga la página (mismo criterio que
+  // un carrito de compra típico, no hace falta persistirlo).
+  const [carritoQty, setCarritoQty] = useState({});
+  const [carritoOpen, setCarritoOpen] = useState(false);
+  const carritoCount = Object.values(carritoQty).reduce((a, b) => a + b, 0);
+  const agregarAlCarrito = (p) => setCarritoQty(prev => ({ ...prev, [p.id]: (prev[p.id] || 0) + 1 }));
+  const quitarDelCarrito = (id) => setCarritoQty(prev => {
+    const next = { ...prev };
+    if (next[id] <= 1) delete next[id];
+    else next[id] -= 1;
+    return next;
+  });
+
   // Tracking de búsqueda — debounce 800ms: sin esto se mandaría un evento
   // por cada tecla tipeada. No se trackea al propio dueño (ver pageview).
   useEffect(() => {
@@ -386,7 +405,7 @@ export function TemplateCommerceModern({
   const [sortOpen, setSortOpen] = useState(false);
   const [precioMin, setPrecioMin] = useState('');
   const [precioMax, setPrecioMax] = useState('');
-  const [soloDescuento, setSoloDescuento] = useState(false);
+  const [filtroBadges, setFiltroBadges] = useState([]);
   const [filtrosAtributos, setFiltrosAtributos] = useState({});
   const [sortBy, setSortBy] = useState('relevancia');
   const SORT_OPTIONS = [
@@ -397,7 +416,7 @@ export function TemplateCommerceModern({
     { value: 'destacados',  label: 'Destacados' },
   ];
   const activeAttrCount = Object.values(filtrosAtributos).filter(v => v && v.length > 0).length;
-  const activeFilterCount = [precioMin !== '' || precioMax !== '', soloDescuento].filter(Boolean).length + activeAttrCount;
+  const activeFilterCount = [precioMin !== '' || precioMax !== '', filtroBadges.length > 0].filter(Boolean).length + activeAttrCount;
 
   // Atributos dinámicos — derivados de tienda.productos[].attributes (ej.
   // tamaño, apto_celiaco, con_extra), mismo criterio que
@@ -434,7 +453,7 @@ export function TemplateCommerceModern({
     const base = productos.filter(p => {
       if (catActiva !== '__todas' && catDe(p) !== catActiva) return false;
       if (q && !nombreDe(p).toLowerCase().includes(q) && !(p.descripcion || '').toLowerCase().includes(q)) return false;
-      if (soloDescuento && !(p.precioOriginal && Number(p.precioOriginal) > Number(p.precio || 0))) return false;
+      if (filtroBadges.length && !calcularBadges(p).some(id => filtroBadges.includes(id))) return false;
       if (pMin !== null && (p.precio == null || Number(p.precio) < pMin)) return false;
       if (pMax !== null && (p.precio == null || Number(p.precio) > pMax)) return false;
       for (const [key, vals] of Object.entries(filtrosAtributos)) {
@@ -451,7 +470,7 @@ export function TemplateCommerceModern({
       if (sortBy === 'destacados')  return (b.rating ?? 0) - (a.rating ?? 0);
       return 0;
     });
-  }, [productos, query, catActiva, soloDescuento, precioMin, precioMax, filtrosAtributos, sortBy]);
+  }, [productos, query, catActiva, filtroBadges, precioMin, precioMax, filtrosAtributos, sortBy]);
 
   // Con orden explícito (no "relevancia"), el agrupado por categoría no
   // tiene sentido — el usuario pidió ordenar TODOS los resultados, no cada
@@ -548,6 +567,15 @@ export function TemplateCommerceModern({
     surf, surf2, border, txt, txtM, primary, onPrimary,
     onOpenAdminMenu: esDueño ? setOfertaAdminTarget : null,
   };
+
+  // Props de carrito por producto — solo si el catálogo (módulo "productos")
+  // está activo. El dueño viendo su propia tienda no necesita agregar al
+  // carrito, así que tampoco se lo ofrecemos (evita que confunda su propia
+  // vista de vendedor con la del cliente).
+  const catalogoConCarrito = s.productos?.activa && !esDueño;
+  const carritoPropsDe = (p) => catalogoConCarrito
+    ? { qty: carritoQty[p.id] || 0, onAdd: agregarAlCarrito, onRemove: quitarDelCarrito }
+    : {};
 
   // standalone (/t/:slug, sin sesión): este componente es la página entera,
   // necesita su propio scroll acotado a 100dvh — mismo patrón que
@@ -846,7 +874,7 @@ export function TemplateCommerceModern({
               </div>
               {query ? (
                 <>
-                  <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: txt }}>Sin resultados para "{query}"</p>
+                  <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: txt }}>Sin resultados para &quot;{query}&quot;</p>
                   <p style={{ margin: '0 0 16px', fontSize: 13, color: txtM }}>Probá con otra palabra o revisá la ortografía</p>
                   <button onClick={() => setQuery('')} style={{ padding: '9px 18px', borderRadius: RADIUS.md, border: `1.5px solid ${border}`, background: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: txt, ...F }}>
                     Limpiar búsqueda
@@ -899,29 +927,29 @@ export function TemplateCommerceModern({
                     // — mismo patrón que LOKAL usa en TiendaDetailScreen.
                     <Carrusel>
                       {items.map(p => (
-                        <ProductCardVertical key={p.id} p={p} onOpen={() => setDetalle(p)} {...cardProps} />
+                        <ProductCardVertical key={p.id} p={p} onOpen={() => setDetalle(p)} {...cardProps} {...carritoPropsDe(p)} />
                       ))}
                     </Carrusel>
                   ) : items.length === 1 ? (
                     // 1 sola: card horizontal normal, como cualquier otra categoría.
-                    <ProductCardList p={items[0]} onOpen={() => setDetalle(items[0])} {...cardProps} />
+                    <ProductCardList p={items[0]} onOpen={() => setDetalle(items[0])} {...cardProps} {...carritoPropsDe(items[0])} />
                   ) : pocasVerticales ? (
                     // 2-3 bebidas: se ajustan al ancho disponible, sin scroll.
                     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${items.length}, 1fr)`, gap: 10 }}>
                       {items.map(p => (
-                        <ProductCardVertical key={p.id} p={p} onOpen={() => setDetalle(p)} fluida {...cardProps} />
+                        <ProductCardVertical key={p.id} p={p} onOpen={() => setDetalle(p)} fluida {...cardProps} {...carritoPropsDe(p)} />
                       ))}
                     </div>
                   ) : layout === 'grilla' ? (
                     <div className="cm-grid">
                       {items.map(p => (
-                        <ProductCardGrid key={p.id} p={p} onOpen={() => setDetalle(p)} {...cardProps} />
+                        <ProductCardGrid key={p.id} p={p} onOpen={() => setDetalle(p)} {...cardProps} {...carritoPropsDe(p)} />
                       ))}
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {items.map(p => (
-                        <ProductCardList key={p.id} p={p} onOpen={() => setDetalle(p)} {...cardProps} />
+                        <ProductCardList key={p.id} p={p} onOpen={() => setDetalle(p)} {...cardProps} {...carritoPropsDe(p)} />
                       ))}
                     </div>
                   )}
@@ -1128,7 +1156,8 @@ export function TemplateCommerceModern({
 
       {/* ── Detalle — vista tipo flyer (imagen + compartir, sin carrito) ── */}
       {detalle && (
-        <ProductDetailModal producto={detalle} onClose={() => setDetalle(null)} onCompartir={compartir} />
+        <ProductDetailModal producto={detalle} onClose={() => setDetalle(null)} onCompartir={compartir}
+          {...(detalle ? carritoPropsDe(detalle) : {})} />
       )}
 
       {/* Modal de mapa compartido — el chip de dirección del hero lo abre
@@ -1150,18 +1179,32 @@ export function TemplateCommerceModern({
         open={filtersOpen} onClose={() => setFiltersOpen(false)}
         precioMin={precioMin} setPrecioMin={setPrecioMin}
         precioMax={precioMax} setPrecioMax={setPrecioMax}
-        soloDescuento={soloDescuento} setSoloDescuento={setSoloDescuento}
+        filtroBadges={filtroBadges} setFiltroBadges={setFiltroBadges}
         atributosDisponibles={atributosDisponibles}
         filtrosAtributos={filtrosAtributos} setFiltrosAtributos={setFiltrosAtributos}
         layout={layout} setLayout={setLayout}
         activeFilterCount={activeFilterCount}
-        onLimpiar={() => { setPrecioMin(''); setPrecioMax(''); setSoloDescuento(false); setFiltrosAtributos({}); setFiltersOpen(false); }}
+        onLimpiar={() => { setPrecioMin(''); setPrecioMax(''); setFiltroBadges([]); setFiltrosAtributos({}); setFiltersOpen(false); }}
       />
       <OrdenarSheet open={sortOpen} onClose={() => setSortOpen(false)} sortBy={sortBy} setSortBy={setSortBy} options={SORT_OPTIONS} />
 
       {/* ── Compartir — sheet con opciones (hero + TiendaNavBar) ── */}
       <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} url={shareUrl} titulo={tienda.nombre}
         onCompartido={(medio) => trackCompartir(tienda.id, medio)} />
+
+      {/* ── Carrito — arma el pedido y dispara el POST. Al confirmarse,
+          navega al link del pedido recién creado (/:slug/c/:carritoSlug,
+          CarritoIndividual) en vez de duplicar una pantalla de "listo" acá:
+          esa vista ya muestra items+total+estado, es la misma que ve
+          después cualquiera que abra el link compartido. */}
+      {catalogoConCarrito && (
+        <CarritoSheet
+          open={carritoOpen} onClose={() => setCarritoOpen(false)}
+          tienda={tienda} productos={productos} carritoQty={carritoQty}
+          onAdd={agregarAlCarrito} onRemove={quitarDelCarrito}
+          onEnviado={(carrito) => { window.location.href = `${window.location.origin}/${tienda.slug}/c/${carrito.slug}`; }}
+        />
+      )}
 
       {/* ── Bottom-nav propio de la tienda — SOLO modo standalone. En modo
           plataforma ya existe el bottom-nav global de LOKAL, provisto por
@@ -1182,6 +1225,8 @@ export function TemplateCommerceModern({
             onAbrirMapa={onAbrirMapa}
             onAbrirHorarios={() => setHorariosOpen(true)}
             onCompartir={compartir}
+            onAbrirCarrito={catalogoConCarrito ? () => setCarritoOpen(true) : null}
+            carritoCount={carritoCount}
           />
         </div>
       )}
@@ -1381,21 +1426,15 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
              la otra no tendría lógica para quien navega. */
           /* Dentro del flujo de la barra (no absolute): así la barra crece
              o se achica con su contenido y las acciones acompañan, en vez
-             de estar clavadas a una coordenada calculada a mano. */
+             de estar clavadas a una coordenada calculada a mano. Las reglas
+             de posicionamiento fino de .cm-hero-ed-info/.cm-hero-ed-social
+             quedaron consolidadas más abajo, en el bloque de la barra chip
+             (buscar "TRES grupos separados") — acá solo el ancla a la
+             esquina. */
           .cm-acciones-tienda {
             display: flex; align-items: center; gap: 8px;
             margin-left: auto; flex-shrink: 0;
           }
-          /* La identidad arranca a la IZQUIERDA (no centrada) y las redes
-             van pegadas a ella, no empujadas al extremo por un margin-left
-             auto: con la identidad centrada y las redes estiradas hacia el
-             borde, esos íconos quedaban flotando a mitad de camino, sin
-             pertenecer ni al nombre ni a la esquina. */
-          .cm-hero-ed-info > div:first-child { justify-content: flex-start; }
-          .cm-hero-ed-social { margin-left: 0 !important; }
-          /* La info deja de estirarse a todo el ancho disponible (flex:1) y
-             mide lo que ocupa su contenido: así las redes terminan donde
-             termina el nombre, y no en el borde de una caja invisible. */
           .cm-hero-ed-info { flex: 0 1 auto; min-width: 0; }
           /* La franja del hero deja de estar acotada a 720px CENTRADOS: eso
              empujaba la identidad a 378px del borde en una ventana de 1440
@@ -1517,24 +1556,76 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
             border: 1px solid color-mix(in srgb, var(--tp-primary) 16%, transparent);
             box-shadow: 0 1px 6px color-mix(in srgb, var(--tp-primary) 12%, transparent);
           }
+          /* Altura real ~62px (logo 42px + padding vertical 10×2) — antes
+             14px de padding vertical la subía a ~70px, más alta de lo que
+             el contenido pedía. border-radius:999px (no un px fijo): un
+             valor fijo como 24px queda MUY por debajo de la mitad de la
+             altura real, así los extremos no cierran en semicírculo sino
+             en una esquina apenas curva — 999px siempre resuelve al
+             semicírculo exacto sin tener que recalcular a mano cada vez
+             que cambia el padding o el tamaño del logo. */
+          /* width:fit-content (no estirada a los 1388px del ancla): con
+             identidad+meta+redes+acciones sumando bastante menos que eso,
+             una barra a ancho completo dejaba un tramo vacío entre las
+             redes y "Mapa/Horarios/Compartir" sin ningún contenido que lo
+             justifique — se leía como que faltaba algo ahí, no como
+             espacio de respiro. Como chip real (no franja), se encoge a lo
+             que su contenido pide y queda pegada a la izquierda. */
+          .cm-hero-ed-row { width: fit-content; max-width: calc(100% - 52px); margin: 20px 26px; padding: 10px 18px; gap: 18px; border-radius: 999px; }
           .cm-hero-ed-info { padding-bottom: 0; }
           /* Nombre con más peso y tracking cerrado: en una barra de una
              línea la tipografía es lo único que carga la jerarquía. */
-          .cm-hero-ed-name { font-size: 17px; letter-spacing: -0.03em; }
-          /* La barra es de UNA línea: el nombre y su meta (estado +
-             dirección) dejan de apilarse y comparten fila. */
-          .cm-hero-ed-info { display: flex; align-items: center; gap: 12px; }
-          .cm-hero-ed-meta { margin-top: 0 !important; flex-shrink: 0; }
-          /* Separador sutil entre la identidad (nombre + estado) y las
-             redes: sin él, íconos de colores y texto se leían como una
-             sola tira. Es la misma jerarquía que usa la vista de oferta. */
-          .cm-hero-ed-social {
-            padding-left: 12px;
+          .cm-hero-ed-name { font-size: 18px; letter-spacing: -0.03em; }
+          /* En el JSX, identidad y redes viven en la MISMA fila (fila1,
+             hermanos con space-between) porque en mobile van juntas arriba,
+             pegadas al avatar — meta es la fila2, debajo. En escritorio se
+             quiere identidad — meta — redes como TRES grupos separados en
+             una sola línea, así que .cm-hero-ed-fila1 pasa a display:
+             contents: deja de pintar su propia caja y sus dos hijos
+             (identidad, social) se vuelven hijos flex DIRECTOS de
+             .cm-hero-ed-info, hermanos reales de meta — recién ahí order
+             puede intercalar meta entre ellos sin tocar el JSX ni duplicar
+             el markup por breakpoint. */
+          .cm-hero-ed-info { display: flex; align-items: center; gap: 22px; }
+          /* !important: fila1 lleva su display:flex inline en el JSX
+             (necesario en mobile, donde SÍ debe ser una caja flex real con
+             space-between) — sin !important esa regla inline gana por
+             especificidad y "contents" nunca se aplica acá, dejando a
+             identidad/social atrapados en su propio flex en vez de volverse
+             hermanos directos de meta. */
+          .cm-hero-ed-fila1 { display: contents !important; }
+          .cm-hero-ed-identidad { order: 1; flex: 0 0 auto; }
+          .cm-hero-ed-meta {
+            order: 2;
+            margin-top: 0 !important; margin-left: 0; padding-left: 22px;
+            flex-shrink: 0;
             border-left: 1px solid var(--tp-border);
           }
-          /* Redes al tamaño de la barra: 36px competían con el logo. */
-          .cm-hero-ed-social a { width: 32px !important; height: 32px !important; border-radius: 10px !important; }
+          /* Separador sutil entre meta y redes, empujada al extremo derecho
+             de la barra (mismo ancla que .cm-acciones-tienda, que vive
+             fuera de .cm-hero-ed-info). */
+          .cm-hero-ed-social {
+            order: 3;
+            margin-left: auto;
+            padding-left: 22px;
+            border-left: 1px solid var(--tp-border);
+          }
+          /* Íconos sociales SIN fondo de color propio: en la barra chica
+             competían como un cuarto lenguaje visual (círculos de marca vs.
+             píldoras con borde vs. texto con puntito). Monocromos como
+             "Sitio web" ya era — el color de marca se reserva para el
+             hover, no para el reposo. */
+          .cm-hero-ed-social a {
+            width: 34px !important; height: 34px !important; border-radius: 11px !important;
+            background: transparent !important;
+            border: 1px solid var(--tp-border) !important;
+            color: var(--tp-text-muted) !important;
+          }
           .cm-hero-ed-social a svg { width: 15px !important; height: 15px !important; }
+          @media (hover: hover) {
+            .cm-hero-ed-social a[data-tooltip="WhatsApp"]:hover { color: #25D366 !important; border-color: #25D366 !important; }
+            .cm-hero-ed-social a[data-tooltip="Instagram"]:hover { color: #E1306C !important; border-color: #E1306C !important; }
+          }
         }
         .cm-accion {
           display: inline-flex; align-items: center; gap: 7px;
@@ -1627,17 +1718,25 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
         <div className="cm-hero-ed-logo" style={{ background: tienda.foto ? primarySoft : primary }}>
           {tienda.foto
             ? <img src={tienda.foto} alt={tienda.nombre} onClick={(e) => { trackClick(tienda.id, 'zoom', { origen: 'logo' }); zoomLogo.abrir(0, e); }} style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }} />
-            : <User size={40} color="#fff" />}
+            /* Símbolo de LOKAL en vez de un ícono de usuario genérico: la
+               tienda todavía no tiene marca propia (sin foto), y hasta que
+               la suba lo que representa la página ES la plataforma —
+               mismo criterio que el logo del header en la vista de
+               oferta individual (LogoSymbolSvg), que ya usaba el símbolo
+               real en vez de un placeholder de "sin foto". */
+            : <LogoSymbol size={40} color="#fff" />}
         </div>
         <div className="cm-hero-ed-info">
-          {/* Título+chip a la izquierda, redes a la derecha (aprovecha el
-              ancho que sobraba en esta fila — antes compartían línea con la
-              descripción abajo, forzando más altura). Si nombre+rating+redes
-              no entran en una fila, el grupo de redes se envuelve DEBAJO
-              (columna propia), no se apilan verticalmente los 2/3 botones
-              entre sí — más legible que un stack de íconos angosto. */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
+          {/* Fila 1 (mobile y escritorio): identidad a la izquierda, redes a
+              la derecha — misma línea que el avatar/nombre, no debajo de
+              meta. Fila 2: meta (estado + ubicación). En escritorio el CSS
+              reordena estos DOS hermanos con `order`/flex para separar
+              identidad de redes con el bloque de meta en el medio (ver
+              media query 860px) — pero la base mobile los mantiene juntos
+              en la fila de arriba, que es como ya funcionaba antes de
+              tocar esto. */}
+          <div className="cm-hero-ed-fila1" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+            <div className="cm-hero-ed-identidad" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
               <h1 className="cm-hero-ed-name">{tienda.nombre}</h1>
               {tienda.rating && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '3px 9px', borderRadius: RADIUS.full, background: surf2, color: txtM, border: `1px solid ${border}`, fontSize: 11.5, fontWeight: 800, flexShrink: 0 }}>
@@ -1647,7 +1746,7 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
               )}
             </div>
             {(wa || igUser || web) && (
-              <div className="cm-hero-ed-social" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}>
+              <div className="cm-hero-ed-social" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                 {wa && (
                   <a aria-label="WhatsApp" data-tooltip="WhatsApp" href={`https://wa.me/54${wa}?text=${encodeURIComponent(`Hola ${tienda.nombre}, te contacto desde Lokal.`)}`} target="_blank" rel="noopener noreferrer" onClick={() => trackClick(tienda.id, 'whatsapp')} style={socialStyle(ED_SOCIAL_GRADIENTS.wa)}>
                     <IconWhatsApp style={{ width: 17, height: 17 }} />
@@ -1665,7 +1764,6 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
                 )}
               </div>
             )}
-
           </div>
           <div className="cm-hero-ed-meta" style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, flexWrap: 'wrap', fontSize: 12, color: txtM }}>
             {texto && (
@@ -1684,10 +1782,14 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
           </div>
         </div>
 
-        {/* Acciones de la tienda — SOLO en horizontal (en mobile viven en la
-            barra inferior, al alcance del pulgar). Dentro de la fila, que en
-            escritorio ES la barra de la tienda: quedan alineadas a la
-            derecha por margin-left auto, sin coordenadas absolutas. */}
+        {/* Acciones de la tienda — SOLO en horizontal. En mobile esto NO se
+            duplica con nada: TiendaNavBar (bottom-nav) se oculta por
+            completo desde 860px porque estos 3 botones YA la reemplazan acá
+            arriba (ver .cm-nav-mobile más abajo) — sin esta fila, Mapa/
+            Horarios/Compartir no tendrían ningún botón accesible en
+            escritorio. Que el texto de .cm-hero-ed-meta (estado/dirección)
+            TAMBIÉN dispare mapa/horarios es un atajo adicional sobre el
+            mismo texto informativo, no una duplicación de esta barra. */}
         {modo === 'standalone' && (
           <div className="cm-acciones-tienda">
             {onAbrirMapa && (
@@ -1800,17 +1902,30 @@ function Carrusel({ children, gap = 12, className = 'cm-chips', padding = '0', a
 
 /* ── Card VERTICAL: ver ProductCardVertical en ../components/ProductCards.jsx ── */
 
-/* ── Card GRILLA: foto arriba, info abajo (catálogo visual). Sin selector de
-   cantidad — click en la card lleva directo al detalle. ── */
-function ProductCardGrid({ p, onOpen, surf, surf2, border, txt, txtM, onOpenAdminMenu }) {
+/* ── Card GRILLA: foto arriba, info abajo (catálogo visual). Con carrito
+   activo, el selector de cantidad (QtyControl) se auto-oculta si no viene
+   onAdd — ver su propio comentario en ProductCards.jsx. ── */
+function ProductCardGrid({ p, onOpen, surf, surf2, border, txt, txtM, primary, onPrimary, onOpenAdminMenu, qty, onAdd, onRemove }) {
   const img = fotoDe(p);
   const pct = descuentoPct(p);
+  // "oferta" ya lo cubre el -X% de arriba (mismo dato, precioOriginal >
+  // precio) — mostrar los dos sería redundante. Acá solo se suman
+  // "nuevo"/"por_vencer", que no tienen ningún equivalente visual todavía.
+  const otrosBadges = calcularBadges(p).filter((id) => id !== 'oferta');
+  const badgeId = otrosBadges[0]; // uno solo, mismo criterio que el admin (no saturar la card chica)
+  const badge = badgeId ? BADGE_CONFIG[badgeId] : null;
   return (
     <div onClick={onOpen} role="button" tabIndex={0} className="no-press cm-card"
       style={{ background: surf, border: `1px solid ${border}`, borderRadius: RADIUS.lg, overflow: 'hidden', cursor: 'pointer', boxShadow: SHADOW.sm, display: 'flex', flexDirection: 'column' }}>
       <div style={{ position: 'relative', aspectRatio: '1 / 1', background: surf2 }}>
         {img ? <img src={img} alt={nombreDe(p)} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center' }}><ShoppingBag size={26} style={{ color: txtM, opacity: 0.5 }} /></div>}
         {pct && <span style={{ position: 'absolute', top: 8, left: 8, padding: '3px 8px', borderRadius: RADIUS.sm, background: 'var(--tp-secondary)', color: 'var(--tp-on-secondary)', fontSize: 11, fontWeight: 900 }}>-{pct}%</span>}
+        {!pct && badge && (
+          <span style={{ position: 'absolute', top: 8, left: 8, padding: '3px 8px', borderRadius: RADIUS.sm, display: 'inline-flex', alignItems: 'center', gap: 3, background: 'var(--tp-surface)', color: txt, fontSize: 10, fontWeight: 800, boxShadow: SHADOW.sm }}>
+            <badge.Icon size={11} />
+            {badge.label}
+          </span>
+        )}
         <OfertaMenuButton onOpen={onOpenAdminMenu ? () => onOpenAdminMenu(p) : null} />
       </div>
       <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 5, flex: 1 }}>
@@ -1820,7 +1935,10 @@ function ProductCardGrid({ p, onOpen, surf, surf2, border, txt, txtM, onOpenAdmi
             <Star size={11} style={{ fill: '#fbbf24', color: '#fbbf24' }} />{p.rating}
           </span>
         )}
-        <div style={{ marginTop: 'auto' }}><Precio p={p} txt={txt} /></div>
+        <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+          <Precio p={p} txt={txt} />
+          <QtyControl qty={qty} onAdd={onAdd} onRemove={onRemove} p={p} primary={primary} onPrimary={onPrimary} surf2={surf2} border={border} txt={txt} size="sm" />
+        </div>
       </div>
     </div>
   );

@@ -1,21 +1,14 @@
 ﻿import React, { useState } from 'react';
 import {
   CheckCircle, Edit3, Eye, X, Package,
-  Tag, Zap, CreditCard, Gift,
   MessageSquare, Phone, ChevronDown, ChevronUp,
   LayoutList, ArrowRight,
 } from 'lucide-react';
+import { calcularBadges, BADGE_CONFIG } from '../utils/productBadges';
 
 const CONDICION_LABEL = {
   nuevo: { label: 'Nuevo', cls: 'bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30' },
   usado: { cls: 'bg-surface-card-2 dark:bg-white/8 text-ink-dim dark:text-ink-dim border border-slate-200 dark:border-white/10', label: 'Usado' },
-};
-
-const VENTAJA_MAP = {
-  precio:        { label: 'Mejor precio',   Icon: Tag,        cls: 'bg-primary/10 dark:bg-primary/20 text-primary border border-primary/20' },
-  disponibilidad:{ label: 'Tenelo hoy',     Icon: Zap,        cls: 'bg-amber-50 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30' },
-  financiacion:  { label: 'Financiación',   Icon: CreditCard, cls: 'bg-surface-card-2 dark:bg-white/8 text-ink-dim border border-slate-200 dark:border-white/10' },
-  combo:         { label: 'Combo especial', Icon: Gift,       cls: 'bg-amber-50 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30' },
 };
 
 // onMisProductos — navega al listado de productos publicados
@@ -26,7 +19,7 @@ export default function ProductoSuccessModal({ product, onEdit, onView, onMisPro
   const foto      = product?.fotos?.[0] || product?.foto || null;
   const precio    = product?.precio ? `$${Number(product.precio).toLocaleString('es-AR')}` : null;
   const cond      = CONDICION_LABEL[product?.condicion] || null;
-  const ventajas  = Array.isArray(product?.ventaja) ? product.ventaja.filter(v => VENTAJA_MAP[v]) : [];
+  const badges    = product ? calcularBadges(product) : [];
   const desc      = product?.descripcion?.trim() || null;
   const stock     = product?.stock;
   const catName   = product?.categoryName || product?.categoryId || null;
@@ -100,13 +93,13 @@ export default function ProductoSuccessModal({ product, onEdit, onView, onMisPro
             </div>
           )}
 
-          {/* Ventajas */}
-          {ventajas.length > 0 && (
+          {/* Badges (calculados) + financiación (campo libre, independiente) */}
+          {(badges.length > 0 || financiacion) && (
             <div className="flex flex-wrap gap-1.5">
-              {ventajas.map(id => {
-                const v = VENTAJA_MAP[id];
+              {badges.map(id => {
+                const v = BADGE_CONFIG[id];
                 return (
-                  <span key={id} className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${v.cls}`}>
+                  <span key={id} className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${v.pastel} ${v.iconColor}`}>
                     <v.Icon className="w-3 h-3" />
                     {v.label}
                   </span>

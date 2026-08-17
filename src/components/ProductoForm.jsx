@@ -1,10 +1,11 @@
 ﻿import React, { useRef, useState } from 'react';
 import {
   Camera, X, AlertCircle, Loader2, CheckCircle,
-  MessageSquare, Check, Info, Gift, Zap, CreditCard, Tag,
+  MessageSquare, Check, Info, EyeOff,
 } from 'lucide-react';
 import CategoryPicker from '../CategoryPicker';
 import AttributesEditor from '../AttributesEditor';
+import { calcularBadges, BADGE_CONFIG } from '../utils/productBadges';
 
 // ─── Condición cards ──────────────────────────────────────────────────────────
 const CONDICION_OPTS = [
@@ -41,42 +42,6 @@ const CONDICION_OPTS = [
   },
 ];
 
-// ─── Ventaja options ──────────────────────────────────────────────────────────
-const VENTAJA_OPTS = [
-  {
-    id: 'precio',
-    label: 'Mejor precio',
-    tip: 'Tu precio es menor o más conveniente que el de la competencia.',
-    Icon: Tag,
-    activeClass: 'bg-primary border-transparent text-white',
-    iconClass: 'text-primary',
-  },
-  {
-    id: 'disponibilidad',
-    label: 'Tenelo hoy',
-    tip: 'El producto está en stock y disponible para entrega o retiro inmediato.',
-    Icon: Zap,
-    activeClass: 'bg-amber-400 border-transparent text-white',
-    iconClass: 'text-amber-500 dark:text-amber-400',
-  },
-  {
-    id: 'financiacion',
-    label: 'Financiación',
-    tip: 'Ofrecés cuotas, pago en efectivo diferido u otra forma de financiamiento.',
-    Icon: CreditCard,
-    activeClass: 'bg-ink-dim border-transparent text-white',
-    iconClass: 'text-ink-dim',
-  },
-  {
-    id: 'combo',
-    label: 'Combo especial',
-    tip: 'Incluís un pack, regalo o producto adicional junto con la oferta principal.',
-    Icon: Gift,
-    activeClass: 'bg-amber-500 border-transparent text-white',
-    iconClass: 'text-amber-500 dark:text-amber-400',
-  },
-];
-
 const cardCls = 'bg-surface-card rounded-2xl border border-slate-200 dark:border-white/10 p-4';
 const labelCls = 'text-xs font-bold text-ink-dim uppercase tracking-wider';
 const inputCls = 'w-full bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand transition-colors dark:text-white placeholder:text-ink-dim';
@@ -109,77 +74,71 @@ const Tip = ({ text }) => {
   );
 };
 
-// ─── VentajaSection ───────────────────────────────────────────────────────────
-function VentajaSection({ form, set, inputCls, labelCls }) {
-  const [infoModal, setInfoModal] = useState(null);
+// ─── BadgesSection ────────────────────────────────────────────────────────────
+// Reemplaza a VentajaSection (checkbox manual "Mejor precio"/"Financiación"/
+// "Combo especial" — conceptos de venta comparativa que no aplican bien a
+// un comercio simple, y que quedaban tildados para siempre sin relación con
+// el estado real del producto). Los 3 badges de acá se CALCULAN solos
+// (ver productBadges.js: reciente → "Nuevo", precioOriginal>precio →
+// "Oferta", vence pronto → "Últimos días") a partir de datos que el
+// formulario ya está juntando (precio/precioOriginal/fecha) — no hay nada
+// que tildar. El único control manual es el override: forzar un badge que
+// no se cumpliría solo, u ocultar uno que sí se cumple.
+function BadgesSection({ form, set, labelCls }) {
+  const previa = {
+    precio: form.precio ? Number(form.precio) : null,
+    precioOriginal: form.precioOriginal ? Number(form.precioOriginal) : null,
+    publishAt: new Date().toISOString(), // al crear, se publica ahora — "Nuevo" siempre aplicaría de forma automática al guardar
+    expireAt: form.expireAt || null,
+    badgesForzados: form.badgesForzados,
+  };
+  const activos = new Set(calcularBadges(previa));
+  const agregar = form.badgesForzados?.agregar || [];
+  const ocultar = form.badgesForzados?.ocultar || [];
 
-  const active = VENTAJA_OPTS.find(v => v.id === infoModal);
-  const ventajas = Array.isArray(form.ventaja) ? form.ventaja : [];
-  const toggle = (id) => set('ventaja', ventajas.includes(id) ? ventajas.filter(x => x !== id) : [...ventajas, id]);
-  const showFinanciacion = ventajas.includes('financiacion');
+  const toggleForzado = (id) => {
+    const seCalculariaSolo = activos.has(id) && !agregar.includes(id);
+    if (seCalculariaSolo) {
+      // Está activo por cálculo real → tocar el chip lo OCULTA.
+      const yaOculto = ocultar.includes(id);
+      set('badgesForzados', {
+        agregar,
+        ocultar: yaOculto ? ocultar.filter(x => x !== id) : [...ocultar, id],
+      });
+    } else {
+      // No se cumple solo → tocar el chip lo FUERZA.
+      const yaForzado = agregar.includes(id);
+      set('badgesForzados', {
+        agregar: yaForzado ? agregar.filter(x => x !== id) : [...agregar, id],
+        ocultar,
+      });
+    }
+  };
 
   return (
-    <>
-      <div className={cardCls}>
-        <p className={`${labelCls} mb-3`}>Ventaja exclusiva <span className="font-normal normal-case text-ink-dim">(opcional · podés elegir varias)</span></p>
-        <div className="grid grid-cols-2 gap-2">
-          {VENTAJA_OPTS.map(v => {
-            const Icon = v.Icon;
-            const isActive = ventajas.includes(v.id);
-            return (
-              <div key={v.id} className="relative">
-                <button
-                  onClick={() => toggle(v.id)}
-                  className={`w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-2xl border-2 transition-all pr-8
-                    ${isActive ? v.activeClass : 'border-slate-200 dark:border-white/15 hover:border-slate-300 dark:hover:border-white/25 text-ink dark:text-ink-dim'}`}
-                >
-                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : v.iconClass}`} />
-                  <span className="font-semibold text-sm">{v.label}</span>
-                </button>
-                <button
-                  onClick={e => { e.stopPropagation(); setInfoModal(v.id); }}
-                  className={`absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full transition-colors
-                    ${isActive ? 'text-white/70 hover:text-white' : 'text-ink-dim hover:text-ink-dim dark:hover:text-ink-dim'}`}
-                >
-                  <Info className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-        {/* financiación siempre en DOM, colapsa sin salto de layout */}
-        <div className={`overflow-hidden transition-all duration-200 ${showFinanciacion ? 'max-h-24 mt-3 opacity-100' : 'max-h-0 opacity-0'}`}>
-          <label className={`${labelCls} block mb-2`}>Detalle de financiación</label>
-          <input value={form.financiacion} onChange={e => set('financiacion', e.target.value)} placeholder="Ej: 12 cuotas sin interés" className={inputCls} />
-        </div>
-      </div>
-
-      {/* Modal info ventaja */}
-      {infoModal && active && (
-        <div className="fixed inset-0 z-[6000] flex items-center justify-center p-6" onClick={() => setInfoModal(null)}>
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative bg-surface-card rounded-3xl p-6 w-full max-w-xs shadow-2xl" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setInfoModal(null)} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-surface-card-2 dark:bg-white/10 text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/15 transition-colors">
-              <X className="w-4 h-4" />
-            </button>
-            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center mb-4 ${active.activeClass}`}>
-              <active.Icon className="w-5 h-5 text-white" />
-            </div>
-            <p className="font-bold text-ink text-base mb-2">{active.label}</p>
-            <p className="text-sm text-ink-dim leading-relaxed">{active.tip}</p>
+    <div className={cardCls}>
+      <p className={`${labelCls} mb-1`}>Badges</p>
+      <p className="text-xs text-ink-dim mb-3">Se calculan solos según precio y fechas — tocá uno para forzarlo u ocultarlo manualmente.</p>
+      <div className="grid grid-cols-3 gap-2">
+        {Object.entries(BADGE_CONFIG).map(([id, cfg]) => {
+          const Icon = cfg.Icon;
+          const isActive = activos.has(id);
+          const isOculto = ocultar.includes(id) && !agregar.includes(id);
+          return (
             <button
-              onClick={() => { toggle(active.id); setInfoModal(null); }}
-              className={`mt-5 w-full py-2.5 rounded-2xl font-bold text-sm transition-colors
-                ${ventajas.includes(active.id)
-                  ? 'bg-surface-card-2 dark:bg-white/10 text-ink-dim dark:text-ink-dim'
-                  : `${active.activeClass} text-white`}`}
+              key={id}
+              type="button"
+              onClick={() => toggleForzado(id)}
+              className={`flex flex-col items-center justify-center gap-1.5 px-2 py-3 rounded-2xl border-2 transition-all
+                ${isActive ? `${cfg.color} border-transparent text-white` : isOculto ? 'border-dashed border-slate-300 dark:border-white/20 text-ink-dim opacity-60' : 'border-slate-200 dark:border-white/15 text-ink-dim hover:border-slate-300 dark:hover:border-white/25'}`}
             >
-              {ventajas.includes(active.id) ? 'Quitar ventaja' : 'Seleccionar'}
+              {isOculto ? <EyeOff className="w-4 h-4 shrink-0" /> : <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : cfg.iconColor}`} />}
+              <span className="font-semibold text-xs">{cfg.label}</span>
             </button>
-          </div>
-        </div>
-      )}
-    </>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -484,8 +443,14 @@ export default function ProductoForm({
         )}
       </div>
 
-      {/* ── Ventaja exclusiva ── */}
-      <VentajaSection form={form} set={set} inputCls={inputCls} labelCls={labelCls} />
+      {/* ── Badges dinámicos (Nuevo/Oferta/Últimos días) ── */}
+      <BadgesSection form={form} set={set} labelCls={labelCls} />
+
+      {/* ── Financiación (campo libre, independiente de los badges) ── */}
+      <div className={cardCls}>
+        <label className={`${labelCls} block mb-2`}>Financiación <span className="font-normal normal-case text-ink-dim">(opcional)</span></label>
+        <input value={form.financiacion} onChange={e => set('financiacion', e.target.value)} placeholder="Ej: 12 cuotas sin interés" className={inputCls} />
+      </div>
 
       {/* ── Contacto ── */}
       <ContactoSection form={form} set={set} tiendaWhatsapp={tiendaWhatsapp} inputCls={inputCls} labelCls={labelCls} />

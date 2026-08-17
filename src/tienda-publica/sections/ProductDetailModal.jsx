@@ -1,18 +1,19 @@
 /**
  * ProductDetailModal — vista ampliada de una oferta: imagen grande con zoom
  * (tap para ampliar, mismo mecanismo que el flyer del proyecto de referencia),
- * nombre, descripción y precio si existen, botón Compartir. Sin selector de
- * cantidad ni "agregar" — LOKAL LINKS no tiene carrito, cada oferta es un
- * flyer individual compartible.
+ * nombre, descripción y precio si existen, botón Compartir. Ofertas simples
+ * (sin módulo Catálogo) siguen siendo un flyer sin selector de cantidad — el
+ * botón "Agregar" solo aparece si el caller pasa onAdd (catálogo con carrito
+ * activo), mismo criterio que QtyControl en ProductCards.jsx.
  */
 import React, { useState } from 'react';
-import { X, Share2, ShoppingBag } from 'lucide-react';
+import { X, Share2, ShoppingBag, Plus, Minus } from 'lucide-react';
 import { FONT, RADIUS, SHADOW } from '../tokens.js';
 import { formatPrice } from '../utils.js';
 
 const F = { fontFamily: FONT.family };
 
-export function ProductDetailModal({ producto, onClose, onCompartir }) {
+export function ProductDetailModal({ producto, onClose, onCompartir, qty = 0, onAdd, onRemove }) {
   const [zoom, setZoom] = useState(false);
   if (!producto) return null;
 
@@ -79,19 +80,40 @@ export function ProductDetailModal({ producto, onClose, onCompartir }) {
             <p style={{ margin: '0 0 18px', fontSize: 14, lineHeight: 1.6, color: 'var(--tp-text-muted)' }}>{producto.descripcion}</p>
           )}
 
-          <button
-            onClick={onCompartir}
-            className="tp-pdm-share"
-            style={{
-              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              padding: '14px', border: 'none', borderRadius: RADIUS.lg,
-              background: 'var(--tp-primary)', color: 'var(--tp-on-primary)', fontWeight: 800, fontSize: 15,
-              cursor: 'pointer', transition: 'transform .12s cubic-bezier(0.34,1.56,0.64,1), filter .15s ease', ...F,
-            }}
-          >
-            <Share2 size={17} />
-            Compartir
-          </button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={onCompartir}
+              className="tp-pdm-share"
+              style={{
+                flex: onAdd ? undefined : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                padding: '14px', border: `1.5px solid var(--tp-border)`, borderRadius: RADIUS.lg,
+                background: onAdd ? 'var(--tp-surface)' : 'var(--tp-primary)',
+                color: onAdd ? 'var(--tp-text)' : 'var(--tp-on-primary)',
+                fontWeight: 800, fontSize: 15, cursor: 'pointer',
+                transition: 'transform .12s cubic-bezier(0.34,1.56,0.64,1), filter .15s ease', ...F,
+              }}
+            >
+              <Share2 size={17} />
+              {onAdd ? null : 'Compartir'}
+            </button>
+            {onAdd && (qty === 0 ? (
+              <button onClick={() => onAdd(producto)} className="tp-pdm-share" style={{
+                flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                padding: '14px', border: 'none', borderRadius: RADIUS.lg,
+                background: 'var(--tp-primary)', color: 'var(--tp-on-primary)', fontWeight: 800, fontSize: 15,
+                cursor: 'pointer', transition: 'transform .12s cubic-bezier(0.34,1.56,0.64,1), filter .15s ease', ...F,
+              }}>
+                <Plus size={17} />
+                Agregar al pedido
+              </button>
+            ) : (
+              <div style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '6px 10px', borderRadius: RADIUS.lg, background: 'var(--tp-primary)' }}>
+                <button onClick={() => onRemove(producto.id)} aria-label="Restar" style={{ width: 36, height: 36, border: 'none', borderRadius: RADIUS.md, background: 'rgba(255,255,255,.2)', color: 'var(--tp-on-primary)', display: 'grid', placeItems: 'center', cursor: 'pointer' }}><Minus size={16} /></button>
+                <span style={{ fontWeight: 900, fontSize: 16, color: 'var(--tp-on-primary)' }}>{qty}</span>
+                <button onClick={() => onAdd(producto)} aria-label="Sumar" style={{ width: 36, height: 36, border: 'none', borderRadius: RADIUS.md, background: 'rgba(255,255,255,.2)', color: 'var(--tp-on-primary)', display: 'grid', placeItems: 'center', cursor: 'pointer' }}><Plus size={16} /></button>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

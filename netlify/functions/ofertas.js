@@ -8,7 +8,7 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { getBearerToken, requireAuth, verifyFirebaseIdToken } from './_lib/auth.js';
 import { handleError, handleOptions, HttpError, jsonResponse, parseJsonBody } from './_lib/http.js';
-import { sanitizeMediaUrls, sanitizeText, requireText } from './_lib/validation.js';
+import { sanitizeMediaUrls, sanitizeText, requireText, sanitizeNumber, sanitizeStringArray, sanitizePlainObject, sanitizePhone } from './_lib/validation.js';
 import { ensureStoreOwner, findTiendaById, findTiendaBySlug, readTiendas } from './_lib/tiendas-store.js';
 import { isModuleActive } from './_lib/modules.js';
 
@@ -92,8 +92,19 @@ function esVigente(o, now = Date.now()) {
   return now >= pub && now <= exp;
 }
 
+// CONDICIONES/VENTAJAS válidas — mismo set que ProductoForm.jsx
+// (CONDICION_OPTS/VENTAJA_OPTS). Rechazar valores fuera de este set en vez
+// de guardar lo que venga: son ids que el frontend usa para elegir ícono/
+// color fijos, un valor inesperado ahí rompería ese render, no solo el dato.
+const CONDICIONES_VALIDAS = new Set(['nuevo', 'usado']);
+const VENTAJAS_VALIDAS = new Set(['precio', 'disponibilidad', 'financiacion', 'combo']);
+
 function sanitizeOfertaInput(body, tienda, existingSlug) {
-  const nombre = requireText(body.nombre, { field: 'nombre', min: 2, max: 160, multiline: false });
+  // El formulario de "Producto" (catálogo) manda `titulo`, el de "Oferta"
+  // manda `nombre` — mismo backend, dos formularios distintos del admin.
+  // Aceptar cualquiera de los dos evita forzar un cambio de contrato en un
+  // frontend que ya funciona así.
+  const nombre = requireText(body.nombre ?? body.titulo, { field: 'nombre', min: 2, max: 160, multiline: false });
   const imageUrl = sanitizeMediaUrls(body.imageUrl ? [body.imageUrl] : [], { maxItems: 1 })[0] || null;
   const thumbUrl = sanitizeMediaUrls(body.thumbUrl ? [body.thumbUrl] : [], { maxItems: 1 })[0] || imageUrl;
   // ogImageUrl: variante generada client-side (canvas resize, ver
@@ -106,18 +117,49 @@ function sanitizeOfertaInput(body, tienda, existingSlug) {
   // viene (ofertas viejas, o subida por un flujo que no la generó todavía),
   // cae a thumbUrl.
   const ogImageUrl = sanitizeMediaUrls(body.ogImageUrl ? [body.ogImageUrl] : [], { maxItems: 1 })[0] || thumbUrl;
+  // fotos[]: galería del producto (ProductoForm permite varias) — imageUrl/
+  // thumbUrl/ogImageUrl arriba siguen siendo la ÚNICA foto que usa una
+  // oferta simple, y la portada del producto cae a la primera de fotos[]
+  // si no vino imageUrl explícito.
+  const fotos = sanitizeMediaUrls(Array.isArray(body.fotos) ? body.fotos : [], { maxItems: 8 });
 
-  return {
+  const base = {
     tiendaId: tienda.id,
     nombre,
     slug: existingSlug || generateSlug(nombre),
-    imageUrl,
-    thumbUrl,
-    ogImageUrl,
+    imageUrl: imageUrl || fotos[0] || null,
+    thumbUrl: thumbUrl || fotos[0] || null,
+    ogImageUrl: ogImageUrl || fotos[0] || null,
     publishAt: body.publishAt || new Date().toISOString(),
     expireAt: body.expireAt || null,
     visible: body.visible !== false,
   };
+
+  // Campos específicos del módulo "catalogo" (producto de comercio) — cada
+  // uno se asigna SOLO si la clave está presente en el body (no con `??`
+  // contra undefined): así un PATCH parcial que no toca "precio" no lo pisa
+  // con null, y una oferta simple del módulo "ofertas" (que nunca manda
+  // estas claves) no termina con un objeto lleno de nulls decorativos.
+  const producto = {};
+  if (fotos.length) producto.fotos = fotos;
+  if ('descripcion' in body) producto.descripcion = sanitizeText(body.descripcion, { max: 2000, multiline: true });
+  if ('precio' in body) producto.precio = sanitizeNumber(body.precio, { field: 'precio', min: 0, max: 999999999 });
+  if ('precioOriginal' in body) producto.precioOriginal = sanitizeNumber(body.precioOriginal, { field: 'precioOriginal', min: 0, max: 999999999 });
+  if ('stock' in body) producto.stock = sanitizeNumber(body.stock, { field: 'stock', min: 0, max: 999999, integer: true });
+  if ('ventaja' in body) {
+    const lista = Array.isArray(body.ventaja) ? body.ventaja : body.ventaja ? [body.ventaja] : [];
+    producto.ventaja = sanitizeStringArray(lista, { maxItems: 4, maxItemLength: 20 }).filter((v) => VENTAJAS_VALIDAS.has(v));
+  }
+  if ('financiacion' in body) producto.financiacion = sanitizeText(body.financiacion, { max: 200, multiline: false }) || null;
+  if ('condicion' in body) {
+    const c = sanitizeText(body.condicion, { max: 20, multiline: false });
+    producto.condicion = CONDICIONES_VALIDAS.has(c) ? c : 'nuevo';
+  }
+  if ('categoryId' in body) producto.categoryId = sanitizeText(body.categoryId, { max: 80, multiline: false }) || null;
+  if ('contactoWhatsapp' in body) producto.contactoWhatsapp = sanitizePhone(body.contactoWhatsapp) || null;
+  if ('attributes' in body) producto.attributes = sanitizePlainObject(body.attributes, { maxKeys: 20, maxStringLength: 80 });
+
+  return { ...base, ...producto };
 }
 
 export const handler = async (event) => {
@@ -210,8 +252,20 @@ export const handler = async (event) => {
       const tienda = findTiendaById(tiendas, ofertas[idx].tiendaId);
       ensureStoreOwner(user, tienda);
 
+      // Campos que disparan sanitizeOfertaInput en un PATCH parcial. Incluye
+      // `titulo` (alias de `nombre` que manda ProductoForm) y todos los
+      // campos propios del catálogo — sin `titulo` acá, un PATCH de edición
+      // de producto (que siempre manda titulo+precio+stock, nunca `nombre`)
+      // no entraba a este bloque y los campos de producto se perdían en
+      // cada edición aunque sí se guardaran bien al crear.
+      const CAMPOS_QUE_DISPARAN_SANITIZE = [
+        'nombre', 'titulo', 'imageUrl', 'thumbUrl', 'ogImageUrl', 'fotos',
+        'publishAt', 'expireAt', 'descripcion', 'precio', 'precioOriginal',
+        'stock', 'ventaja', 'financiacion', 'condicion', 'categoryId',
+        'contactoWhatsapp', 'attributes',
+      ];
       const update = {};
-      if ('nombre' in body || 'imageUrl' in body || 'thumbUrl' in body || 'ogImageUrl' in body || 'publishAt' in body || 'expireAt' in body) {
+      if (CAMPOS_QUE_DISPARAN_SANITIZE.some((campo) => campo in body)) {
         Object.assign(update, sanitizeOfertaInput({ ...ofertas[idx], ...body }, tienda, ofertas[idx].slug));
       }
       if ('visible' in body) update.visible = !!body.visible;

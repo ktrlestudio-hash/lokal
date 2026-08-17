@@ -6,10 +6,11 @@
  * DENTRO de FiltrosSheet (ya no vive suelto en la barra).
  */
 import React, { useState, useEffect } from 'react';
-import { X, LayoutGrid, List, Check, Tag } from 'lucide-react';
+import { X, LayoutGrid, List, Check } from 'lucide-react';
 import { RADIUS, SHADOW, FONT } from '../tokens.js';
 import { useSheetOpen } from '../hooks/useSheetOpen.js';
 import { SHEET_TRANSITION_CSS } from './sheetTransitionCss.js';
+import { BADGE_CONFIG } from '../../utils/productBadges.js';
 
 const F = { fontFamily: FONT.family };
 
@@ -46,6 +47,15 @@ function SheetShell({ open, onClose, title, children }) {
 
 const sectionLabel = { fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--tp-text-muted)', margin: '0 0 8px' };
 
+// Colores hex por badge — misma familia que BADGE_CONFIG (emerald/amber),
+// pero en hex porque este sheet usa style inline, no clases Tailwind.
+// "oferta" usa el primary de la tienda (var css) en vez de un hex fijo.
+const BADGE_CHIP_COLORS = {
+  nuevo: { activeBg: '#10b981', activeColor: '#fff', softBg: 'rgba(16,185,129,.12)', softColor: '#059669' },
+  oferta: { activeBg: 'var(--tp-primary)', activeColor: 'var(--tp-on-primary)', softBg: 'var(--tp-primary-soft)', softColor: 'var(--tp-primary)' },
+  por_vencer: { activeBg: '#f59e0b', activeColor: '#fff', softBg: 'rgba(245,158,11,.12)', softColor: '#b45309' },
+};
+
 // Chip "rápido" tipo pastel — mismo patrón visual que qDescuento en
 // TodasOfertasScreen.jsx (fondo pastel del color semántico, texto/ícono a
 // juego; activo = color sólido + texto blanco).
@@ -65,7 +75,7 @@ function ChipRapido({ active, onClick, Icon, label, activeBg, softBg, activeColo
 export function FiltrosSheet({
   open, onClose,
   precioMin, setPrecioMin, precioMax, setPrecioMax,
-  soloDescuento, setSoloDescuento,
+  filtroBadges = [], setFiltroBadges,
   atributosDisponibles = [], filtrosAtributos = {}, setFiltrosAtributos,
   layout, setLayout,
   onLimpiar, activeFilterCount,
@@ -80,7 +90,11 @@ export function FiltrosSheet({
   const applyPrecio = () => { setPrecioMin(minDraft); setPrecioMax(maxDraft); };
 
   const chips = [
-    ...(soloDescuento ? [{ key: 'desc', label: 'Con descuento', onRemove: () => setSoloDescuento(false) }] : []),
+    ...filtroBadges.map((id) => ({
+      key: `badge_${id}`,
+      label: BADGE_CONFIG[id]?.label || id,
+      onRemove: () => setFiltroBadges(prev => prev.filter(x => x !== id)),
+    })),
     ...Object.entries(filtrosAtributos).filter(([, v]) => v && v.length > 0).flatMap(([k, vals]) =>
       vals.map(v => ({
         key: `attr_${k}_${v}`,
@@ -116,8 +130,14 @@ export function FiltrosSheet({
       <div style={{ marginBottom: 20 }}>
         <p style={sectionLabel}>Filtros rápidos</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <ChipRapido active={soloDescuento} onClick={() => setSoloDescuento(v => !v)} Icon={Tag} label="Con descuento"
-            activeBg="#f43f5e" activeColor="#fff" softBg="rgba(244,63,94,.12)" softColor="#e11d48" />
+          {Object.entries(BADGE_CONFIG).map(([id, cfg]) => {
+            const c = BADGE_CHIP_COLORS[id];
+            return (
+              <ChipRapido key={id} active={filtroBadges.includes(id)} Icon={cfg.Icon} label={cfg.label}
+                onClick={() => setFiltroBadges(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                activeBg={c.activeBg} activeColor={c.activeColor} softBg={c.softBg} softColor={c.softColor} />
+            );
+          })}
         </div>
       </div>
 
