@@ -1,5 +1,4 @@
 ﻿import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
-import { cacheGet, cacheSet } from './lokCache';
 import { PaywallModal as PaywallModalUI, PremiumModal as PremiumModalUI, SuscripcionContent } from './store/PricingUI';
 import { haptic } from './haptic';
 import LazyImg from './LazyImg';
@@ -11,6 +10,7 @@ import { SECCIONES_DEFAULT } from './tienda-publica/tokens.js';
 import { isModuleActive, deriveColorPalette, getEstadoApertura } from './tienda-publica/utils.js';
 import { useGeolocation } from './hooks';
 import TransferenciaModal from './store/modals/TransferenciaModal';
+import { useProductosOfertas } from './store/hooks/useProductosOfertas';
 import {
   Store, Package, MessageSquare, Search, ArrowLeft, Globe, Home,
   Send, MapPin, CheckCircle, X, Loader2, AlertCircle,
@@ -248,16 +248,20 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [createSheetClosing, setCreateSheetClosing] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
 
-  // Productos
-  const PROD_CACHE_KEY = `productos-${tiendaData?.id || 'store'}`;
-  // misProductosSinFiltrar (no "misProductos" a secas): el nombre corto
-  // queda reservado para la versión filtrada por tipo que declaran
-  // OfertasScreen/ProductosScreen dentro de sí mismas (shadowing local) —
-  // ver el comentario ahí. Todo lo demás en este componente (badge del
-  // nav, búsqueda de ítems en Mensajes, menciones) sigue leyendo la lista
-  // COMPLETA acá, sin filtrar, que es lo que necesitan.
-  const [misProductosSinFiltrar, setMisProductos] = useState(() => cacheGet(PROD_CACHE_KEY) || []);
-  const [loadingProductos, setLoadingProductos] = useState(false);
+  // Productos — estado + fetch + mutaciones CRUD viven en useProductosOfertas
+  // (Fase 3 del plan: primer estado realmente compartido extraído a hook,
+  // se usa en 30+ lugares de este componente, no solo las 2 screens de
+  // productos). misProductosSinFiltrar (no "misProductos" a secas): el
+  // nombre corto queda reservado para la versión filtrada por tipo que
+  // declaran OfertasScreen/ProductosScreen dentro de sí mismas (shadowing
+  // local) — ver el comentario ahí. Todo lo demás en este componente (badge
+  // del nav, búsqueda de ítems en Mensajes, menciones) sigue leyendo la
+  // lista COMPLETA acá, sin filtrar, que es lo que necesitan.
+  const productosOfertas = useProductosOfertas(tiendaData?.id);
+  const misProductosSinFiltrar = productosOfertas.items;
+  const setMisProductos = productosOfertas.setItems;
+  const loadingProductos = productosOfertas.loading;
+  const fetchMisProductos = productosOfertas.fetchAll;
 
   // Página pública — edición inline
   const [editingPublicPage, setEditingPublicPage] = useState(false);
@@ -893,24 +897,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       }
     } catch { /* silencioso */ } finally {
       setInboxLoading(false);
-    }
-  };
-
-  const fetchMisProductos = async () => {
-    if (mockMode) return;
-    setLoadingProductos(true);
-    try {
-      // all=1: el dueño ve también vencidas/ocultas en su panel (para poder
-      // reactivarlas); el listado público (GET ?slug=...) sigue filtrando
-      // solo vigentes del lado del backend.
-      const res = await apiFetch(`${API_BASE}/ofertas?tiendaId=${tiendaData.id}&all=1`, { authRequired: true });
-      if (res.ok) {
-        const data = await res.json();
-        cacheSet(PROD_CACHE_KEY, data, 10 * 60 * 1000);
-        setMisProductos(data);
-      }
-    } catch { /* silencioso */ } finally {
-      setLoadingProductos(false);
     }
   };
 
