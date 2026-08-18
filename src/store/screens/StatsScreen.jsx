@@ -12,6 +12,7 @@ export function StatsScreen({
   mockMode, MOCK_STATS,
   aiLoading, setAiLoading, aiError, setAiError, aiData, setAiData,
   apiFetch, API_BASE,
+  isDark, toggleTheme, onOpenAccount, renderAccountAvatar,
 }) {
   const fetchInsights = async () => {
     setAiLoading(true);
@@ -36,7 +37,11 @@ export function StatsScreen({
 
   return (
     <div className="min-h-screen sa-page-bg pb-24 lg:pb-8">
-      <StorePageHeader title="Estadísticas" subtitle="Rendimiento de tu tienda" icon={TrendingUp} />
+      <StorePageHeader
+        title="Estadísticas" subtitle="Rendimiento de tu tienda" icon={TrendingUp}
+        isDark={isDark} toggleTheme={toggleTheme}
+        onOpenAccount={onOpenAccount} renderAccountAvatar={renderAccountAvatar}
+      />
 
       <div className="max-w-3xl mx-auto px-5 py-6 space-y-5">
         {/* Cards visitas mock */}

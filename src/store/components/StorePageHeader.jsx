@@ -97,7 +97,7 @@ export function StorePageHeader({
             className="ui-avatar-btn ring-2 ring-transparent hover:ring-brand transition-all shrink-0"
             title="Mi cuenta"
           >
-            {renderAccountAvatar()}
+            {renderAccountAvatar?.()}
           </button>
         </div>
       </div>

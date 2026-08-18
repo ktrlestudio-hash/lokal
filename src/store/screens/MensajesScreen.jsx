@@ -32,6 +32,7 @@ export function MensajesScreen({
   inboxReply, setInboxReply, inboxSending, inboxSendReply,
   inboxInfoOpen, setInboxInfoOpen,
   inboxScrollRef, inboxMobileScrollRef,
+  isDark, toggleTheme, onOpenAccount, renderAccountAvatar,
 }) {
   const TYPE_META = {
     chat:     { label: 'Chat',     color: 'bg-info',        textColor: 'text-info dark:text-info',               bg: 'bg-info-muted dark:bg-info/10',        Icon: MessageSquare },
@@ -1092,6 +1093,8 @@ export function MensajesScreen({
         <StorePageHeader
           title="Mensajes"
           subtitle={unreadTotal > 0 ? `${unreadTotal} sin leer` : `${allThreads.length} conversación${allThreads.length !== 1 ? 'es' : ''}`}
+          isDark={isDark} toggleTheme={toggleTheme}
+          onOpenAccount={onOpenAccount} renderAccountAvatar={renderAccountAvatar}
           actionSlot={
             <button onClick={fetchInbox} className="ui-icon-btn hover:bg-surface-card-2 dark:hover:bg-white/8 text-ink-dim" title="Actualizar">
               <RotateCcw className={`w-4 h-4 ${inboxLoading ? 'animate-spin' : ''}`} />

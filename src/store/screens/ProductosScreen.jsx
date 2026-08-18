@@ -30,6 +30,7 @@ export function ProductosScreen({
   prodDetailEditField, setProdDetailEditField, prodDetailDraft, setProdDetailDraft,
   prodDetailSaving, setProdDetailSaving, prodDetailPhotoConfirm, setProdDetailPhotoConfirm,
   primerBadge, apiFetch, API_BASE, haptic,
+  isDark, toggleTheme, onOpenAccount, renderAccountAvatar,
 }) {
   const [importadorOpen, setImportadorOpen] = useState(false);
   // Shadowing simétrico al de OfertasScreen (ver comentario ahí): con
@@ -487,6 +488,8 @@ export function ProductosScreen({
       <StorePageHeader
         title="Mis productos"
         subtitle={`${misProductos.length} publicación${misProductos.length !== 1 ? 'es' : ''} · ${activos.length} activa${activos.length !== 1 ? 's' : ''}`}
+        isDark={isDark} toggleTheme={toggleTheme}
+        onOpenAccount={onOpenAccount} renderAccountAvatar={renderAccountAvatar}
         actionSlot={(
           <>
             {loadingProductos && <Loader2 className="w-4 h-4 animate-spin text-ink-dim shrink-0" />}

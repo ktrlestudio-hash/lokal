@@ -1303,6 +1303,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       inboxReply={inboxReply} setInboxReply={setInboxReply} inboxSending={inboxSending} inboxSendReply={inboxSendReply}
       inboxInfoOpen={inboxInfoOpen} setInboxInfoOpen={setInboxInfoOpen}
       inboxScrollRef={inboxScrollRef} inboxMobileScrollRef={inboxMobileScrollRef}
+      isDark={isDark} toggleTheme={toggleTheme}
+      onOpenAccount={() => setMoreSheetOpen(v => !v)} renderAccountAvatar={renderAccountAvatar}
     />
   );
 
@@ -1917,6 +1919,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       aiLoading={aiLoading} setAiLoading={setAiLoading} aiError={aiError} setAiError={setAiError}
       aiData={aiData} setAiData={setAiData}
       apiFetch={apiFetch} API_BASE={API_BASE}
+      isDark={isDark} toggleTheme={toggleTheme}
+      onOpenAccount={() => setMoreSheetOpen(v => !v)} renderAccountAvatar={renderAccountAvatar}
     />
   );
 
@@ -2734,6 +2738,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       ofertaConfirmDelete={ofertaConfirmDelete} setOfertaConfirmDelete={setOfertaConfirmDelete}
       handleCancelarOfertaAdmin={handleCancelarOfertaAdmin} handleReintentarOfertaAdmin={handleReintentarOfertaAdmin}
       apiFetch={apiFetch} API_BASE={API_BASE} haptic={haptic}
+      isDark={isDark} toggleTheme={toggleTheme}
+      onOpenAccount={() => setMoreSheetOpen(v => !v)} renderAccountAvatar={renderAccountAvatar}
     />
   );
 
@@ -2773,6 +2779,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       prodDetailSaving={prodDetailSaving} setProdDetailSaving={setProdDetailSaving}
       prodDetailPhotoConfirm={prodDetailPhotoConfirm} setProdDetailPhotoConfirm={setProdDetailPhotoConfirm}
       primerBadge={primerBadge} apiFetch={apiFetch} API_BASE={API_BASE} haptic={haptic}
+      isDark={isDark} toggleTheme={toggleTheme}
+      onOpenAccount={() => setMoreSheetOpen(v => !v)} renderAccountAvatar={renderAccountAvatar}
     />
   );
 

@@ -19,6 +19,7 @@ export function OfertasScreen({
   ofertaConfirmDelete, setOfertaConfirmDelete,
   handleCancelarOfertaAdmin, handleReintentarOfertaAdmin,
   apiFetch, API_BASE, haptic,
+  isDark, toggleTheme, onOpenAccount, renderAccountAvatar,
 }) {
   // Shadowing intencional de misProductos (el estado real, sin filtrar,
   // sigue existiendo afuera de este componente — el badge del nav y la
@@ -224,6 +225,8 @@ export function OfertasScreen({
         title="Ofertas"
         subtitle={`${misProductos.length} publicación${misProductos.length !== 1 ? 'es' : ''}`}
         icon={Tag}
+        isDark={isDark} toggleTheme={toggleTheme}
+        onOpenAccount={onOpenAccount} renderAccountAvatar={renderAccountAvatar}
         actionSlot={(
           <>
             {loadingProductos && <Loader2 className="w-4 h-4 animate-spin text-ink-dim shrink-0" />}
