@@ -21,8 +21,8 @@ export function PasoCalibrar({ headers, filasPreview, sugerencias, mapeo, onCamb
   const listoParaContinuar = tieneNombre && tienePrecio;
 
   return (
-    <div className="flex-1 overflow-y-auto no-scrollbar">
-      <div className="px-5 py-5 max-w-2xl mx-auto space-y-5">
+    <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar">
+      <div className="px-5 py-5 max-w-lg mx-auto space-y-5">
         <div>
           <h2 className="font-black text-lg mb-1">Confirmá qué es cada columna</h2>
           <p className="text-sm text-ink-dim leading-relaxed">
@@ -55,12 +55,14 @@ export function PasoCalibrar({ headers, filasPreview, sugerencias, mapeo, onCamb
                     </p>
                   )}
                 </div>
-                <SimpleSelect
-                  value={valorActual}
-                  onChange={(campo) => onCambiarMapeo(header, campo)}
-                  options={OPCIONES_CAMPO}
-                  compact
-                />
+                <div className="sm:max-w-[260px]">
+                  <SimpleSelect
+                    value={valorActual}
+                    onChange={(campo) => onCambiarMapeo(header, campo)}
+                    options={OPCIONES_CAMPO}
+                    compact
+                  />
+                </div>
               </div>
             );
           })}

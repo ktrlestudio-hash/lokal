@@ -106,7 +106,7 @@ export function StoreSidebar({
                 }
               }}
               onMouseLeave={() => setTooltip(null)}
-              className={`w-full flex items-center ui-chip transition-colors overflow-hidden mb-0.5 ${
+              className={`w-full flex items-center ui-chip transition-colors overflow-hidden mb-0.5 ${expanded ? '' : 'justify-center px-0'} ${
                 isActive
                   ? 'bg-surface-card-2 dark:bg-white/8 text-ink font-bold'
                   : 'text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/5 hover:text-ink dark:hover:text-ink-dim'
@@ -121,16 +121,22 @@ export function StoreSidebar({
                   </span>
                 )}
               </div>
+              {/* Colapsado: width:0 (no solo opacity:0) — con solo opacity el
+                  texto seguía ocupando su ancho real + el gap de .ui-chip,
+                  empujando el ícono lejos del centro de los 64px del
+                  sidebar colapsado. */}
               <span
                 className="text-sm font-semibold whitespace-nowrap flex-1 text-left overflow-hidden"
-                style={{ opacity: expanded ? 1 : 0, transition: 'opacity 160ms ease', transitionDelay: expanded ? '80ms' : '0ms' }}
+                style={expanded
+                  ? { opacity: 1, transition: 'opacity 160ms ease', transitionDelay: '80ms' }
+                  : { opacity: 0, width: 0, flex: '0 0 0px', transition: 'opacity 160ms ease' }}
               >
                 {label}
               </span>
-              {badge > 0 && (
+              {badge > 0 && expanded && (
                 <span
                   className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full mr-2 shrink-0 ${isActive ? 'bg-white/20 text-white' : 'bg-surface-card-2 dark:bg-white/10 text-ink-dim'}`}
-                  style={{ opacity: expanded ? 1 : 0, transition: 'opacity 160ms ease', transitionDelay: expanded ? '80ms' : '0ms' }}
+                  style={{ opacity: 1, transition: 'opacity 160ms ease', transitionDelay: '80ms' }}
                 >
                   {badge}
                 </span>

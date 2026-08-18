@@ -220,9 +220,10 @@ async function accionAplicar({ event, env, body }) {
   const ambiguosConfirmados = Array.isArray(body.ambiguosConfirmados) ? body.ambiguosConfirmados : [];
 
   const { data: ofertasActuales, etag } = await safeRead(bucket, OFERTAS_KEY, []);
-  const { ofertas, actualizados, bajasAplicadas } = aplicarDiff({
+  const { ofertas, actualizados, bajasAplicadas, errores } = aplicarDiff({
     ofertas: ofertasActuales, tienda, tiendaId, altas, actualizaciones, bajas,
   });
+  const altasAplicadas = altas.length - errores.filter((e) => e.tipo === 'alta').length;
 
   await safeWrite(bucket, OFERTAS_KEY, ofertas, etag);
 
@@ -235,16 +236,17 @@ async function accionAplicar({ event, env, body }) {
       await confirmarMatch(db, { tiendaId, huellaFuente: corrida.huella, señalTipo, señalValor, productoId });
     }
     await actualizarCorrida(db, corridaId, {
-      estado: 'aplicada',
-      resumen: { ...corrida.resumen, altasAplicadas: altas.length, actualizacionesAplicadas: actualizados, bajasAplicadas },
+      estado: errores.length ? 'aplicada_con_errores' : 'aplicada',
+      resumen: { ...corrida.resumen, altasAplicadas, actualizacionesAplicadas: actualizados, bajasAplicadas, errores: errores.length },
     });
   }
 
   return jsonResponse(event, 200, {
-    altasAplicadas: altas.length,
+    altasAplicadas,
     actualizacionesAplicadas: actualizados,
     bajasAplicadas,
     matchesConfirmados: ambiguosConfirmados.length,
+    errores,
   }, { ...HTTP_OPTIONS, env });
 }
 

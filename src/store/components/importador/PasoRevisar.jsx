@@ -11,11 +11,20 @@
 import React, { useMemo, useState } from 'react';
 import {
   PackagePlus, RefreshCw, HelpCircle, PackageX, ChevronDown, ChevronUp,
-  ArrowRight, CheckCircle2,
+  CheckCircle2, Search, X,
 } from 'lucide-react';
 
 function formatoPrecio(n) {
   return n == null ? '—' : `$${Number(n).toLocaleString('es')}`;
+}
+
+function ChipPrecio({ children, tono = 'brand' }) {
+  const tonos = {
+    brand: 'bg-brand/10 text-brand-dark dark:text-brand',
+    ok: 'bg-ok/10 text-ok-dark dark:text-ok',
+    dim: 'bg-surface-card-2 dark:bg-white/8 text-ink-dim',
+  };
+  return <span className={`shrink-0 text-xs font-black px-2 py-1 rounded-lg ${tonos[tono]}`}>{children}</span>;
 }
 
 function SeccionColapsable({ icono: Icono, color, titulo, subtitulo, count, children, defaultAbierto = false }) {
@@ -41,6 +50,14 @@ function SeccionColapsable({ icono: Icono, color, titulo, subtitulo, count, chil
 
 export function PasoRevisar({ diff, seleccion, onCambiarSeleccion }) {
   const { altas, actualizaciones, ambiguos, posiblesBajas } = diff;
+  const [busqueda, setBusqueda] = useState('');
+
+  const q = busqueda.trim().toLowerCase();
+
+  const actualizacionesFiltradas = useMemo(() => actualizaciones.filter((a) => !q || (a.nombre || '').toLowerCase().includes(q)), [actualizaciones, q]);
+  const altasFiltradas = useMemo(() => altas.filter((a) => !q || (a.nombre || '').toLowerCase().includes(q)), [altas, q]);
+  const ambiguosFiltrados = useMemo(() => ambiguos.filter((a) => !q || (a.fila.nombre || '').toLowerCase().includes(q)), [ambiguos, q]);
+  const bajasFiltradas = useMemo(() => posiblesBajas.filter((p) => !q || (p.nombre || '').toLowerCase().includes(q)), [posiblesBajas, q]);
 
   const resumen = useMemo(() => ({
     altas: altas.length,
@@ -66,20 +83,38 @@ export function PasoRevisar({ diff, seleccion, onCambiarSeleccion }) {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto no-scrollbar">
-      <div className="px-5 py-5 max-w-2xl mx-auto space-y-3">
+    <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar">
+      <div className="px-5 py-5 max-w-lg mx-auto space-y-3">
         <div>
           <h2 className="font-black text-lg mb-1">Revisá los cambios</h2>
           <p className="text-sm text-ink-dim">Elegí qué aplicar. Nada se guarda hasta que confirmes al final.</p>
+        </div>
+
+        {/* Buscador — filtra por nombre en las 4 secciones a la vez, útil
+            cuando el archivo trae cientos de filas y el usuario busca un
+            producto puntual para revisar antes de aplicar todo. */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-dim" />
+          <input
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar producto..."
+            className="w-full pl-8 pr-8 py-2 bg-surface-card-2 dark:bg-white/5 rounded-xl text-sm placeholder:text-ink-dim focus:outline-none focus:ring-2 focus:ring-brand transition-all border border-transparent focus:border-brand/20"
+          />
+          {busqueda && (
+            <button onClick={() => setBusqueda('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-dim">
+              <X className="w-3 h-3" />
+            </button>
+          )}
         </div>
 
         {/* Actualizaciones de precio/stock — el caso más común al re-importar */}
         <SeccionColapsable
           icono={RefreshCw} color={{ bg: 'bg-brand/10', text: 'text-brand' }}
           titulo="Productos a actualizar" subtitulo="Precio, stock u otro dato cambió"
-          count={resumen.actualizaciones} defaultAbierto
+          count={actualizacionesFiltradas.length} defaultAbierto
         >
-          {actualizaciones.map((act) => (
+          {actualizacionesFiltradas.map((act) => (
             <label key={act.productoId} className="flex items-center gap-3 bg-surface-card rounded-xl px-3 py-2.5 cursor-pointer">
               <input
                 type="checkbox"
@@ -87,13 +122,9 @@ export function PasoRevisar({ diff, seleccion, onCambiarSeleccion }) {
                 onChange={() => onCambiarSeleccion('actualizaciones', act.productoId)}
                 className="w-4 h-4 rounded accent-brand shrink-0"
               />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate">{act.nombre}</p>
-                <div className="flex items-center gap-1.5 text-xs text-ink-dim flex-wrap">
-                  {'precio' in act.cambios && <span className="flex items-center gap-1">Precio <ArrowRight className="w-2.5 h-2.5" /> <strong className="text-ink">{formatoPrecio(act.cambios.precio)}</strong></span>}
-                  {'stock' in act.cambios && <span>Stock → <strong className="text-ink">{act.cambios.stock}</strong></span>}
-                </div>
-              </div>
+              <p className="flex-1 min-w-0 text-sm font-semibold truncate">{act.nombre}</p>
+              {'precio' in act.cambios && <ChipPrecio>{formatoPrecio(act.cambios.precio)}</ChipPrecio>}
+              {'stock' in act.cambios && !('precio' in act.cambios) && <ChipPrecio tono="dim">Stock: {act.cambios.stock}</ChipPrecio>}
             </label>
           ))}
         </SeccionColapsable>
@@ -102,9 +133,9 @@ export function PasoRevisar({ diff, seleccion, onCambiarSeleccion }) {
         <SeccionColapsable
           icono={PackagePlus} color={{ bg: 'bg-ok/10', text: 'text-ok-dark dark:text-ok' }}
           titulo="Productos nuevos" subtitulo="No estaban en tu catálogo"
-          count={resumen.altas} defaultAbierto
+          count={altasFiltradas.length} defaultAbierto
         >
-          {altas.map((alta, i) => (
+          {altasFiltradas.map((alta, i) => (
             <label key={i} className="flex items-center gap-3 bg-surface-card rounded-xl px-3 py-2.5 cursor-pointer">
               <input
                 type="checkbox"
@@ -112,10 +143,8 @@ export function PasoRevisar({ diff, seleccion, onCambiarSeleccion }) {
                 onChange={() => onCambiarSeleccion('altas', i)}
                 className="w-4 h-4 rounded accent-brand shrink-0"
               />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate">{alta.nombre || 'Sin nombre'}</p>
-                <p className="text-xs text-ink-dim">{formatoPrecio(alta.precio)}</p>
-              </div>
+              <p className="flex-1 min-w-0 text-sm font-semibold truncate">{alta.nombre || 'Sin nombre'}</p>
+              <ChipPrecio tono="ok">{formatoPrecio(alta.precio)}</ChipPrecio>
             </label>
           ))}
         </SeccionColapsable>
@@ -124,9 +153,9 @@ export function PasoRevisar({ diff, seleccion, onCambiarSeleccion }) {
         <SeccionColapsable
           icono={HelpCircle} color={{ bg: 'bg-amber-50 dark:bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400' }}
           titulo="No estamos seguros" subtitulo="Confirmá si es el mismo producto"
-          count={resumen.ambiguos}
+          count={ambiguosFiltrados.length}
         >
-          {ambiguos.map((amb, i) => (
+          {ambiguosFiltrados.map((amb, i) => (
             <div key={i} className="bg-surface-card rounded-xl px-3 py-2.5">
               <p className="text-xs text-ink-dim mb-1">En el archivo: <strong className="text-ink">{amb.fila.nombre}</strong></p>
               <label className="flex items-center gap-2 cursor-pointer">
@@ -157,9 +186,9 @@ export function PasoRevisar({ diff, seleccion, onCambiarSeleccion }) {
         <SeccionColapsable
           icono={PackageX} color={{ bg: 'bg-danger/8', text: 'text-danger' }}
           titulo="Ya no aparecen en el archivo" subtitulo="¿Los ocultamos de tu tienda?"
-          count={resumen.bajas}
+          count={bajasFiltradas.length}
         >
-          {posiblesBajas.map((p) => (
+          {bajasFiltradas.map((p) => (
             <label key={p.id} className="flex items-center gap-3 bg-surface-card rounded-xl px-3 py-2.5 cursor-pointer">
               <input
                 type="checkbox"
@@ -167,10 +196,8 @@ export function PasoRevisar({ diff, seleccion, onCambiarSeleccion }) {
                 onChange={() => onCambiarSeleccion('bajas', p.id)}
                 className="w-4 h-4 rounded accent-danger shrink-0"
               />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate">{p.nombre}</p>
-                <p className="text-xs text-ink-dim">{formatoPrecio(p.precio)} · se oculta, no se borra</p>
-              </div>
+              <p className="flex-1 min-w-0 text-sm font-semibold truncate">{p.nombre}</p>
+              <ChipPrecio tono="dim">{formatoPrecio(p.precio)}</ChipPrecio>
             </label>
           ))}
         </SeccionColapsable>

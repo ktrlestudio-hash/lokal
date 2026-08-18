@@ -67,6 +67,11 @@ describe('sanitizeOfertaInput', () => {
     expect(porTitulo.nombre).toBe('Producto B');
   });
 
+  it('persiste presentacion como texto libre corto', () => {
+    const result = sanitizeOfertaInput({ nombre: 'Aceite', presentacion: '900cc' }, TIENDA, null);
+    expect(result.presentacion).toBe('900cc');
+  });
+
   it('PATCH parcial: no reintroduce un campo de producto si el body no lo trae', () => {
     // Simula el patrón real de ofertas.js PATCH: { ...existente, ...body }
     const existente = { id: 'oferta_1', nombre: 'Tomate', precio: 1500, stock: 40 };

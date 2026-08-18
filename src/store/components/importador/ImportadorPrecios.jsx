@@ -36,7 +36,7 @@ const TITULOS_PASO = {
   resultado: 'Listo',
 };
 
-export function ImportadorPrecios({ tiendaId, onClose, onAplicado }) {
+export function ImportadorPrecios({ tiendaId, sidebarExpanded, onClose, onAplicado }) {
   const [paso, setPaso] = useState('subir');
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState(null);
@@ -205,9 +205,16 @@ export function ImportadorPrecios({ tiendaId, onClose, onAplicado }) {
     if (file) manejarArchivoElegido(file);
   };
 
+  // En desktop el wizard respeta el sidebar fijo (z-[200] en StoreSidebar,
+  // no compite con este z-[6000] pero SÍ debe dejarle su ancho visible en
+  // vez de taparlo con inset-0 a toda la ventana — mismo ancho dinámico que
+  // el spacer de StoreApp.jsx, expandido (224px) o colapsado (64px).
+  const offsetSidebarDesktop = sidebarExpanded ? 224 : 64;
+
   return (
     <div
-      className="fixed inset-0 z-[6000] bg-surface-card flex flex-col overflow-hidden animate-fade-in"
+      className="fixed inset-0 h-[100dvh] z-[6000] bg-surface-card flex flex-col overflow-hidden animate-fade-in lg:left-[var(--sidebar-offset)]"
+      style={{ '--sidebar-offset': `${offsetSidebarDesktop}px`, transition: 'left 380ms cubic-bezier(0.16,1,0.3,1)' }}
       onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
     >
       {/* Overlay de arrastre — pantalla completa, color de marca translúcido,
@@ -223,14 +230,20 @@ export function ImportadorPrecios({ tiendaId, onClose, onAplicado }) {
 
       {/* Header */}
       <div className="shrink-0 flex items-center gap-2 px-3 h-14 border-b border-slate-100 dark:border-white/8">
-        {puedeVolver ? (
+        {puedeVolver && !cargando ? (
           <button onClick={volver} className="ui-icon-btn bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8 transition-colors shrink-0">
             <ChevronLeft className="w-5 h-5" />
           </button>
         ) : <div className="w-9" />}
         <p className="font-black flex-1 truncate text-sm text-center">{TITULOS_PASO[paso]}</p>
         {cargando && <Loader2 className="w-4 h-4 animate-spin text-brand shrink-0" />}
-        <button onClick={onClose} className="ui-icon-btn bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:bg-danger/10 hover:text-danger transition-colors shrink-0">
+        {/* Cerrar deshabilitado mientras se aplica: evita interrumpir una
+            escritura real al catálogo (POST /aplicar) a mitad de camino. */}
+        <button
+          onClick={cargando ? undefined : onClose}
+          disabled={cargando}
+          className="ui-icon-btn bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:bg-danger/10 hover:text-danger transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
           <X className="w-4 h-4" />
         </button>
       </div>
@@ -268,6 +281,20 @@ export function ImportadorPrecios({ tiendaId, onClose, onAplicado }) {
           onCambiarMapeo={cambiarMapeo}
           totalFilas={calibracion.totalFilas}
         />
+      ) : paso === 'revisar' && cargando ? (
+        // Feedback real de progreso, no solo un spinner en el botón: con
+        // archivos grandes (cientos de filas) el POST /aplicar tarda varios
+        // segundos reales (lee+escribe todo el catálogo en R2) — sin esto
+        // se sentía "colgado" en vez de "trabajando".
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-brand" />
+          <div>
+            <p className="text-sm font-bold">Aplicando cambios a tu catálogo...</p>
+            <p className="text-xs text-ink-dim mt-1">
+              {seleccion.altas.size + seleccion.actualizaciones.size + seleccion.bajas.size} cambios en camino, no cierres esta pantalla
+            </p>
+          </div>
+        </div>
       ) : paso === 'revisar' ? (
         <PasoRevisar diff={diff} seleccion={seleccion} onCambiarSeleccion={cambiarSeleccion} />
       ) : (
@@ -281,21 +308,20 @@ export function ImportadorPrecios({ tiendaId, onClose, onAplicado }) {
           <button
             onClick={confirmarCalibracion}
             disabled={cargando || !calibracionLista(mapeo)}
-            className="w-full py-3.5 rounded-2xl bg-brand hover:bg-brand-light text-white font-bold text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full sm:max-w-sm sm:mx-auto flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-brand hover:bg-brand-light text-white font-bold text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {cargando ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Continuar'}
           </button>
         </div>
       )}
-      {paso === 'revisar' && diff && (diff.altas.length > 0 || diff.actualizaciones.length > 0 || diff.posiblesBajas.length > 0) && (
+      {paso === 'revisar' && !cargando && diff && (diff.altas.length > 0 || diff.actualizaciones.length > 0 || diff.posiblesBajas.length > 0) && (
         <div className="shrink-0 px-5 pt-4 border-t border-slate-100 dark:border-white/8" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}>
           {error && <p className="text-xs text-danger font-medium mb-2 text-center">{error}</p>}
           <button
             onClick={aplicar}
-            disabled={cargando}
-            className="w-full py-3.5 rounded-2xl bg-brand hover:bg-brand-light text-white font-bold text-sm transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+            className="w-full sm:max-w-sm sm:mx-auto flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-brand hover:bg-brand-light text-white font-bold text-sm transition-colors"
           >
-            {cargando ? <Loader2 className="w-4 h-4 animate-spin" /> : `Aplicar cambios (${seleccion.altas.size + seleccion.actualizaciones.size + seleccion.bajas.size})`}
+            {`Aplicar cambios (${seleccion.altas.size + seleccion.actualizaciones.size + seleccion.bajas.size})`}
           </button>
         </div>
       )}

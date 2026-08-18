@@ -15,7 +15,7 @@ import { ImportadorPrecios } from '../components/importador/ImportadorPrecios.js
 import { ProductosOfertasToggle } from '../components/ProductosOfertasToggle.jsx';
 
 export function ProductosScreen({
-  tiendaId, fetchMisProductos,
+  tiendaId, fetchMisProductos, sidebarExpanded,
   ambosModulosActivos, subScreenProductos, setSubScreenProductos,
   misProductosSinFiltrar, setMisProductos, loadingProductos,
   productoShowForm, setProductoShowForm, productoEditing, setProductoEditing,
@@ -66,7 +66,7 @@ export function ProductosScreen({
       return;
     }
     setEditingProducto(null);
-    setForm({ titulo: '', descripcion: '', precio: '', precioOriginal: '', badgesForzados: null, financiacion: '', stock: '1', condicion: 'nuevo', categoryId: null, contactoWhatsapp: '' });
+    setForm({ titulo: '', descripcion: '', precio: '', precioOriginal: '', badgesForzados: null, financiacion: '', presentacion: '', stock: '1', condicion: 'nuevo', categoryId: null, contactoWhatsapp: '' });
     setFotoFiles([]); setFotoPreviews([]);
     setSaveErr(null); setProductoAttributes({});
     setShowForm(true);
@@ -74,7 +74,7 @@ export function ProductosScreen({
 
   const openEdit = (o) => {
     setEditingProducto(o);
-    setForm({ titulo: o.titulo, descripcion: o.descripcion || '', precio: o.precio || '', precioOriginal: o.precioOriginal || '', badgesForzados: o.badgesForzados || null, financiacion: o.financiacion || '', stock: o.stock ?? '1', condicion: o.condicion || 'nuevo', categoryId: o.categoryId || null, contactoWhatsapp: o.contactoWhatsapp || '' });
+    setForm({ titulo: o.titulo, descripcion: o.descripcion || '', precio: o.precio || '', precioOriginal: o.precioOriginal || '', badgesForzados: o.badgesForzados || null, financiacion: o.financiacion || '', presentacion: o.presentacion || '', stock: o.stock ?? '1', condicion: o.condicion || 'nuevo', categoryId: o.categoryId || null, contactoWhatsapp: o.contactoWhatsapp || '' });
     setFotoFiles([]); setFotoPreviews(o.fotos || []);
     setSaveErr(null); setProductoAttributes(o.attributes || {});
     setShowForm(true);
@@ -447,6 +447,16 @@ export function ProductosScreen({
               </div>
             </div>
 
+            {/* Presentación */}
+            {(o.presentacion || prodDetailEditField === 'presentacion') && (
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-ink-dim mb-1">Presentación</p>
+                <div className="text-sm text-ink-dim dark:text-ink-dim">
+                  <InlineField field="presentacion" value={o.presentacion ?? ''} placeholder="—" />
+                </div>
+              </div>
+            )}
+
             {/* Financiación */}
             {(o.financiacion || prodDetailEditField === 'financiacion') && (
               <div>
@@ -523,6 +533,7 @@ export function ProductosScreen({
       {importadorOpen && (
         <ImportadorPrecios
           tiendaId={tiendaId}
+          sidebarExpanded={sidebarExpanded}
           onClose={() => setImportadorOpen(false)}
           onAplicado={() => fetchMisProductos?.()}
         />

@@ -26,6 +26,7 @@ export function construirDiff({ resultados, productos }) {
         precioOriginal: numeroValido(r.fila.precioOriginal),
         stock: numeroValido(r.fila.stock),
         descripcion: r.fila.descripcion || null,
+        presentacion: r.fila.presentacion || null,
         codigoBarra: r.fila.codigoBarra || null,
         skuProveedor: r.fila.skuProveedor || null,
       });

@@ -71,6 +71,10 @@ export function sanitizeOfertaInput(body, tienda, existingSlug) {
     producto.badgesForzados = { agregar: limpiar(raw.agregar), ocultar: limpiar(raw.ocultar) };
   }
   if ('financiacion' in body) producto.financiacion = sanitizeText(body.financiacion, { max: 200, multiline: false }) || null;
+  // presentacion: texto libre corto (ej. "1kg", "500cc", "unidad", "pack x6")
+  // — no se modela como enum porque la variedad real entre rubros (almacén,
+  // ferretería, indumentaria) es demasiado amplia para una lista cerrada.
+  if ('presentacion' in body) producto.presentacion = sanitizeText(body.presentacion, { max: 40, multiline: false }) || null;
   if ('condicion' in body) {
     const c = sanitizeText(body.condicion, { max: 20, multiline: false });
     producto.condicion = CONDICIONES_VALIDAS.has(c) ? c : 'nuevo';

@@ -12,7 +12,7 @@ import { normalizarHeader } from './huella.js';
 // producto final, solo se usan para vincular filas a productos.
 export const CAMPOS_DESTINO = [
   'nombre', 'precio', 'precioOriginal', 'stock', 'descripcion',
-  'marca', 'codigoBarra', 'skuProveedor', 'ignorar',
+  'marca', 'presentacion', 'codigoBarra', 'skuProveedor', 'ignorar',
 ];
 
 // Diccionario de sinónimos por campo — nivel 1. Cada entrada normalizada
@@ -24,6 +24,7 @@ const SINONIMOS = {
   skuProveedor: ['sku', 'codigo', 'cod', 'id', 'referencia', 'ref', 'codigo_proveedor', 'codigo_producto'],
   nombre: ['producto', 'articulo', 'descripcion', 'detalle', 'item', 'nombre', 'concepto'],
   marca: ['marca', 'brand', 'fabricante'],
+  presentacion: ['presentacion', 'unidad', 'unidad_de_medida', 'formato', 'contenido', 'medida', 'peso', 'volumen'],
   precio: ['precio', 'pvp', 'importe', 'valor', 'precio_venta', 'precio_lista', 'precio_publico'],
   precioOriginal: ['precio_anterior', 'precio_original', 'precio_sin_descuento', 'precio_regular'],
   stock: ['stock', 'cantidad', 'existencia', 'disponible', 'existencias'],

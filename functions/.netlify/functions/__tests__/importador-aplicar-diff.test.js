@@ -61,4 +61,39 @@ describe('aplicarDiff', () => {
     expect(actualizados).toBe(0);
     expect(ofertas[0].precio).toBe(100);
   });
+
+  it('un alta inválida (sin nombre) no tira abajo el resto del lote', () => {
+    const { ofertas, errores } = aplicarDiff({
+      ofertas: [], tienda, tiendaId: 't1',
+      altas: [
+        { nombre: 'Producto Válido', precio: 1000 },
+        { nombre: null, precio: 2000 },
+        { nombre: 'Otro Válido', precio: 3000 },
+      ],
+      actualizaciones: [], bajas: [],
+    });
+    expect(ofertas).toHaveLength(2);
+    expect(errores).toHaveLength(1);
+    expect(errores[0].tipo).toBe('alta');
+  });
+
+  it('una actualización inválida no tira abajo el resto del lote', () => {
+    const existentes = [
+      { id: 'p1', tiendaId: 't1', nombre: 'Producto A', precio: 100, slug: 'a' },
+      { id: 'p2', tiendaId: 't1', nombre: 'Producto B', precio: 200, slug: 'b' },
+    ];
+    const { ofertas, actualizados, errores } = aplicarDiff({
+      ofertas: existentes, tienda, tiendaId: 't1',
+      altas: [],
+      actualizaciones: [
+        { productoId: 'p1', cambios: { precio: 150 } },
+        { productoId: 'p2', cambios: { nombre: null } },
+      ],
+      bajas: [],
+    });
+    expect(actualizados).toBe(1);
+    expect(errores).toHaveLength(1);
+    expect(errores[0].tipo).toBe('actualizacion');
+    expect(ofertas.find((o) => o.id === 'p1').precio).toBe(150);
+  });
 });

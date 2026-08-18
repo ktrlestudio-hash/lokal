@@ -2,10 +2,10 @@
 // realmente (respuesta de accionAplicar). Cierra el círculo del feedback:
 // el usuario armó una selección en PasoRevisar, acá ve que se guardó.
 import React from 'react';
-import { CheckCircle2, PackagePlus, RefreshCw, PackageX } from 'lucide-react';
+import { CheckCircle2, PackagePlus, RefreshCw, PackageX, AlertTriangle } from 'lucide-react';
 
 export function PasoResultado({ resultado, onCerrar, onImportarOtro }) {
-  const { altasAplicadas, actualizacionesAplicadas, bajasAplicadas } = resultado;
+  const { altasAplicadas, actualizacionesAplicadas, bajasAplicadas, errores = [] } = resultado;
   const items = [
     { icono: PackagePlus, label: 'productos nuevos', valor: altasAplicadas },
     { icono: RefreshCw, label: 'productos actualizados', valor: actualizacionesAplicadas },
@@ -13,13 +13,19 @@ export function PasoResultado({ resultado, onCerrar, onImportarOtro }) {
   ].filter((i) => i.valor > 0);
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center text-center px-6 gap-5">
-      <div className="w-16 h-16 rounded-3xl bg-ok/10 flex items-center justify-center">
-        <CheckCircle2 className="w-8 h-8 text-ok-dark dark:text-ok" />
+    <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col items-center text-center px-6 py-8 gap-5">
+      <div className={`w-16 h-16 rounded-3xl flex items-center justify-center ${errores.length ? 'bg-amber-50 dark:bg-amber-500/10' : 'bg-ok/10'}`}>
+        {errores.length
+          ? <AlertTriangle className="w-8 h-8 text-amber-600 dark:text-amber-400" />
+          : <CheckCircle2 className="w-8 h-8 text-ok-dark dark:text-ok" />}
       </div>
       <div>
-        <h2 className="font-black text-xl mb-1">Catálogo actualizado</h2>
-        <p className="text-sm text-ink-dim">Los cambios ya están en tu tienda.</p>
+        <h2 className="font-black text-xl mb-1">{errores.length ? 'Catálogo actualizado, con algunos problemas' : 'Catálogo actualizado'}</h2>
+        <p className="text-sm text-ink-dim">
+          {errores.length
+            ? `Se aplicaron los cambios válidos. ${errores.length} fila${errores.length !== 1 ? 's' : ''} no se pudo${errores.length !== 1 ? 'ieron' : ''} procesar.`
+            : 'Los cambios ya están en tu tienda.'}
+        </p>
       </div>
 
       {items.length > 0 && (
@@ -31,6 +37,21 @@ export function PasoResultado({ resultado, onCerrar, onImportarOtro }) {
               <span className="text-sm font-black text-brand">{valor}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {errores.length > 0 && (
+        <div className="w-full max-w-xs text-left">
+          <p className="text-[10px] font-black uppercase tracking-widest text-ink-dim mb-2">Filas con problemas</p>
+          <div className="flex flex-col gap-1.5">
+            {errores.slice(0, 10).map((e, i) => (
+              <div key={i} className="bg-amber-50 dark:bg-amber-500/10 rounded-xl px-3 py-2 text-xs">
+                <p className="font-semibold text-amber-700 dark:text-amber-400">{e.nombre || '(sin nombre)'}</p>
+                <p className="text-ink-dim">{e.error}</p>
+              </div>
+            ))}
+            {errores.length > 10 && <p className="text-xs text-ink-dim text-center">y {errores.length - 10} más...</p>}
+          </div>
         </div>
       )}
 

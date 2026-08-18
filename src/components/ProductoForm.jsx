@@ -446,6 +446,12 @@ export default function ProductoForm({
       {/* ── Badges dinámicos (Nuevo/Oferta/Últimos días) ── */}
       <BadgesSection form={form} set={set} labelCls={labelCls} />
 
+      {/* ── Presentación (kg, cc, unidad...) ── */}
+      <div className={cardCls}>
+        <label className={`${labelCls} block mb-2`}>Presentación <span className="font-normal normal-case text-ink-dim">(opcional)</span></label>
+        <input value={form.presentacion} onChange={e => set('presentacion', e.target.value)} placeholder="Ej: 1kg, 500cc, unidad" className={inputCls} />
+      </div>
+
       {/* ── Financiación (campo libre, independiente de los badges) ── */}
       <div className={cardCls}>
         <label className={`${labelCls} block mb-2`}>Financiación <span className="font-normal normal-case text-ink-dim">(opcional)</span></label>

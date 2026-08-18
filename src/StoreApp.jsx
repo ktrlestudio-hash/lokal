@@ -2755,6 +2755,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const ProductosScreen = () => (
     <ProductosScreenBase
       tiendaId={tienda?.id || tiendaData?.id} fetchMisProductos={fetchMisProductos}
+      sidebarExpanded={sidebarExpanded}
       ambosModulosActivos={ambosModulosActivos} subScreenProductos={subScreenProductos} setSubScreenProductos={setSubScreenProductos}
       misProductosSinFiltrar={misProductosSinFiltrar}
       setMisProductos={setMisProductos} loadingProductos={loadingProductos}

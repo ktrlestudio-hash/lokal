@@ -10,6 +10,7 @@ export const CAMPOS_DESTINO_INFO = {
   stock: { label: 'Stock', obligatorio: false },
   descripcion: { label: 'Descripción', obligatorio: false },
   marca: { label: 'Marca', obligatorio: false },
+  presentacion: { label: 'Presentación (kg, cc, unidad...)', obligatorio: false },
   codigoBarra: { label: 'Código de barra', obligatorio: false },
   skuProveedor: { label: 'Código / SKU del proveedor', obligatorio: false },
   ignorar: { label: 'No importar esta columna', obligatorio: false },
