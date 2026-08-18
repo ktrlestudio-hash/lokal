@@ -111,7 +111,7 @@ async function requireTienda(event, env, tiendaId) {
 }
 
 async function accionCalibrar({ event, env, body }) {
-  const tiendaId = sanitizeText(body.tiendaId, { max: 64, multiline: false });
+  const tiendaId = sanitizeText(String(body.tiendaId || ''), { max: 64, multiline: false });
   if (!tiendaId) throw new HttpError(400, 'tiendaId es requerido');
   await requireTienda(event, env, tiendaId);
 
@@ -144,7 +144,7 @@ async function accionCalibrar({ event, env, body }) {
 }
 
 async function accionSincronizar({ event, env, body }) {
-  const tiendaId = sanitizeText(body.tiendaId, { max: 64, multiline: false });
+  const tiendaId = sanitizeText(String(body.tiendaId || ''), { max: 64, multiline: false });
   if (!tiendaId) throw new HttpError(400, 'tiendaId es requerido');
   if (!body.mapeo || typeof body.mapeo !== 'object') throw new HttpError(400, 'mapeo es requerido');
 
@@ -202,7 +202,7 @@ async function accionSincronizar({ event, env, body }) {
 //   bajas: [productoId] — de diff.posiblesBajas, los que el usuario
 //     confirmó dar de baja (se ocultan con visible:false, no se borran)
 async function accionAplicar({ event, env, body }) {
-  const tiendaId = sanitizeText(body.tiendaId, { max: 64, multiline: false });
+  const tiendaId = sanitizeText(String(body.tiendaId || ''), { max: 64, multiline: false });
   if (!tiendaId) throw new HttpError(400, 'tiendaId es requerido');
   const tienda = await requireTienda(event, env, tiendaId);
 
