@@ -1,0 +1,192 @@
+// importador.js — endpoint del importador universal de listas de precios
+// (v1: Excel/CSV/JSON/texto plano). Junta extractor → huella → calibración
+// (D1) → clasificador → matcher → diff. Ver diseño acordado en la memoria
+// lokal-links-importar-precios-excel-pdf.
+//
+// Dos acciones vía POST ?action=:
+//   - "calibrar": recibe el archivo crudo, devuelve la tabla extraída +
+//     sugerencias de columnas (clasificador nivel 1+2) para que el
+//     frontend arme la pantalla de confirmación humana (nivel 3). No
+//     escribe nada todavía — es de solo lectura sobre D1 (busca
+//     calibración existente por huella).
+//   - "sincronizar": recibe el archivo + el mapeo YA confirmado por el
+//     humano (columna → campo destino), guarda la calibración, corre
+//     matcher+diff contra el catálogo real de la tienda, y devuelve el
+//     plan de sincronización (altas/actualizaciones/ambiguos/posibles
+//     bajas) sin aplicarlo — aplicar cambios reales al catálogo queda
+//     para un segundo POST explícito del frontend (confirmar-cambios,
+//     fuera de esta v1 de endpoint) para no mutar productos a ciegas.
+import { requireAuth } from './_lib/auth.js';
+import { handleError, handleOptions, HttpError, jsonResponse, parseJsonBody } from './_lib/http.js';
+import { sanitizeText } from './_lib/validation.js';
+import { ensureStoreOwner, findTiendaById, readTiendas } from './_lib/tiendas-store.js';
+import { readOfertas } from './_lib/ofertas-read.js';
+import { extraerTabla, ExtractorError } from './_lib/importador/extractores.js';
+import { calcularHuella } from './_lib/importador/huella.js';
+import { clasificarColumnas } from './_lib/importador/clasificador.js';
+import { buscarCalibracion, guardarCalibracion, crearCorrida, actualizarCorrida } from './_lib/importador/calibraciones-store.js';
+import { matchearFilas } from './_lib/importador/matcher.js';
+import { construirDiff } from './_lib/importador/diff.js';
+
+const HTTP_OPTIONS = {
+  allowHeaders: 'Content-Type, Authorization',
+  allowMethods: 'POST, OPTIONS',
+};
+
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+
+function decodeBase64(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized) throw new HttpError(400, 'Archivo vacío');
+  let binary;
+  try {
+    binary = atob(normalized);
+  } catch {
+    throw new HttpError(400, 'Archivo inválido (base64 corrupto)');
+  }
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+// arrayBufferATexto — para CSV/JSON/texto plano necesitamos el string; el
+// frontend siempre manda base64 (mismo contrato que upload.js) así que
+// decodificamos bytes → UTF-8 acá, no le pedimos al cliente dos formatos.
+function bytesATexto(bytes) {
+  return new TextDecoder('utf-8').decode(bytes);
+}
+
+async function leerArchivoDelBody(body) {
+  const fileName = sanitizeText(body.fileName, { max: 160, multiline: false });
+  const contentType = sanitizeText(body.contentType, { max: 120, multiline: false });
+  if (!fileName || !body.fileData) throw new HttpError(400, 'fileName y fileData son requeridos');
+
+  const bytes = decodeBase64(body.fileData);
+  if (bytes.length > MAX_FILE_BYTES) throw new HttpError(400, 'Archivo demasiado grande (máx 5MB)');
+
+  const ext = fileName.split('.').pop()?.toLowerCase();
+  const esBinario = ext === 'xlsx' || ext === 'xls';
+  const texto = esBinario ? null : bytesATexto(bytes);
+  const arrayBuffer = esBinario ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) : null;
+
+  try {
+    return extraerTabla({ nombreArchivo: fileName, contentType, arrayBuffer, texto });
+  } catch (error) {
+    if (error instanceof ExtractorError) throw new HttpError(400, error.message);
+    throw error;
+  }
+}
+
+// mapearFilas — convierte {headers, rows} + mapeo confirmado {header: campo}
+// a un array de objetos por campo destino (lo que espera matcher.js/diff.js).
+function mapearFilas({ headers, rows }, mapeo) {
+  const indices = {};
+  headers.forEach((h, i) => {
+    const campo = mapeo[h];
+    if (campo && campo !== 'ignorar') indices[campo] = i;
+  });
+  return rows.map((row) => {
+    const fila = {};
+    for (const [campo, i] of Object.entries(indices)) fila[campo] = row[i];
+    return fila;
+  });
+}
+
+async function requireTienda(event, env, tiendaId) {
+  const user = await requireAuth(event, env);
+  const tiendas = await readTiendas(env.LOKAL_BUCKET);
+  const tienda = findTiendaById(tiendas, tiendaId);
+  if (!tienda) throw new HttpError(404, 'Tienda no encontrada');
+  ensureStoreOwner(user, tienda);
+  return tienda;
+}
+
+async function accionCalibrar({ event, env, body }) {
+  const tiendaId = sanitizeText(body.tiendaId, { max: 64, multiline: false });
+  if (!tiendaId) throw new HttpError(400, 'tiendaId es requerido');
+  await requireTienda(event, env, tiendaId);
+
+  const tabla = await leerArchivoDelBody(body);
+  const huella = calcularHuella(tabla.headers);
+  const existente = await buscarCalibracion(env.IMPORTADOR_DB, tiendaId, huella);
+
+  if (existente) {
+    return jsonResponse(event, 200, {
+      huella,
+      headers: tabla.headers,
+      filasPreview: tabla.rows.slice(0, 5),
+      totalFilas: tabla.rows.length,
+      mapeo: existente.mapeo,
+      necesitaRevision: false,
+      calibracionReusada: true,
+    }, { ...HTTP_OPTIONS, env });
+  }
+
+  const { sugerencias, necesitaRevision } = clasificarColumnas(tabla);
+  return jsonResponse(event, 200, {
+    huella,
+    headers: tabla.headers,
+    filasPreview: tabla.rows.slice(0, 5),
+    totalFilas: tabla.rows.length,
+    sugerencias,
+    necesitaRevision,
+    calibracionReusada: false,
+  }, { ...HTTP_OPTIONS, env });
+}
+
+async function accionSincronizar({ event, env, body }) {
+  const tiendaId = sanitizeText(body.tiendaId, { max: 64, multiline: false });
+  if (!tiendaId) throw new HttpError(400, 'tiendaId es requerido');
+  if (!body.mapeo || typeof body.mapeo !== 'object') throw new HttpError(400, 'mapeo es requerido');
+
+  await requireTienda(event, env, tiendaId);
+
+  const tabla = await leerArchivoDelBody(body);
+  const huella = calcularHuella(tabla.headers);
+  const db = env.IMPORTADOR_DB;
+
+  await guardarCalibracion(db, { tiendaId, huella, headersOriginales: tabla.headers, mapeo: body.mapeo });
+  const corridaId = await crearCorrida(db, { tiendaId, huella, nombreArchivo: sanitizeText(body.fileName, { max: 160, multiline: false }) });
+
+  try {
+    const filasMapeadas = mapearFilas(tabla, body.mapeo);
+    const productos = (await readOfertas(env.LOKAL_BUCKET)).filter((o) => String(o.tiendaId) === String(tiendaId));
+
+    const resultados = await matchearFilas(db, { tiendaId, huella, filasMapeadas, productos });
+    const diff = construirDiff({ resultados, productos });
+
+    await actualizarCorrida(db, corridaId, {
+      estado: 'completada',
+      resumen: {
+        altas: diff.altas.length,
+        actualizaciones: diff.actualizaciones.length,
+        ambiguos: diff.ambiguos.length,
+        posiblesBajas: diff.posiblesBajas.length,
+      },
+    });
+
+    return jsonResponse(event, 200, { corridaId, huella, ...diff }, { ...HTTP_OPTIONS, env });
+  } catch (error) {
+    await actualizarCorrida(db, corridaId, { estado: 'error' });
+    throw error;
+  }
+}
+
+export async function onRequestOptions({ request, env }) {
+  return handleOptions(request, { ...HTTP_OPTIONS, env });
+}
+
+export async function onRequestPost({ request, env }) {
+  const event = request;
+  try {
+    const { searchParams } = new URL(request.url);
+    const action = searchParams.get('action');
+    const body = await parseJsonBody(event);
+
+    if (action === 'calibrar') return await accionCalibrar({ event, env, body });
+    if (action === 'sincronizar') return await accionSincronizar({ event, env, body });
+    throw new HttpError(400, 'action inválida (esperado: calibrar | sincronizar)');
+  } catch (error) {
+    return handleError(request, error, 'Error interno', { ...HTTP_OPTIONS, env });
+  }
+}

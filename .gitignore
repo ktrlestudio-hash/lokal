@@ -2,7 +2,11 @@ node_modules/
 dist/
 .env
 .env.local
-.netlify/
+# Carpeta de caché que genera `netlify dev` en la raíz del proyecto — NO
+# confundir con functions/.netlify/functions/, que es código fuente real
+# de las Cloudflare Pages Functions (el nombre de carpeta imita la ruta
+# que Netlify usaba, mantenido para no romper API_BASE del frontend).
+/.netlify/
 # Config local de Claude Code — permisos de sesión, puede contener secrets
 # pegados en comandos aprobados (ver limpieza de historial 2026-08-17: una
 # API key real quedó acá en 3 commits viejos, forzó un filter-branch).
