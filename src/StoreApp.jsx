@@ -1349,7 +1349,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     return (
       <div className="h-[100dvh] flex flex-col sa-page-bg">
         <StorePageHeader title="Suscripción" subtitle="Gestioná tu plan y facturación" onBack={() => setScreen('perfil')} />
-        <div className="flex-1 overflow-y-auto no-scrollbar">
+        <div className="flex-1 overflow-y-auto no-scrollbar pb-[calc(var(--store-bottom-nav-h)_+_1rem)] lg:pb-0">
         <SuscripcionContent
           planActual={planActual}
           isActiva={isActiva}

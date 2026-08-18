@@ -242,11 +242,11 @@ export function OfertasScreen({
       />
 
       {loadingProductos && misProductos.length === 0 ? (
-        <div className="flex-1 overflow-y-auto no-scrollbar p-4 pb-24 lg:pb-4">
+        <div className="flex-1 overflow-y-auto no-scrollbar p-4 pb-[calc(var(--store-bottom-nav-h)_+_1rem)] lg:pb-4">
           <SkeletonProductosGrid cols={2} count={6} />
         </div>
       ) : misProductos.length === 0 && !loadingProductos ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-center px-6 gap-4 pb-24 lg:pb-0">
+        <div className="flex-1 flex flex-col items-center justify-center text-center px-6 gap-4 pb-[var(--store-bottom-nav-h)] lg:pb-0">
           <div className="w-16 h-16 rounded-3xl bg-brand/10 dark:bg-brand/15 flex items-center justify-center">
             <Package className="w-8 h-8 text-brand" />
           </div>
@@ -259,7 +259,7 @@ export function OfertasScreen({
           </button>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto no-scrollbar p-4">
+        <div className="flex-1 overflow-y-auto no-scrollbar p-4 pb-[calc(var(--store-bottom-nav-h)_+_1rem)] lg:pb-4">
           {/* Barra de resumen — contexto de gestión, no repite lo que ya
               muestra la pantalla de Estadísticas. */}
           <div className="flex items-center gap-4 px-1 pb-4 text-xs">

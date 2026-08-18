@@ -13,6 +13,7 @@ import LazyImg from '../../LazyImg';
 import { StorePageHeader } from '../components/StorePageHeader.jsx';
 import { ImportadorPrecios } from '../components/importador/ImportadorPrecios.jsx';
 import { ProductosOfertasToggle } from '../components/ProductosOfertasToggle.jsx';
+import { useInterceptarRetroceso } from '../hooks/useInterceptarRetroceso.js';
 
 export function ProductosScreen({
   tiendaId, fetchMisProductos, sidebarExpanded,
@@ -35,6 +36,15 @@ export function ProductosScreen({
   isDark, toggleTheme, onOpenAccount, renderAccountAvatar,
 }) {
   const [importadorOpen, setImportadorOpen] = useState(false);
+  // El atrás nativo cierra el panel de detalle en vez de salir del admin
+  // entero. ProductoDetail no acumula "borrador" (cada campo se autoguarda
+  // al blur en saveField/removePhoto), así que no hace falta modal de
+  // "¿descartar cambios?" — solo que el atrás no se escape del overlay.
+  useInterceptarRetroceso({
+    activo: !!prodDetail,
+    hayCambiosSinGuardar: () => false,
+    onCerrar: () => setProdDetail(null),
+  });
   // Shadowing simétrico al de OfertasScreen (ver comentario ahí): con
   // ambos módulos activos, esta pantalla solo muestra ítems CON precio
   // (productos de catálogo reales) — sin este filtro, mostraba también las
@@ -540,11 +550,11 @@ export function ProductosScreen({
       )}
 
       {loadingProductos && misProductos.length === 0 ? (
-        <div className="flex-1 overflow-y-auto no-scrollbar p-4 pb-24 lg:pb-4">
+        <div className="flex-1 overflow-y-auto no-scrollbar p-4 pb-[calc(var(--store-bottom-nav-h)_+_1rem)] lg:pb-4">
           <SkeletonProductosGrid cols={2} count={6} />
         </div>
       ) : misProductos.length === 0 && !loadingProductos ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-center px-6 gap-4 pb-24 lg:pb-0">
+        <div className="flex-1 flex flex-col items-center justify-center text-center px-6 gap-4 pb-[var(--store-bottom-nav-h)] lg:pb-0">
           <div className="w-16 h-16 rounded-3xl bg-brand/10 dark:bg-brand/15 flex items-center justify-center">
             <Package className="w-8 h-8 text-brand" />
           </div>
@@ -682,7 +692,7 @@ export function ProductosScreen({
             </div>
 
             {/* Lista / Grilla */}
-            <div className="flex-1 overflow-y-auto no-scrollbar p-4 pb-24 lg:pb-4">
+            <div className="flex-1 overflow-y-auto no-scrollbar p-4 pb-[calc(var(--store-bottom-nav-h)_+_1rem)] lg:pb-4">
               {filtered.length === 0 ? (
                 <div className="flex flex-col items-center text-center gap-3 pt-12 pb-8">
                   <Search className="w-8 h-8 text-ink-dim dark:text-ink-dim" />

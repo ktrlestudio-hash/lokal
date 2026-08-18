@@ -16,6 +16,9 @@ import { PasoSubir } from './PasoSubir.jsx';
 import { PasoCalibrar, calibracionLista } from './PasoCalibrar.jsx';
 import { PasoRevisar } from './PasoRevisar.jsx';
 import { PasoResultado } from './PasoResultado.jsx';
+import { EstadoCarga } from './EstadoCarga.jsx';
+import { ModalConfirmar } from '../ModalConfirmar.jsx';
+import { useInterceptarRetroceso } from '../../hooks/useInterceptarRetroceso.js';
 
 const API_BASE = '/.netlify/functions';
 
@@ -49,6 +52,7 @@ export function ImportadorPrecios({ tiendaId, sidebarExpanded, onClose, onAplica
   const [seleccion, setSeleccion] = useState({ altas: new Set(), actualizaciones: new Set(), bajas: new Set(), ambiguos: new Map() });
   const [resultado, setResultado] = useState(null);
   const [arrastrando, setArrastrando] = useState(false);
+  const [archivoInfo, setArchivoInfo] = useState(null); // { name, size } del File real, para EstadoCarga
   const dragCounter = useRef(0);
 
   const llamarImportador = async (action, body) => {
@@ -65,6 +69,7 @@ export function ImportadorPrecios({ tiendaId, sidebarExpanded, onClose, onAplica
   const manejarArchivoElegido = async (file) => {
     setError(null);
     setCargando(true);
+    setArchivoInfo({ name: file.name, size: file.size });
     try {
       const fileData = await fileToBase64(file);
       const payload = { tiendaId, fileName: file.name, contentType: file.type, fileData };
@@ -163,7 +168,7 @@ export function ImportadorPrecios({ tiendaId, sidebarExpanded, onClose, onAplica
 
   const reiniciar = () => {
     setPaso('subir'); setArchivo(null); setCalibracion(null); setMapeo({});
-    setDiff(null); setCorridaId(null);
+    setDiff(null); setCorridaId(null); setArchivoInfo(null);
     setSeleccion({ altas: new Set(), actualizaciones: new Set(), bajas: new Set(), ambiguos: new Map() });
     setResultado(null); setError(null);
   };
@@ -175,6 +180,23 @@ export function ImportadorPrecios({ tiendaId, sidebarExpanded, onClose, onAplica
 
   const indicePaso = PASOS.indexOf(paso);
   const puedeVolver = paso === 'calibrar' || (paso === 'revisar' && !calibracion?.calibracionReusada);
+
+  // El atrás nativo cierra el wizard en vez de salir del admin entero —
+  // ver useInterceptarRetroceso. "Cambios sin guardar" = hay progreso real
+  // en curso que se perdería: cualquier paso intermedio (ya se subió un
+  // archivo, ya se calibró, ya se armó una selección para aplicar). El
+  // paso "subir" (nada elegido todavía) y "resultado" (ya se aplicó, no
+  // hay nada que perder) no piden confirmación.
+  const hayCambiosSinGuardar = () => paso === 'calibrar' || paso === 'revisar';
+  const { pidiendoConfirmacion, pedirConfirmacion, confirmarDescartar, cancelarDescartar } = useInterceptarRetroceso({
+    activo: true,
+    hayCambiosSinGuardar,
+    onCerrar: onClose,
+  });
+  // Mismo criterio para el botón X del header: si hay progreso en curso,
+  // pide la misma confirmación que el atrás nativo — cerrar con la X no
+  // debería ser un atajo silencioso alrededor de la misma protección.
+  const pedirCierre = () => { if (hayCambiosSinGuardar()) pedirConfirmacion(); else onClose(); };
 
   // Drag&drop a nivel de toda la pantalla del wizard, no solo el recuadro
   // chico de PasoSubir — más fácil de acertar, especialmente arrastrando
@@ -240,7 +262,7 @@ export function ImportadorPrecios({ tiendaId, sidebarExpanded, onClose, onAplica
         {/* Cerrar deshabilitado mientras se aplica: evita interrumpir una
             escritura real al catálogo (POST /aplicar) a mitad de camino. */}
         <button
-          onClick={cargando ? undefined : onClose}
+          onClick={cargando ? undefined : pedirCierre}
           disabled={cargando}
           className="ui-icon-btn bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:bg-danger/10 hover:text-danger transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
         >
@@ -266,10 +288,7 @@ export function ImportadorPrecios({ tiendaId, sidebarExpanded, onClose, onAplica
       )}
 
       {cargando && paso === 'subir' && !error ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-brand" />
-          <p className="text-sm text-ink-dim font-medium">Leyendo tu archivo...</p>
-        </div>
+        <EstadoCarga tipo="leyendo" archivoInfo={archivoInfo} />
       ) : paso === 'subir' ? (
         <PasoSubir onArchivoElegido={manejarArchivoElegido} error={error} />
       ) : paso === 'calibrar' ? (
@@ -286,15 +305,11 @@ export function ImportadorPrecios({ tiendaId, sidebarExpanded, onClose, onAplica
         // archivos grandes (cientos de filas) el POST /aplicar tarda varios
         // segundos reales (lee+escribe todo el catálogo en R2) — sin esto
         // se sentía "colgado" en vez de "trabajando".
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-brand" />
-          <div>
-            <p className="text-sm font-bold">Aplicando cambios a tu catálogo...</p>
-            <p className="text-xs text-ink-dim mt-1">
-              {seleccion.altas.size + seleccion.actualizaciones.size + seleccion.bajas.size} cambios en camino, no cierres esta pantalla
-            </p>
-          </div>
-        </div>
+        <EstadoCarga
+          tipo="aplicando"
+          archivoInfo={archivoInfo}
+          cantidadCambios={seleccion.altas.size + seleccion.actualizaciones.size + seleccion.bajas.size}
+        />
       ) : paso === 'revisar' ? (
         <PasoRevisar diff={diff} seleccion={seleccion} onCambiarSeleccion={cambiarSeleccion} />
       ) : (
@@ -325,6 +340,17 @@ export function ImportadorPrecios({ tiendaId, sidebarExpanded, onClose, onAplica
           </button>
         </div>
       )}
+
+      <ModalConfirmar
+        abierto={pidiendoConfirmacion}
+        titulo="¿Salir sin terminar?"
+        mensaje="Vas a perder el progreso de esta importación. El archivo no se volvió a subir todavía."
+        textoCancelar="Seguir acá"
+        textoConfirmar="Salir"
+        tono="warn"
+        onCancelar={cancelarDescartar}
+        onConfirmar={confirmarDescartar}
+      />
     </div>
   );
 }

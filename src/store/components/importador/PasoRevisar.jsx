@@ -67,6 +67,10 @@ export function PasoRevisar({ diff, seleccion, onCambiarSeleccion }) {
   }), [altas, actualizaciones, ambiguos, posiblesBajas]);
 
   const sinCambios = resumen.altas === 0 && resumen.actualizaciones === 0 && resumen.ambiguos === 0 && resumen.bajas === 0;
+  // Primera importación (catálogo vacío o sin ningún match): TODO cae en
+  // altas, no hay nada previo contra qué comparar — "Revisá los cambios"
+  // no tiene sentido ahí, no hay un "antes" del que se esté cambiando algo.
+  const esPrimeraImportacion = resumen.actualizaciones === 0 && resumen.ambiguos === 0 && resumen.bajas === 0 && resumen.altas > 0;
 
   if (sinCambios) {
     return (
@@ -86,8 +90,12 @@ export function PasoRevisar({ diff, seleccion, onCambiarSeleccion }) {
     <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar">
       <div className="px-5 py-5 max-w-lg mx-auto space-y-3">
         <div>
-          <h2 className="font-black text-lg mb-1">Revisá los cambios</h2>
-          <p className="text-sm text-ink-dim">Elegí qué aplicar. Nada se guarda hasta que confirmes al final.</p>
+          <h2 className="font-black text-lg mb-1">{esPrimeraImportacion ? 'Confirmá qué vamos a importar' : 'Revisá los cambios'}</h2>
+          <p className="text-sm text-ink-dim">
+            {esPrimeraImportacion
+              ? 'Elegí qué productos publicar. Nada se guarda hasta que confirmes al final.'
+              : 'Elegí qué aplicar. Nada se guarda hasta que confirmes al final.'}
+          </p>
         </div>
 
         {/* Buscador — filtra por nombre en las 4 secciones a la vez, útil

@@ -37,6 +37,15 @@
 
 /* ── 1. BRAND — EDITÁ SOLO ESTA SECCIÓN PARA REPINTAR TODA LA APP ──────────── */
 :root {
+  /* Altura real del bottom-nav mobile del admin de tienda (StoreBottomNav),
+     publicada por ese componente vía ResizeObserver — este valor es solo
+     el fallback antes del primer render de React (evita un salto de
+     padding al montar), NO la fuente de verdad. Las screens del admin
+     usan padding-bottom: var(--store-bottom-nav-h) en vez de un pb-24
+     hardcodeado, así el padding siempre coincide con la altura real del
+     nav sin depender de mantener dos números sincronizados a mano. */
+  --store-bottom-nav-h: 84px;
+
   /* Primario de marca — turquesa LOKAL (coherente con LOKAL global, no el
      rojo de comida rápida). RGB separado por espacios (requerido por Tailwind). */
   --brand:           0 184 217;   /* #00B8D9  turquesa — base              */

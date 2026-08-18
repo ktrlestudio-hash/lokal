@@ -36,7 +36,7 @@ export function StatsScreen({
     : 'text-ink-dim bg-surface-card-2 dark:bg-white/5 border-slate-200 dark:border-white/10';
 
   return (
-    <div className="min-h-screen sa-page-bg pb-24 lg:pb-8">
+    <div className="min-h-screen sa-page-bg pb-[calc(var(--store-bottom-nav-h)_+_1rem)] lg:pb-8">
       <StorePageHeader
         title="Estadísticas" subtitle="Rendimiento de tu tienda" icon={TrendingUp}
         isDark={isDark} toggleTheme={toggleTheme}

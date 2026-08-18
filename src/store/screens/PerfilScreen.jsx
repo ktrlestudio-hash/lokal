@@ -514,12 +514,14 @@ export function PerfilScreen({
           </button>
         </div>
 
-        {/* Mismo ajuste que en Ofertas: espaciador SOLO de la altura del
-            nav (84px), no un pb-24 mezclado con el aire estético — el
-            padding real de esta pantalla ya viene de cada bloque interno
-            (px-5 lg:px-8, space-y-5), así que este bloque cubre nav sin
-            sumar aire extra encima de eso. */}
-        <div style={{ height: 84 }} className="lg:hidden" aria-hidden="true" />
+        {/* Mismo ajuste que en Ofertas: espaciador SOLO de la altura REAL
+            del nav (var(--store-bottom-nav-h), medida por ResizeObserver
+            en StoreBottomNav — ya no un 84px hardcodeado ni un pb-24
+            mezclado con el aire estético). El padding real de esta
+            pantalla ya viene de cada bloque interno (px-5 lg:px-8,
+            space-y-5), así que este bloque cubre el nav sin sumar aire
+            extra encima de eso. */}
+        <div style={{ height: 'var(--store-bottom-nav-h)' }} className="lg:hidden" aria-hidden="true" />
       </div>
       </div>{/* fin overflow-y-auto */}
     </div>

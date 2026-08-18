@@ -266,6 +266,18 @@ export async function onRequestPost({ request, env }) {
     if (action === 'aplicar') return await accionAplicar({ event, env, body });
     throw new HttpError(400, 'action inválida (esperado: calibrar | sincronizar | aplicar)');
   } catch (error) {
+    // Diagnóstico temporal (2026-08-18): 500 real en producción en
+    // action=aplicar con un lote grande, sin acceso a wrangler tail en este
+    // entorno — se devuelve el mensaje/stack real en el body (no solo
+    // "Error interno") para verlo directo en la consola del navegador.
+    // SACAR este bloque una vez encontrada la causa real.
+    console.error('POST /importador falló:', error?.constructor?.name, error?.message, error?.stack);
+    if (!(error instanceof HttpError)) {
+      return jsonResponse(event, 500, {
+        error: `DEBUG: ${error?.constructor?.name}: ${error?.message}`,
+        stack: String(error?.stack || '').split('\n').slice(0, 6),
+      }, { ...HTTP_OPTIONS, env });
+    }
     return handleError(request, error, 'Error interno', { ...HTTP_OPTIONS, env });
   }
 }

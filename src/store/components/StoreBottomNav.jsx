@@ -3,21 +3,51 @@
 // Fase 3. Segundo slot es Mensajes o Estadísticas según qué módulo esté
 // activo, para mantener 5 items balanceados alrededor del FAB central en
 // ambos casos, sin quedar descentrado.
-import React from 'react';
+//
+// Publica su propia altura real como variable CSS global
+// (--store-bottom-nav-h) vía ResizeObserver — así cada screen compensa el
+// nav con exactamente su altura real (medida, no adivinada/hardcodeada
+// como los pb-24 sueltos que había antes) y queda correcto automáticamente
+// aunque cambie el contenido del nav, la safe-area, o la orientación del
+// dispositivo. Cuando el nav no se renderiza (return null más abajo) la
+// variable se limpia a 0 para que las screens que lo consultan no dejen un
+// padding fantasma.
+import React, { useLayoutEffect, useRef } from 'react';
 import { Tag, MessageSquare, TrendingUp, Plus, Store, Menu } from 'lucide-react';
 import { isModuleActive } from '../../tienda-publica/utils.js';
+
+function usePublicarAlturaReal(ref, activo) {
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    if (!activo) {
+      root.style.setProperty('--store-bottom-nav-h', '0px');
+      return;
+    }
+    const el = ref.current;
+    if (!el) return;
+    const publicar = () => root.style.setProperty('--store-bottom-nav-h', `${el.offsetHeight}px`);
+    publicar();
+    const ro = new ResizeObserver(publicar);
+    ro.observe(el);
+    return () => { ro.disconnect(); root.style.setProperty('--store-bottom-nav-h', '0px'); };
+  }, [ref, activo]);
+}
 
 export function StoreBottomNav({
   screen, inboxMobileView, tiendaData, unreadTotal, isEmprendimiento,
   navigateTo, setCreateSheetOpen, setCreateSheetClosing,
   createSheetOpen, closeCreateSheet, setMoreSheetOpen,
 }) {
-  if (screen === 'mi-pagina' || (screen === 'mensajes' && inboxMobileView === 'chat')) return null;
+  const navRef = useRef(null);
+  const visible = !(screen === 'mi-pagina' || (screen === 'mensajes' && inboxMobileView === 'chat'));
+  usePublicarAlturaReal(navRef, visible);
+
+  if (!visible) return null;
 
   const resetCreate = () => { setCreateSheetOpen(false); setCreateSheetClosing(false); };
 
   return (
-    <div style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} className="lg:hidden fixed bottom-0 left-0 right-0 bg-surface-card border-t border-slate-100 dark:border-white/8 z-[4500]">
+    <div ref={navRef} style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} className="lg:hidden fixed bottom-0 left-0 right-0 bg-surface-card border-t border-slate-100 dark:border-white/8 z-[4500]">
       <div className="flex items-end justify-around px-2 pt-2 pb-3 max-w-md mx-auto">
         <button onClick={() => { navigateTo('productos'); resetCreate(); }} className="flex flex-col items-center gap-1 min-w-[56px]">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${screen === 'productos' ? 'bg-primary/10 dark:bg-primary/15' : 'hover:bg-surface-card-2 dark:hover:bg-white/8'}`}>
