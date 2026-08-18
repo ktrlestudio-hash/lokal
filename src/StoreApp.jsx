@@ -2753,7 +2753,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   // segunda de las 5 pantallas grandes).
   const ProductosScreen = () => (
     <ProductosScreenBase
-      tiendaId={tiendaData?.id} fetchMisProductos={fetchMisProductos}
+      tiendaId={tienda?.id || tiendaData?.id} fetchMisProductos={fetchMisProductos}
       ambosModulosActivos={ambosModulosActivos} misProductosSinFiltrar={misProductosSinFiltrar}
       setMisProductos={setMisProductos} loadingProductos={loadingProductos}
       productoShowForm={productoShowForm} setProductoShowForm={setProductoShowForm}
