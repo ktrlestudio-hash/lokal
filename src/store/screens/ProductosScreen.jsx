@@ -13,7 +13,7 @@ import LazyImg from '../../LazyImg';
 import { StorePageHeader } from '../components/StorePageHeader.jsx';
 import { ImportadorPrecios } from '../components/importador/ImportadorPrecios.jsx';
 import { ProductosOfertasToggle } from '../components/ProductosOfertasToggle.jsx';
-import { useInterceptarRetroceso } from '../hooks/useInterceptarRetroceso.js';
+import { useCapaUI } from '../navegacion/useCapaUI.js';
 
 export function ProductosScreen({
   tiendaId, fetchMisProductos, sidebarExpanded,
@@ -36,15 +36,20 @@ export function ProductosScreen({
   isDark, toggleTheme, onOpenAccount, renderAccountAvatar,
 }) {
   const [importadorOpen, setImportadorOpen] = useState(false);
-  // El atrás nativo cierra el panel de detalle en vez de salir del admin
-  // entero. ProductoDetail no acumula "borrador" (cada campo se autoguarda
-  // al blur en saveField/removePhoto), así que no hace falta modal de
-  // "¿descartar cambios?" — solo que el atrás no se escape del overlay.
-  useInterceptarRetroceso({
-    activo: !!prodDetail,
-    hayCambiosSinGuardar: () => false,
-    onCerrar: () => setProdDetail(null),
-  });
+  // Cada capa de UI que se abre encima de la lista se registra en el
+  // uiStack, así el atrás nativo cierra exactamente esa capa (la de
+  // arriba) en vez de salir de la app — ver src/store/navegacion/uiStack.js.
+  // Ninguna de estas acumula "borrador" sin guardar: el detalle autoguarda
+  // cada campo al blur, y el resto son selecciones/confirmaciones — por eso
+  // no piden confirmación al cerrarse.
+  // (productoShowForm/ofertaShowForm y los sheets globales se registran en
+  // StoreApp.jsx, que es donde vive su estado — acá solo las capas propias
+  // de esta pantalla.)
+  // (El importador se registra a sí mismo desde ImportadorPrecios.jsx,
+  // porque su cierre necesita confirmación cuando hay progreso a medias.)
+  useCapaUI({ abierto: !!prodDetail, onCerrar: () => setProdDetail(null) });
+  useCapaUI({ abierto: !!prodFilterSheet, onCerrar: () => setProdFilterSheet(false) });
+  useCapaUI({ abierto: !!confirmDelete, onCerrar: () => setConfirmDelete(null) });
   // Shadowing simétrico al de OfertasScreen (ver comentario ahí): con
   // ambos módulos activos, esta pantalla solo muestra ítems CON precio
   // (productos de catálogo reales) — sin este filtro, mostraba también las

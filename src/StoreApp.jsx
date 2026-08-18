@@ -11,6 +11,7 @@ import TransferenciaModal from './store/modals/TransferenciaModal';
 import { useProductosOfertas } from './store/hooks/useProductosOfertas';
 import { useInbox } from './store/hooks/useInbox';
 import { useTiendaPatch } from './store/hooks/useTiendaPatch';
+import { useCapaUI } from './store/navegacion/useCapaUI.js';
 import { StorePageHeader as StorePageHeaderBase } from './store/components/StorePageHeader.jsx';
 import { StoreSidebar as StoreSidebarBase } from './store/components/StoreSidebar.jsx';
 import { StoreBottomNav as StoreBottomNavBase } from './store/components/StoreBottomNav.jsx';
@@ -429,6 +430,27 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   // escribe de forma síncrona antes de disparar la subida, sin ese desfasaje.
   const ofertaPendientesRef = useRef(new Map()); // _localId -> datos del ítem
   const ofertaAbortRefs = useRef({}); // _localId -> AbortController
+
+  // ── Capas de UI ↔ historial del navegador ────────────────────────────────
+  // Cada sheet/modal/overlay abierto es UNA entrada de historial: el atrás
+  // nativo cierra la capa de arriba (LIFO) en vez de salir de la app. Un
+  // único dueño de la pila evita que varios listeners de popstate compitan
+  // por el mismo evento — ver src/store/navegacion/uiStack.js.
+  // Cuando no queda ninguna capa abierta, el atrás hace lo nativo (salir),
+  // que es el comportamiento esperado y no se pelea.
+  useCapaUI({ abierto: moreSheetOpen, onCerrar: () => setMoreSheetOpen(false) });
+  // Arrow que difiere la resolución: closeCreateSheet se declara más abajo
+  // (const en TDZ acá), pero para cuando esta callback se ejecute ya existe.
+  useCapaUI({ abierto: createSheetOpen, onCerrar: () => closeCreateSheet() });
+  useCapaUI({ abierto: productoShowForm, onCerrar: () => setProductoShowForm(false) });
+  useCapaUI({ abierto: ofertaShowForm, onCerrar: () => setOfertaShowForm(false) });
+  useCapaUI({ abierto: quickPriceOpen, onCerrar: () => setQuickPriceOpen(false) });
+  useCapaUI({ abierto: showPaywall, onCerrar: () => setShowPaywall(false) });
+  useCapaUI({ abierto: showPremiumModal, onCerrar: () => setShowPremiumModal(false) });
+  useCapaUI({ abierto: showTransferenciaModal, onCerrar: () => setShowTransferenciaModal(false) });
+  useCapaUI({ abierto: !!fieldEditor, onCerrar: () => setFieldEditor(null) });
+  useCapaUI({ abierto: locationModal, onCerrar: () => setLocationModal(false) });
+  useCapaUI({ abierto: horarioModal, onCerrar: () => setHorarioModal(false) });
 
   const subirOfertaEnColaAdmin = useCallback((localId) => {
     const item = ofertaPendientesRef.current.get(localId);

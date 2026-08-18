@@ -18,7 +18,7 @@ import { PasoRevisar } from './PasoRevisar.jsx';
 import { PasoResultado } from './PasoResultado.jsx';
 import { EstadoCarga } from './EstadoCarga.jsx';
 import { ModalConfirmar } from '../ModalConfirmar.jsx';
-import { useInterceptarRetroceso } from '../../hooks/useInterceptarRetroceso.js';
+import { useCapaUI } from '../../navegacion/useCapaUI.js';
 
 const API_BASE = '/.netlify/functions';
 
@@ -181,22 +181,23 @@ export function ImportadorPrecios({ tiendaId, sidebarExpanded, onClose, onAplica
   const indicePaso = PASOS.indexOf(paso);
   const puedeVolver = paso === 'calibrar' || (paso === 'revisar' && !calibracion?.calibracionReusada);
 
-  // El atrás nativo cierra el wizard en vez de salir del admin entero —
-  // ver useInterceptarRetroceso. "Cambios sin guardar" = hay progreso real
-  // en curso que se perdería: cualquier paso intermedio (ya se subió un
-  // archivo, ya se calibró, ya se armó una selección para aplicar). El
-  // paso "subir" (nada elegido todavía) y "resultado" (ya se aplicó, no
-  // hay nada que perder) no piden confirmación.
-  const hayCambiosSinGuardar = () => paso === 'calibrar' || paso === 'revisar';
-  const { pidiendoConfirmacion, pedirConfirmacion, confirmarDescartar, cancelarDescartar } = useInterceptarRetroceso({
-    activo: true,
-    hayCambiosSinGuardar,
+  // El wizard es una capa del uiStack: el atrás nativo lo cierra a él, no
+  // a la app entera (ver src/store/navegacion/uiStack.js). "Cambios sin
+  // guardar" = hay progreso real en curso que se perdería: cualquier paso
+  // intermedio (ya se subió un archivo, ya se calibró, ya se armó una
+  // selección para aplicar). El paso "subir" (nada elegido todavía) y
+  // "resultado" (ya se aplicó, no hay nada que perder) cierran sin
+  // preguntar. El botón X usa el mismo camino que el atrás — cerrar con la
+  // X no debe ser un atajo silencioso alrededor de la confirmación.
+  const [pidiendoConfirmacion, setPidiendoConfirmacion] = useState(false);
+  const { cerrar: pedirCierre, forzarCierre } = useCapaUI({
+    abierto: true,
     onCerrar: onClose,
+    confirmarAntesDeCerrar: () => paso === 'calibrar' || paso === 'revisar',
+    onPedirConfirmacion: () => setPidiendoConfirmacion(true),
   });
-  // Mismo criterio para el botón X del header: si hay progreso en curso,
-  // pide la misma confirmación que el atrás nativo — cerrar con la X no
-  // debería ser un atajo silencioso alrededor de la misma protección.
-  const pedirCierre = () => { if (hayCambiosSinGuardar()) pedirConfirmacion(); else onClose(); };
+  const confirmarDescartar = () => { setPidiendoConfirmacion(false); forzarCierre(); };
+  const cancelarDescartar = () => setPidiendoConfirmacion(false);
 
   // Drag&drop a nivel de toda la pantalla del wizard, no solo el recuadro
   // chico de PasoSubir — más fácil de acertar, especialmente arrastrando

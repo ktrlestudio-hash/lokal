@@ -2,7 +2,7 @@
 // ya usaban los "¿Eliminar producto?" inline en cada screen (ProductosScreen,
 // OfertasScreen) pero parametrizado para reusar en cualquier confirmación
 // destructiva o de abandono (ej. "¿Descartar cambios?" al cerrar un wizard
-// con el botón atrás — ver useInterceptarRetroceso).
+// con el botón atrás — ver src/store/navegacion/useCapaUI.js).
 import React from 'react';
 import { AlertTriangle } from 'lucide-react';
 

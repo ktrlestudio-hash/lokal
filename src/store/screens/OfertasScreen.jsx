@@ -12,6 +12,7 @@ import { SkeletonProductosGrid } from '../../Skeletons';
 import LazyImg from '../../LazyImg';
 import { StorePageHeader } from '../components/StorePageHeader.jsx';
 import { ProductosOfertasToggle } from '../components/ProductosOfertasToggle.jsx';
+import { useCapaUI } from '../navegacion/useCapaUI.js';
 
 export function OfertasScreen({
   ambosModulosActivos, subScreenProductos, setSubScreenProductos,
@@ -23,6 +24,12 @@ export function OfertasScreen({
   apiFetch, API_BASE, haptic,
   isDark, toggleTheme, onOpenAccount, renderAccountAvatar,
 }) {
+  // Capa de UI ↔ historial: el atrás nativo cierra este modal en vez de
+  // salir de la app (ver src/store/navegacion/uiStack.js). El formulario
+  // de oferta (ofertaShowForm) se registra en StoreApp.jsx, donde vive su
+  // estado.
+  useCapaUI({ abierto: !!ofertaConfirmDelete, onCerrar: () => setOfertaConfirmDelete(null) });
+
   // Shadowing intencional de misProductos (el estado real, sin filtrar,
   // sigue existiendo afuera de este componente — el badge del nav y la
   // búsqueda de ítems en Mensajes lo necesitan completo). Cuando la tienda
