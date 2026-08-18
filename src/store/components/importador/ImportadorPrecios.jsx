@@ -9,8 +9,8 @@
 // eligió exactamente qué aplicar — ni una sola escritura automática sin
 // revisión humana en el medio (ver diseño en la memoria
 // lokal-links-importar-precios-excel-pdf).
-import React, { useState } from 'react';
-import { X, Loader2, ChevronLeft } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { X, Loader2, ChevronLeft, UploadCloud } from 'lucide-react';
 import { apiFetch } from '../../../api';
 import { PasoSubir } from './PasoSubir.jsx';
 import { PasoCalibrar, calibracionLista } from './PasoCalibrar.jsx';
@@ -48,6 +48,8 @@ export function ImportadorPrecios({ tiendaId, onClose, onAplicado }) {
   const [corridaId, setCorridaId] = useState(null);
   const [seleccion, setSeleccion] = useState({ altas: new Set(), actualizaciones: new Set(), bajas: new Set(), ambiguos: new Map() });
   const [resultado, setResultado] = useState(null);
+  const [arrastrando, setArrastrando] = useState(false);
+  const dragCounter = useRef(0);
 
   const llamarImportador = async (action, body) => {
     const res = await apiFetch(`${API_BASE}/importador?action=${action}`, {
@@ -174,8 +176,51 @@ export function ImportadorPrecios({ tiendaId, onClose, onAplicado }) {
   const indicePaso = PASOS.indexOf(paso);
   const puedeVolver = paso === 'calibrar' || (paso === 'revisar' && !calibracion?.calibracionReusada);
 
+  // Drag&drop a nivel de toda la pantalla del wizard, no solo el recuadro
+  // chico de PasoSubir — más fácil de acertar, especialmente arrastrando
+  // desde el explorador de archivos en desktop. dragCounter en vez de un
+  // simple boolean: dragenter/dragleave se disparan también al pasar por
+  // hijos del contenedor, y contando entradas/salidas se evita que el
+  // overlay parpadee al arrastrar sobre los propios elementos internos.
+  const arrastreActivo = paso === 'subir' && !cargando;
+  const onDragEnter = (e) => {
+    if (!arrastreActivo) return;
+    e.preventDefault();
+    dragCounter.current += 1;
+    setArrastrando(true);
+  };
+  const onDragOver = (e) => { if (arrastreActivo) e.preventDefault(); };
+  const onDragLeave = (e) => {
+    if (!arrastreActivo) return;
+    e.preventDefault();
+    dragCounter.current -= 1;
+    if (dragCounter.current <= 0) { dragCounter.current = 0; setArrastrando(false); }
+  };
+  const onDrop = (e) => {
+    if (!arrastreActivo) return;
+    e.preventDefault();
+    dragCounter.current = 0;
+    setArrastrando(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) manejarArchivoElegido(file);
+  };
+
   return (
-    <div className="fixed inset-0 z-[6000] bg-surface-card flex flex-col overflow-hidden animate-fade-in">
+    <div
+      className="fixed inset-0 z-[6000] bg-surface-card flex flex-col overflow-hidden animate-fade-in"
+      onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
+    >
+      {/* Overlay de arrastre — pantalla completa, color de marca translúcido,
+          ícono+texto grandes centrados. Solo tapa el contenido, no bloquea
+          los eventos de drag (pointer-events-none) para que dragleave siga
+          disparando correctamente sobre el contenedor de abajo. */}
+      {arrastrando && (
+        <div className="absolute inset-0 z-10 bg-brand/90 backdrop-blur-sm flex flex-col items-center justify-center gap-4 pointer-events-none animate-fade-in">
+          <UploadCloud className="w-16 h-16 text-white" strokeWidth={1.5} />
+          <p className="text-2xl font-black text-white">Soltá el archivo acá</p>
+        </div>
+      )}
+
       {/* Header */}
       <div className="shrink-0 flex items-center gap-2 px-3 h-14 border-b border-slate-100 dark:border-white/8">
         {puedeVolver ? (

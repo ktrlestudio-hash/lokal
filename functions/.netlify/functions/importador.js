@@ -77,7 +77,12 @@ async function leerArchivoDelBody(body) {
     return extraerTabla({ nombreArchivo: fileName, contentType, arrayBuffer, texto });
   } catch (error) {
     if (error instanceof ExtractorError) throw new HttpError(400, error.message);
-    throw error;
+    // Cualquier otra excepción del parser (ej. algo interno de la librería
+    // xlsx) se convierte en HttpError con el mensaje real en vez de
+    // propagarse cruda — el frontend siempre recibe JSON, nunca una
+    // respuesta no-JSON del runtime.
+    console.error('Error inesperado leyendo archivo del importador:', error);
+    throw new HttpError(500, `Error al leer el archivo: ${error?.message || 'desconocido'}`);
   }
 }
 

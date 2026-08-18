@@ -80,7 +80,11 @@ export default [
     // functions/.netlify/functions/**. .netlify/**: carpeta generada por
     // `netlify dev` (bundles minificados + telemetría de terceros, no
     // código propio — es la que generaba 14000+ "errores" fantasma la
-    // primera vez que corrió este lint).
-    ignores: ['dist/**', 'node_modules/**', 'netlify/**', '.netlify/**', '_ARCHIVO_NO_LOKAL/**'],
+    // primera vez que corrió este lint). .wrangler/**: mismo problema pero
+    // generado por `wrangler pages dev`/`wrangler dev` — bundles minificados
+    // temporales (functionsWorker-*.js, middleware-insertion-facade.js) que
+    // no estaban acá hasta que se corrió wrangler dev localmente por primera
+    // vez para diagnosticar un bug (2026-08-18).
+    ignores: ['dist/**', 'node_modules/**', 'netlify/**', '.netlify/**', '.wrangler/**', '_ARCHIVO_NO_LOKAL/**'],
   },
 ];

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:functions": "wrangler pages dev dist --port 8888 --compatibility-date=2026-06-08",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",

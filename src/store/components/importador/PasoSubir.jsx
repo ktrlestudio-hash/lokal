@@ -1,8 +1,10 @@
-// PasoSubir — primer paso del wizard: elegir/soltar el archivo. Drag&drop +
-// input nativo, mismos formatos que extraerTabla() acepta en el backend
-// (xlsx/xls/csv/json, más texto plano vía paste). Sin fricción: no hay
-// configuración previa que pedirle al usuario antes de esto.
-import React, { useRef, useState } from 'react';
+// PasoSubir — primer paso del wizard: elegir/soltar el archivo. El drag&drop
+// se detecta en TODA la pantalla del paso (no solo el recuadro chico) — ver
+// zonaArrastreActiva en ImportadorPrecios.jsx, que envuelve este componente
+// entero. Acá solo queda el recuadro visual + input nativo, mismos formatos
+// que extraerTabla() acepta en el backend (xlsx/xls/csv/json, más texto
+// plano). Sin fricción: no hay configuración previa que pedirle al usuario.
+import React, { useRef } from 'react';
 import { UploadCloud, FileSpreadsheet, FileJson, FileText, AlertCircle } from 'lucide-react';
 
 const EXTENSIONES_ACEPTADAS = ['.xlsx', '.xls', '.csv', '.json', '.txt'];
@@ -16,7 +18,6 @@ function iconoPorExtension(nombre) {
 
 export function PasoSubir({ onArchivoElegido, error }) {
   const inputRef = useRef(null);
-  const [arrastrando, setArrastrando] = useState(false);
 
   const manejarArchivos = (files) => {
     const file = files?.[0];
@@ -36,18 +37,11 @@ export function PasoSubir({ onArchivoElegido, error }) {
         </p>
       </div>
 
-      <label
-        onDragOver={(e) => { e.preventDefault(); setArrastrando(true); }}
-        onDragLeave={() => setArrastrando(false)}
-        onDrop={(e) => { e.preventDefault(); setArrastrando(false); manejarArchivos(e.dataTransfer.files); }}
-        className={`w-full max-w-sm border-2 border-dashed rounded-3xl p-8 flex flex-col items-center gap-3 cursor-pointer transition-colors ${
-          arrastrando ? 'border-brand bg-brand/5' : 'border-slate-200 dark:border-white/15 hover:border-brand/50 hover:bg-surface-card-2 dark:hover:bg-white/5'
-        }`}
-      >
-        <UploadCloud className={`w-7 h-7 transition-colors ${arrastrando ? 'text-brand' : 'text-ink-dim'}`} />
+      <label className="w-full max-w-sm border-2 border-dashed border-slate-200 dark:border-white/15 rounded-3xl p-8 flex flex-col items-center gap-3 cursor-pointer transition-colors hover:border-brand/50 hover:bg-surface-card-2 dark:hover:bg-white/5">
+        <UploadCloud className="w-7 h-7 text-ink-dim" />
         <div className="text-center">
-          <p className="text-sm font-bold">Arrastrá el archivo acá</p>
-          <p className="text-xs text-ink-dim mt-0.5">o tocá para elegirlo</p>
+          <p className="text-sm font-bold">Arrastrá el archivo a cualquier parte de la pantalla</p>
+          <p className="text-xs text-ink-dim mt-0.5">o tocá acá para elegirlo</p>
         </div>
         <input
           ref={inputRef}
