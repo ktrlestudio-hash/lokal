@@ -164,23 +164,25 @@ export default function Root() {
   // Sincronizar páginas legales + oferta individual con la URL del navegador
   useEffect(() => {
     const onPop = () => {
-      // Centinela de /admin: una vez logueado, /admin (y todo lo que cuelga
-      // de ahí — overlays del importador, ProductoDetail, etc., que apilan
-      // SUS PROPIAS entradas de historial arriba de esta) es la "pantalla
-      // inicial" del usuario — ningún atrás, por más insistente, debe poder
-      // salir de esa rama mientras haya sesión activa. Sin esto, cada
-      // pushState de un overlay "gastaba" un retroceso de la misma pila que
-      // Root.jsx usa para /admin: bastaban 1-2 atrás para consumir también
-      // la entrada real de /admin y caer en lo que había ANTES de loguearse
-      // (la landing), con la sesión de Firebase intacta pero la UI
-      // mostrando el login/landing como si no hubiera nadie logueado.
+      // Centinela de /admin: una vez logueado, /admin es la "pantalla
+      // inicial" del usuario — ningún atrás debe poder salir de esa rama
+      // mientras haya sesión activa (sin esto, agotar el historial de la
+      // pestaña caía en lo que había ANTES de loguearse, con Firebase
+      // intacto pero la UI mostrando login/landing como si no hubiera
+      // sesión). Este handler SOLO actúa cuando el pathname realmente
+      // cambió fuera de /admin — nunca toca el historial mientras
+      // pathname sigue siendo /admin, para no pisar a
+      // useInterceptarRetroceso (overlays como el importador), que
+      // escucha el MISMO evento popstate para cerrarse limpio con su
+      // propia entrada. Reponer el colchón acá también sería competir con
+      // esos listeners por el mismo pop — esa responsabilidad vive aparte,
+      // en el efecto de abajo, reactivo a los cambios de pathname en vez
+      // de acoplado a este handler.
       //
       // firebaseUserRef (no el state directo): este listener se registra
       // una sola vez ([] de deps) para no reconectarlo en cada login/logout,
       // así que necesita leer el valor MÁS RECIENTE sin depender de closure.
-      const salioDeAdminLogueado = firebaseUserRef.current
-        && !window.location.pathname.startsWith('/admin');
-      if (salioDeAdminLogueado) {
+      if (firebaseUserRef.current && !window.location.pathname.startsWith('/admin')) {
         window.history.pushState({}, '', '/admin');
         forceUrlRecheck();
         return;
@@ -303,6 +305,46 @@ export default function Root() {
     window.history.replaceState({}, '', '/admin');
     forceUrlRecheck();
   }, [rebotarLandingLogueada]);
+
+  // Colchón de historial para el centinela de /admin (ver el listener de
+  // popstate más arriba): si el usuario llega DIRECTO a /admin en esta
+  // pestaña (bookmark, refresh, URL tipeada a mano — sin haber navegado
+  // antes desde la landing con pushState), esa es la ÚNICA entrada de
+  // historial de la pestaña. El primer atrás no tiene ninguna entrada
+  // previa a la cual retroceder DENTRO de la SPA, así que el navegador
+  // cierra la pestaña/página directamente — popstate nunca llega a
+  // dispararse, el centinela nunca corre. Empujar esta entrada extra
+  // apenas se confirma sesión activa en /admin garantiza que SIEMPRE haya
+  // algo que "consumir" antes de que el navegador se quede sin historial:
+  // el primer atrás dispara popstate (que el centinela intercepta) en vez
+  // de cerrar la pestaña. Se hace una sola vez por sesión de /admin
+  // (marcador en el propio state del historial, no un ref con boolean
+  // suelto — sobrevive a remounts de Root sin duplicar entradas).
+  useEffect(() => {
+    if (!(firebaseUser && window.location.pathname.startsWith('/admin'))) return;
+    if (window.history.state?.lokalAdminColchon) return;
+    window.history.pushState({ lokalAdminColchon: true }, '');
+
+    // Reposición pasiva: un segundo listener de popstate, aparte del
+    // centinela de arriba, que SOLO observa — no compite por el mismo pop
+    // con useInterceptarRetroceso (overlays). Corre en un setTimeout(0)
+    // para actuar DESPUÉS de que todos los demás listeners (el centinela,
+    // los de los overlays) ya terminaron de procesar ese mismo evento —
+    // así ve el resultado final del pop, no un estado a medio resolver.
+    // Si en ese momento seguimos en /admin y el colchón se consumió (un
+    // overlay cerró su propia entrada, o el centinela reinsertó /admin sin
+    // colchón propio), lo repone para que el PRÓXIMO atrás tampoco se
+    // quede sin historial.
+    const reponerColchon = () => {
+      setTimeout(() => {
+        if (!firebaseUserRef.current || !window.location.pathname.startsWith('/admin')) return;
+        if (window.history.state?.lokalAdminColchon) return;
+        window.history.pushState({ lokalAdminColchon: true }, '');
+      }, 0);
+    };
+    window.addEventListener('popstate', reponerColchon);
+    return () => window.removeEventListener('popstate', reponerColchon);
+  }, [firebaseUser]);
 
   // ── Oferta individual (/:tienda/o/:oferta) — vista React que reusa los
   //    componentes del home. El link lo comparten WhatsApp/FB; el SSR
