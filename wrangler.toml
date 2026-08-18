@@ -13,3 +13,13 @@ pages_build_output_dir = "dist"
 [[r2_buckets]]
 binding = "LOKAL_BUCKET"
 bucket_name = "lokal-storage"
+
+# SQL para el importador universal de listas de precios (calibraciones de
+# columnas por huella de archivo, matches confirmados producto↔fila,
+# historial de importaciones) — el modelo R2-con-JSON de arriba no alcanza
+# para datos que se consultan/actualizan seguido con registros chicos.
+# Nada más del proyecto usa esto todavía, solo el importador.
+[[d1_databases]]
+binding = "IMPORTADOR_DB"
+database_name = "lokal-links-importador"
+database_id = "4f388dd6-ccb6-436b-8fb6-a147d197f5ee"

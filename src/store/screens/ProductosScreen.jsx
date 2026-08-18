@@ -2,17 +2,19 @@
 // 'catalogo'). Segunda de las 5 pantallas grandes extraídas en la Fase 3 —
 // mismo criterio que OfertasScreen: recibe todo por props explícitas, sin
 // rediseñar su manejo de estado.
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Loader2, Zap, Plus, Package, AlertTriangle, Search, ArrowUpDown, CheckCircle,
   ListFilter, LayoutGrid, LayoutList, ToggleRight, ToggleLeft, Edit3, Trash2,
-  ChevronLeft, ChevronRight, X, Tag,
+  ChevronLeft, ChevronRight, X, Tag, UploadCloud,
 } from 'lucide-react';
 import { SkeletonProductosGrid } from '../../Skeletons';
 import LazyImg from '../../LazyImg';
 import { StorePageHeader } from '../components/StorePageHeader.jsx';
+import { ImportadorPrecios } from '../components/importador/ImportadorPrecios.jsx';
 
 export function ProductosScreen({
+  tiendaId, fetchMisProductos,
   ambosModulosActivos, misProductosSinFiltrar, setMisProductos, loadingProductos,
   productoShowForm, setProductoShowForm, productoEditing, setProductoEditing,
   productoForm, setProductoForm, productoFotoFiles, setProductoFotoFiles,
@@ -29,6 +31,7 @@ export function ProductosScreen({
   prodDetailSaving, setProdDetailSaving, prodDetailPhotoConfirm, setProdDetailPhotoConfirm,
   primerBadge, apiFetch, API_BASE, haptic,
 }) {
+  const [importadorOpen, setImportadorOpen] = useState(false);
   // Shadowing simétrico al de OfertasScreen (ver comentario ahí): con
   // ambos módulos activos, esta pantalla solo muestra ítems CON precio
   // (productos de catálogo reales) — sin este filtro, mostraba también las
@@ -487,6 +490,9 @@ export function ProductosScreen({
         actionSlot={(
           <>
             {loadingProductos && <Loader2 className="w-4 h-4 animate-spin text-ink-dim shrink-0" />}
+            <button onClick={() => setImportadorOpen(true)} className="flex items-center gap-1.5 bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-ink dark:text-ink-dim hover:text-brand text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0" title="Importar lista de precios desde Excel, CSV o JSON">
+              <UploadCloud className="w-4 h-4" /><span className="hidden sm:inline">Importar</span>
+            </button>
             {activos.length > 0 && (
               <button onClick={() => setQuickPriceOpen(true)} className="flex items-center gap-1.5 bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-ink dark:text-ink-dim hover:text-brand text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0" title="Editar precios uno por uno">
                 <Zap className="w-4 h-4" /><span className="hidden sm:inline">Precio rápido</span>
@@ -505,6 +511,14 @@ export function ProductosScreen({
           productos={activos}
           onClose={() => setQuickPriceOpen(false)}
           onSaved={(id, patch) => setMisProductos(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p))}
+        />
+      )}
+
+      {importadorOpen && (
+        <ImportadorPrecios
+          tiendaId={tiendaId}
+          onClose={() => setImportadorOpen(false)}
+          onAplicado={() => fetchMisProductos?.()}
         />
       )}
 
