@@ -25,7 +25,7 @@ export function ProductosOfertasToggle({ value, onChange }) {
           }`}
         >
           <Icon className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden sm:inline">{label}</span>
+          <span>{label}</span>
         </button>
       ))}
     </div>

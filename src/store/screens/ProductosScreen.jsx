@@ -497,7 +497,7 @@ export function ProductosScreen({
           <>
             {loadingProductos && <Loader2 className="w-4 h-4 animate-spin text-ink-dim shrink-0" />}
             <button onClick={() => setImportadorOpen(true)} className="flex items-center gap-1.5 bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-ink dark:text-ink-dim hover:text-brand text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0" title="Importar lista de precios desde Excel, CSV o JSON">
-              <UploadCloud className="w-4 h-4" /><span className="hidden sm:inline">Importar</span>
+              <UploadCloud className="w-4 h-4" /><span>Importar</span>
             </button>
             {activos.length > 0 && (
               <button onClick={() => setQuickPriceOpen(true)} className="flex items-center gap-1.5 bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-ink dark:text-ink-dim hover:text-brand text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0" title="Editar precios uno por uno">
@@ -541,9 +541,14 @@ export function ProductosScreen({
             <h3 className="font-black text-xl mb-1">Sin productos aún</h3>
             <p className="text-sm text-ink-dim">Publicá tu primer producto para que los clientes te encuentren</p>
           </div>
-          <button onClick={openNew} className="px-6 py-3 bg-brand hover:bg-brand-light text-white rounded-2xl font-bold transition-colors shadow-lg shadow-brand/25">
-            Crear primer producto
-          </button>
+          <div className="flex flex-col items-center gap-2.5">
+            <button onClick={openNew} className="px-6 py-3 bg-brand hover:bg-brand-light text-white rounded-2xl font-bold transition-colors shadow-lg shadow-brand/25">
+              Crear primer producto
+            </button>
+            <button onClick={() => setImportadorOpen(true)} className="flex items-center gap-1.5 text-sm font-bold text-ink-dim hover:text-brand transition-colors py-1.5">
+              <UploadCloud className="w-3.5 h-3.5" /> o importar desde Excel/CSV
+            </button>
+          </div>
         </div>
       ) : (
         <div className="flex flex-1 min-h-0">
