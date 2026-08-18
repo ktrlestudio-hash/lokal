@@ -287,6 +287,23 @@ export default function Root() {
 
   const handleLogout = () => { signOut(auth); setTiendaData(null); };
 
+  // Sesión activa y la ruta actual es específicamente "/" (no una ruta
+  // reservada como /admin, ya resueltas más abajo): alguien logueado que
+  // llega a la landing por URL directa (recarga, la tipeó a mano, un link
+  // viejo guardado) rebota a /admin en vez de ver botones de login
+  // ambiguos con una sesión ya activa detrás. No es el caso del botón
+  // atrás (eso lo cubre el centinela del listener de popstate más arriba)
+  // — acá location.pathname realmente cambió a "/". Este hook DEBE vivir
+  // antes de cualquier return condicional (ofertaRoute/carritoRoute/
+  // legalPage/etc. más abajo) — moverlo después de un return temprano
+  // violaría las reglas de hooks (se saltearía condicionalmente).
+  const rebotarLandingLogueada = firebaseUser && window.location.pathname === '/';
+  useEffect(() => {
+    if (!rebotarLandingLogueada) return;
+    window.history.replaceState({}, '', '/admin');
+    forceUrlRecheck();
+  }, [rebotarLandingLogueada]);
+
   // ── Oferta individual (/:tienda/o/:oferta) — vista React que reusa los
   //    componentes del home. El link lo comparten WhatsApp/FB; el SSR
   //    responde a crawlers con OG y redirige humanos acá. ──────────────────
@@ -478,19 +495,9 @@ export default function Root() {
   //    que entrara sin slug veía la tienda de UN negocio concreto, que no
   //    es lo que espera alguien que llega a la raíz del producto.
   //    Las tiendas siguen sirviéndose por su slug propio (/:tienda). ──────
+  if (rebotarLandingLogueada) return <AppLoader />;
+
   if (!pathToTiendaSlug(window.location.pathname)) {
-    // Sesión activa y esta rama es específicamente "/" (no una ruta
-    // reservada como /admin, ya resueltas arriba): alguien logueado que
-    // llega a la landing por URL directa (recarga, la tipeó a mano, un
-    // link viejo guardado) rebota a /admin en vez de ver botones de login
-    // ambiguos con una sesión ya activa detrás. No es el caso del botón
-    // atrás (eso lo cubre el centinela del listener de popstate más
-    // arriba) — acá location.pathname realmente cambió a "/".
-    if (firebaseUser && window.location.pathname === '/') {
-      window.history.replaceState({}, '', '/admin');
-      forceUrlRecheck();
-      return <AppLoader />;
-    }
     return (
       <LandingScreen
         isDark={isDark}
