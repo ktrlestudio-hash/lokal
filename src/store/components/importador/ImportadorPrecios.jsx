@@ -224,23 +224,31 @@ export function ImportadorPrecios({ tiendaId, onClose, onAplicado }) {
       {/* Header */}
       <div className="shrink-0 flex items-center gap-2 px-3 h-14 border-b border-slate-100 dark:border-white/8">
         {puedeVolver ? (
-          <button onClick={volver} className="ui-icon-btn text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8 transition-colors shrink-0">
+          <button onClick={volver} className="ui-icon-btn bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8 transition-colors shrink-0">
             <ChevronLeft className="w-5 h-5" />
           </button>
         ) : <div className="w-9" />}
         <p className="font-black flex-1 truncate text-sm text-center">{TITULOS_PASO[paso]}</p>
         {cargando && <Loader2 className="w-4 h-4 animate-spin text-brand shrink-0" />}
-        <button onClick={onClose} className="ui-icon-btn text-ink-dim hover:bg-danger/10 hover:text-danger transition-colors shrink-0">
+        <button onClick={onClose} className="ui-icon-btn bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:bg-danger/10 hover:text-danger transition-colors shrink-0">
           <X className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Progreso — solo en los 3 primeros pasos, el resultado no es "un paso más" */}
+      {/* Progreso — 3 segmentos discretos (uno por paso real), no una barra
+          continua: así se ve de un vistazo cuántos pasos hay en total y
+          cuál está completado/actual/pendiente, en vez de una fracción
+          ambigua de "algún" porcentaje. El resultado no es "un paso más". */}
       {paso !== 'resultado' && (
         <div className="shrink-0 px-5 pt-3">
-          <div className="h-1 bg-surface-card-2 dark:bg-white/10 rounded-full overflow-hidden">
-            <div className="h-full bg-brand rounded-full transition-all duration-300" style={{ width: `${((indicePaso + 1) / 3) * 100}%` }} />
+          <div className="flex items-center gap-1.5">
+            {PASOS.slice(0, 3).map((p, i) => (
+              <div key={p} className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
+                i < indicePaso ? 'bg-brand' : i === indicePaso ? 'bg-brand' : 'bg-surface-card-2 dark:bg-white/10'
+              }`} />
+            ))}
           </div>
+          <p className="text-[11px] font-bold text-ink-dim mt-1.5">Paso {indicePaso + 1} de 3</p>
         </div>
       )}
 
@@ -268,7 +276,7 @@ export function ImportadorPrecios({ tiendaId, onClose, onAplicado }) {
 
       {/* Footer de acción — solo en calibrar y revisar (subir tiene su propio CTA visual, resultado también) */}
       {paso === 'calibrar' && (
-        <div className="shrink-0 px-5 py-4 border-t border-slate-100 dark:border-white/8">
+        <div className="shrink-0 px-5 pt-4 border-t border-slate-100 dark:border-white/8" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}>
           {error && <p className="text-xs text-danger font-medium mb-2 text-center">{error}</p>}
           <button
             onClick={confirmarCalibracion}
@@ -280,7 +288,7 @@ export function ImportadorPrecios({ tiendaId, onClose, onAplicado }) {
         </div>
       )}
       {paso === 'revisar' && diff && (diff.altas.length > 0 || diff.actualizaciones.length > 0 || diff.posiblesBajas.length > 0) && (
-        <div className="shrink-0 px-5 py-4 border-t border-slate-100 dark:border-white/8">
+        <div className="shrink-0 px-5 pt-4 border-t border-slate-100 dark:border-white/8" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}>
           {error && <p className="text-xs text-danger font-medium mb-2 text-center">{error}</p>}
           <button
             onClick={aplicar}

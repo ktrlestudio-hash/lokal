@@ -12,10 +12,12 @@ import { SkeletonProductosGrid } from '../../Skeletons';
 import LazyImg from '../../LazyImg';
 import { StorePageHeader } from '../components/StorePageHeader.jsx';
 import { ImportadorPrecios } from '../components/importador/ImportadorPrecios.jsx';
+import { ProductosOfertasToggle } from '../components/ProductosOfertasToggle.jsx';
 
 export function ProductosScreen({
   tiendaId, fetchMisProductos,
-  ambosModulosActivos, misProductosSinFiltrar, setMisProductos, loadingProductos,
+  ambosModulosActivos, subScreenProductos, setSubScreenProductos,
+  misProductosSinFiltrar, setMisProductos, loadingProductos,
   productoShowForm, setProductoShowForm, productoEditing, setProductoEditing,
   productoForm, setProductoForm, productoFotoFiles, setProductoFotoFiles,
   productoFotoPreviews, setProductoFotoPreviews, productoSaving, setProductoSaving,
@@ -488,6 +490,7 @@ export function ProductosScreen({
       <StorePageHeader
         title="Mis productos"
         subtitle={`${misProductos.length} publicación${misProductos.length !== 1 ? 'es' : ''} · ${activos.length} activa${activos.length !== 1 ? 's' : ''}`}
+        leftSlot={ambosModulosActivos ? <ProductosOfertasToggle value={subScreenProductos} onChange={setSubScreenProductos} /> : null}
         isDark={isDark} toggleTheme={toggleTheme}
         onOpenAccount={onOpenAccount} renderAccountAvatar={renderAccountAvatar}
         actionSlot={(

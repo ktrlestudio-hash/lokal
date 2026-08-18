@@ -11,9 +11,11 @@ import {
 import { SkeletonProductosGrid } from '../../Skeletons';
 import LazyImg from '../../LazyImg';
 import { StorePageHeader } from '../components/StorePageHeader.jsx';
+import { ProductosOfertasToggle } from '../components/ProductosOfertasToggle.jsx';
 
 export function OfertasScreen({
-  ambosModulosActivos, misProductosSinFiltrar, setMisProductos, loadingProductos,
+  ambosModulosActivos, subScreenProductos, setSubScreenProductos,
+  misProductosSinFiltrar, setMisProductos, loadingProductos,
   ofertaShowForm, setOfertaEditing, setOfertaForm, setOfertaFotoFile, setOfertaFotoPreview,
   setOfertaIntentoGuardar, setOfertaFotoRemoved, setOfertaFotoLoading, setOfertaShowForm,
   ofertaConfirmDelete, setOfertaConfirmDelete,
@@ -225,6 +227,7 @@ export function OfertasScreen({
         title="Ofertas"
         subtitle={`${misProductos.length} publicación${misProductos.length !== 1 ? 'es' : ''}`}
         icon={Tag}
+        leftSlot={ambosModulosActivos ? <ProductosOfertasToggle value={subScreenProductos} onChange={setSubScreenProductos} /> : null}
         isDark={isDark} toggleTheme={toggleTheme}
         onOpenAccount={onOpenAccount} renderAccountAvatar={renderAccountAvatar}
         actionSlot={(

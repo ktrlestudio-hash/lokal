@@ -5,6 +5,7 @@
 // (calibracionReusada), este paso se salta solo — ver ImportadorPrecios.jsx.
 import React from 'react';
 import { CheckCircle2, AlertTriangle, Table2 } from 'lucide-react';
+import SimpleSelect from '../../../components/ui/SimpleSelect.jsx';
 import { OPCIONES_CAMPO, labelCampo } from './camposDestino.js';
 
 const CONFIANZA_ESTILO = {
@@ -42,27 +43,24 @@ export function PasoCalibrar({ headers, filasPreview, sugerencias, mapeo, onCamb
             const estilo = CONFIANZA_ESTILO[sugerencia?.confianza] || CONFIANZA_ESTILO.ninguna;
             const valorActual = mapeo[header] ?? 'ignorar';
             return (
-              <div key={header} className="bg-surface-card-2 dark:bg-white/5 rounded-2xl p-3.5 flex items-center gap-3">
-                <div className="flex-1 min-w-0">
+              <div key={header} className="bg-surface-card-2 dark:bg-white/5 rounded-2xl p-3.5 flex flex-col gap-2.5">
+                <div>
                   <div className="flex items-center gap-1.5 mb-0.5">
                     <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${estilo.dot}`} />
-                    <p className="font-bold text-sm truncate">{header}</p>
+                    <p className="font-bold text-sm break-words">{header}</p>
                   </div>
                   {filasPreview?.[0]?.[i] !== undefined && (
-                    <p className="text-xs text-ink-dim truncate">
+                    <p className="text-xs text-ink-dim break-words">
                       ej: {filasPreview.slice(0, 2).map((fila) => fila[i]).filter(Boolean).join(' · ') || '—'}
                     </p>
                   )}
                 </div>
-                <select
+                <SimpleSelect
                   value={valorActual}
-                  onChange={(e) => onCambiarMapeo(header, e.target.value)}
-                  className="shrink-0 bg-surface-card border border-slate-200 dark:border-white/10 rounded-xl px-2.5 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-brand max-w-[150px]"
-                >
-                  {OPCIONES_CAMPO.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                  onChange={(campo) => onCambiarMapeo(header, campo)}
+                  options={OPCIONES_CAMPO}
+                  compact
+                />
               </div>
             );
           })}

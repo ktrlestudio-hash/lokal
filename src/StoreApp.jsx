@@ -28,7 +28,7 @@ import {
   Lock, Zap, CalendarDays, RefreshCw,
   Trash2,
   ExternalLink, Link2, Save,
-  Tag, Gift, Wrench, Copy, Info, Clock,
+  Gift, Wrench, Copy, Info, Clock,
   Building2,
   Navigation
 } from 'lucide-react';
@@ -2729,7 +2729,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   // primera de las 5 pantallas grandes).
   const OfertasScreen = () => (
     <OfertasScreenBase
-      ambosModulosActivos={ambosModulosActivos} misProductosSinFiltrar={misProductosSinFiltrar}
+      ambosModulosActivos={ambosModulosActivos} subScreenProductos={subScreenProductos} setSubScreenProductos={setSubScreenProductos}
+      misProductosSinFiltrar={misProductosSinFiltrar}
       setMisProductos={setMisProductos} loadingProductos={loadingProductos}
       ofertaShowForm={ofertaShowForm} setOfertaEditing={setOfertaEditing} setOfertaForm={setOfertaForm}
       setOfertaFotoFile={setOfertaFotoFile} setOfertaFotoPreview={setOfertaFotoPreview}
@@ -2754,7 +2755,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const ProductosScreen = () => (
     <ProductosScreenBase
       tiendaId={tienda?.id || tiendaData?.id} fetchMisProductos={fetchMisProductos}
-      ambosModulosActivos={ambosModulosActivos} misProductosSinFiltrar={misProductosSinFiltrar}
+      ambosModulosActivos={ambosModulosActivos} subScreenProductos={subScreenProductos} setSubScreenProductos={setSubScreenProductos}
+      misProductosSinFiltrar={misProductosSinFiltrar}
       setMisProductos={setMisProductos} loadingProductos={loadingProductos}
       productoShowForm={productoShowForm} setProductoShowForm={setProductoShowForm}
       productoEditing={productoEditing} setProductoEditing={setProductoEditing}
@@ -2871,12 +2873,15 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       {/* spacer so content shifts with sidebar on desktop */}
       <div className="hidden lg:block shrink-0" style={{ width: sidebarExpanded ? 224 : 64, transition: 'width 380ms cubic-bezier(0.16,1,0.3,1)' }} />
       <div className="flex-1 min-w-0">
-        {/* Banner suscripción — vencida o por vencer */}
+        {/* Banner suscripción — vencida o por vencer. Compacto: título corto
+            + detalle mucho más chico al lado (no un párrafo largo en una
+            sola línea de texto, que forzaba más altura). */}
         {!isActiva && (
-          <div className="bg-rose-500 text-white px-4 py-2.5 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm">
-              <Lock className="w-4 h-4 shrink-0" />
-              <span className="font-semibold">Tu suscripción venció y tu página no está publicada. Renovala para volver a publicarla.</span>
+          <div className="bg-rose-500 text-white px-4 py-2 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Lock className="w-3.5 h-3.5 shrink-0" />
+              <span className="text-sm font-bold shrink-0">Suscripción vencida</span>
+              <span className="text-xs text-white/80 truncate hidden sm:inline">· Tu página no está publicada</span>
             </div>
             <button
               onClick={() => setShowPaywall(true)}
@@ -2887,11 +2892,11 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           </div>
         )}
         {isActiva && dias !== null && dias <= 7 && (
-          <div className="bg-amber-500 text-white px-4 py-2.5 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm">
-              <CalendarDays className="w-4 h-4 shrink-0" />
-              <span className="font-semibold">
-                {dias === 0 ? 'Tu suscripción vence hoy.' : `Tu suscripción vence en ${dias} día${dias === 1 ? '' : 's'}.`}
+          <div className="bg-amber-500 text-white px-4 py-2 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <CalendarDays className="w-3.5 h-3.5 shrink-0" />
+              <span className="text-sm font-bold shrink-0">
+                {dias === 0 ? 'Vence hoy' : `Vence en ${dias} día${dias === 1 ? '' : 's'}`}
               </span>
             </div>
             <button
@@ -2913,27 +2918,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           {screen === 'stats' && StatsScreen()}
           {screen === 'productos' && (
             ambosModulosActivos ? (
-              <>
-                {/* Selector Ofertas/Catálogo — SOLO aparece con los 2 módulos
-                    activos a la vez (ver ambosModulosActivos arriba). Antes
-                    esta pantalla renderizaba directo una de las dos según
-                    isModuleActive('catalogo'), así que una tienda con ambos
-                    módulos no tenía forma de administrar el que perdía el
-                    if/else — el otro simplemente no existía en el nav. */}
-                <div className="flex items-center gap-1.5 px-4 pt-3 pb-1 lg:px-6 lg:pt-4">
-                  {[['ofertas', 'Ofertas', Tag], ['catalogo', 'Catálogo', Package]].map(([key, label, Icon]) => (
-                    <button
-                      key={key}
-                      onClick={() => setSubScreenProductos(key)}
-                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-bold transition-colors ${subScreenProductos === key ? 'bg-brand text-white' : 'text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8'}`}
-                    >
-                      <Icon className="w-4 h-4" />
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                {subScreenProductos === 'catalogo' ? ProductosScreen() : OfertasScreen()}
-              </>
+              // Selector Ofertas/Catálogo — SOLO aparece con los 2 módulos
+              // activos a la vez (ver ambosModulosActivos arriba). Vive
+              // DENTRO del header de cada screen (leftSlot, reemplaza el
+              // título) en vez de como una barra aparte encima: así no le
+              // resta altura al h-[100dvh] interno de la screen (antes
+              // generaba scroll extra en la zona vacía, la suma de tabs +
+              // 100dvh excedía el viewport real).
+              subScreenProductos === 'catalogo' ? ProductosScreen() : OfertasScreen()
             ) : (
               isModuleActive(tiendaData, 'catalogo') ? ProductosScreen() : OfertasScreen()
             )
