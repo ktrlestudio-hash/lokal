@@ -21,12 +21,16 @@ import { handleError, handleOptions, HttpError, jsonResponse, parseJsonBody } fr
 import { sanitizeText } from './_lib/validation.js';
 import { ensureStoreOwner, findTiendaById, readTiendas } from './_lib/tiendas-store.js';
 import { readOfertas } from './_lib/ofertas-read.js';
+import { safeRead, safeWrite } from './_lib/r2-safe-write.js';
 import { extraerTabla, ExtractorError } from './_lib/importador/extractores.js';
 import { calcularHuella } from './_lib/importador/huella.js';
 import { clasificarColumnas } from './_lib/importador/clasificador.js';
-import { buscarCalibracion, guardarCalibracion, crearCorrida, actualizarCorrida } from './_lib/importador/calibraciones-store.js';
+import { buscarCalibracion, guardarCalibracion, crearCorrida, actualizarCorrida, buscarCorrida, confirmarMatch } from './_lib/importador/calibraciones-store.js';
 import { matchearFilas } from './_lib/importador/matcher.js';
 import { construirDiff } from './_lib/importador/diff.js';
+import { aplicarDiff } from './_lib/importador/aplicar-diff.js';
+
+const OFERTAS_KEY = 'data/ofertas.json';
 
 const HTTP_OPTIONS = {
   allowHeaders: 'Content-Type, Authorization',
@@ -172,6 +176,73 @@ async function accionSincronizar({ event, env, body }) {
   }
 }
 
+// accionAplicar — segundo paso explícito después de "sincronizar": el
+// frontend ya mostró el plan (altas/actualizaciones/ambiguos/posiblesBajas)
+// al dueño de la tienda, que eligió qué aplicar. Nada se escribe en el
+// catálogo hasta este POST — evita que un archivo mal calibrado mute
+// productos reales sin que un humano lo haya revisado primero (ver diseño
+// en la memoria lokal-links-importar-precios-excel-pdf).
+//
+// body esperado:
+//   corridaId: string (la que devolvió "sincronizar", para trazabilidad)
+//   altas: [{ nombre, precio, precioOriginal, stock, descripcion, ... }]
+//     — subconjunto de diff.altas que el usuario confirmó dar de alta
+//   actualizaciones: [{ productoId, cambios }]
+//     — subconjunto de diff.actualizaciones confirmado
+//   ambiguosConfirmados: [{ productoId, señalTipo, señalValor }]
+//     — de diff.ambiguos, los que el usuario confirmó como el match
+//     correcto; se graban en matches_confirmados para que la próxima
+//     corrida con esta huella los reconozca por señal fuerte (nivel 4:
+//     "match previamente confirmado", ver matcher.js)
+//   bajas: [productoId] — de diff.posiblesBajas, los que el usuario
+//     confirmó dar de baja (se ocultan con visible:false, no se borran)
+async function accionAplicar({ event, env, body }) {
+  const tiendaId = sanitizeText(body.tiendaId, { max: 64, multiline: false });
+  if (!tiendaId) throw new HttpError(400, 'tiendaId es requerido');
+  const tienda = await requireTienda(event, env, tiendaId);
+
+  const bucket = env.LOKAL_BUCKET;
+  const db = env.IMPORTADOR_DB;
+  const corridaId = sanitizeText(body.corridaId, { max: 80, multiline: false });
+  const corrida = corridaId ? await buscarCorrida(db, corridaId) : null;
+  if (corridaId && (!corrida || String(corrida.tienda_id) !== String(tiendaId))) {
+    throw new HttpError(404, 'Corrida no encontrada');
+  }
+
+  const altas = Array.isArray(body.altas) ? body.altas : [];
+  const actualizaciones = Array.isArray(body.actualizaciones) ? body.actualizaciones : [];
+  const bajas = Array.isArray(body.bajas) ? body.bajas.map((id) => sanitizeText(id, { max: 80, multiline: false })) : [];
+  const ambiguosConfirmados = Array.isArray(body.ambiguosConfirmados) ? body.ambiguosConfirmados : [];
+
+  const { data: ofertasActuales, etag } = await safeRead(bucket, OFERTAS_KEY, []);
+  const { ofertas, actualizados, bajasAplicadas } = aplicarDiff({
+    ofertas: ofertasActuales, tienda, tiendaId, altas, actualizaciones, bajas,
+  });
+
+  await safeWrite(bucket, OFERTAS_KEY, ofertas, etag);
+
+  if (corrida) {
+    for (const amb of ambiguosConfirmados) {
+      const productoId = sanitizeText(amb.productoId, { max: 80, multiline: false });
+      const señalTipo = sanitizeText(amb.señalTipo, { max: 30, multiline: false });
+      const señalValor = sanitizeText(String(amb.señalValor || ''), { max: 200, multiline: false });
+      if (!productoId || !señalTipo || !señalValor) continue;
+      await confirmarMatch(db, { tiendaId, huellaFuente: corrida.huella, señalTipo, señalValor, productoId });
+    }
+    await actualizarCorrida(db, corridaId, {
+      estado: 'aplicada',
+      resumen: { ...corrida.resumen, altasAplicadas: altas.length, actualizacionesAplicadas: actualizados, bajasAplicadas },
+    });
+  }
+
+  return jsonResponse(event, 200, {
+    altasAplicadas: altas.length,
+    actualizacionesAplicadas: actualizados,
+    bajasAplicadas,
+    matchesConfirmados: ambiguosConfirmados.length,
+  }, { ...HTTP_OPTIONS, env });
+}
+
 export async function onRequestOptions({ request, env }) {
   return handleOptions(request, { ...HTTP_OPTIONS, env });
 }
@@ -185,7 +256,8 @@ export async function onRequestPost({ request, env }) {
 
     if (action === 'calibrar') return await accionCalibrar({ event, env, body });
     if (action === 'sincronizar') return await accionSincronizar({ event, env, body });
-    throw new HttpError(400, 'action inválida (esperado: calibrar | sincronizar)');
+    if (action === 'aplicar') return await accionAplicar({ event, env, body });
+    throw new HttpError(400, 'action inválida (esperado: calibrar | sincronizar | aplicar)');
   } catch (error) {
     return handleError(request, error, 'Error interno', { ...HTTP_OPTIONS, env });
   }
