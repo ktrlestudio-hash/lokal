@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { auth, onAuthStateChanged, getRedirectResult, signOut } from './firebase';
 import TiendaPublica from './TiendaPublica';
 import OfertaPublica from './OfertaPublica';
@@ -106,6 +106,11 @@ function AppLoader() {
 }
 
 export default function Root() {
+  // Ref (no state) leída por el listener global de popstate más abajo, que
+  // se registra una sola vez — evita reconectar ese listener en cada
+  // login/logout solo para tener el valor fresco de firebaseUser.
+  const firebaseUserRef = useRef(undefined);
+
   const [legalPage, setLegalPage] = useState(() => pathToLegal(window.location.pathname));
   const [ofertaRoute, setOfertaRoute] = useState(() => pathToOferta(window.location.pathname));
   const [carritoRoute, setCarritoRoute] = useState(() => pathToCarrito(window.location.pathname));
@@ -159,6 +164,28 @@ export default function Root() {
   // Sincronizar páginas legales + oferta individual con la URL del navegador
   useEffect(() => {
     const onPop = () => {
+      // Centinela de /admin: una vez logueado, /admin (y todo lo que cuelga
+      // de ahí — overlays del importador, ProductoDetail, etc., que apilan
+      // SUS PROPIAS entradas de historial arriba de esta) es la "pantalla
+      // inicial" del usuario — ningún atrás, por más insistente, debe poder
+      // salir de esa rama mientras haya sesión activa. Sin esto, cada
+      // pushState de un overlay "gastaba" un retroceso de la misma pila que
+      // Root.jsx usa para /admin: bastaban 1-2 atrás para consumir también
+      // la entrada real de /admin y caer en lo que había ANTES de loguearse
+      // (la landing), con la sesión de Firebase intacta pero la UI
+      // mostrando el login/landing como si no hubiera nadie logueado.
+      //
+      // firebaseUserRef (no el state directo): este listener se registra
+      // una sola vez ([] de deps) para no reconectarlo en cada login/logout,
+      // así que necesita leer el valor MÁS RECIENTE sin depender de closure.
+      const salioDeAdminLogueado = firebaseUserRef.current
+        && !window.location.pathname.startsWith('/admin');
+      if (salioDeAdminLogueado) {
+        window.history.pushState({}, '', '/admin');
+        forceUrlRecheck();
+        return;
+      }
+
       setLegalPage(pathToLegal(window.location.pathname));
       const nextOferta = pathToOferta(window.location.pathname);
       setOfertaRoute(nextOferta);
@@ -217,6 +244,7 @@ export default function Root() {
       if (!mounted) return;
       await redirectPromise;
       if (!mounted) return;
+      firebaseUserRef.current = user || null;
       setFirebaseUser(user || null);
 
       // Con sesión confirmada, el próximo destino es StoreApp o
@@ -451,6 +479,18 @@ export default function Root() {
   //    es lo que espera alguien que llega a la raíz del producto.
   //    Las tiendas siguen sirviéndose por su slug propio (/:tienda). ──────
   if (!pathToTiendaSlug(window.location.pathname)) {
+    // Sesión activa y esta rama es específicamente "/" (no una ruta
+    // reservada como /admin, ya resueltas arriba): alguien logueado que
+    // llega a la landing por URL directa (recarga, la tipeó a mano, un
+    // link viejo guardado) rebota a /admin en vez de ver botones de login
+    // ambiguos con una sesión ya activa detrás. No es el caso del botón
+    // atrás (eso lo cubre el centinela del listener de popstate más
+    // arriba) — acá location.pathname realmente cambió a "/".
+    if (firebaseUser && window.location.pathname === '/') {
+      window.history.replaceState({}, '', '/admin');
+      forceUrlRecheck();
+      return <AppLoader />;
+    }
     return (
       <LandingScreen
         isDark={isDark}
