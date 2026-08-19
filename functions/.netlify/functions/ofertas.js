@@ -172,6 +172,25 @@ export async function onRequestDelete({ request, env }) {
     const user = await requireAuth(event, env);
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const tiendaId = searchParams.get('tiendaId');
+    const all = searchParams.get('all');
+
+    // Vaciado masivo: ?tiendaId=X&all=1 borra TODAS las ofertas de esa
+    // tienda de una — pensado para el caso "quiero volver a cargar todo
+    // desde cero" (ej. después de haber importado por error a Ofertas en
+    // vez de Catálogo), no reemplaza el borrado por id de a uno.
+    if (tiendaId && all === '1') {
+      const tiendas = await readTiendas(bucket);
+      const tienda = findTiendaById(tiendas, tiendaId);
+      ensureStoreOwner(user, tienda);
+
+      const ofertas = await readOfertas(bucket);
+      const restantes = ofertas.filter((item) => String(item.tiendaId) !== String(tiendaId));
+      const borradas = ofertas.length - restantes.length;
+      await writeOfertas(bucket, restantes);
+      return jsonResponse(event, 200, { ok: true, borradas }, { ...HTTP_OPTIONS, env });
+    }
+
     if (!id) throw new HttpError(400, 'id requerido');
 
     const ofertas = await readOfertas(bucket);

@@ -2771,6 +2771,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       ambosModulosActivos={ambosModulosActivos} subScreenProductos={subScreenProductos} setSubScreenProductos={setSubScreenProductos}
       misProductosSinFiltrar={misProductosSinFiltrar}
       setMisProductos={setMisProductos} loadingProductos={loadingProductos}
+      tiendaId={tiendaData?.id}
       ofertaShowForm={ofertaShowForm} setOfertaEditing={setOfertaEditing} setOfertaForm={setOfertaForm}
       setOfertaFotoFile={setOfertaFotoFile} setOfertaFotoPreview={setOfertaFotoPreview}
       setOfertaIntentoGuardar={setOfertaIntentoGuardar} setOfertaFotoRemoved={setOfertaFotoRemoved}

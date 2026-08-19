@@ -3,7 +3,7 @@
 // extraídas en la Fase 3 — mismo criterio que el shell: recibe todo por
 // props explícitas, sin rediseñar su estado (sigue viviendo en StoreApp.jsx
 // y controlando el formulario a través de setters pasados por prop).
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Tag, Plus, Loader2, Package, EyeOff, CalendarClock, X, AlertTriangle,
   RotateCcw, Trash2, ToggleRight, ToggleLeft, Edit3,
@@ -16,7 +16,7 @@ import { useCapaUI } from '../navegacion/useCapaUI.js';
 
 export function OfertasScreen({
   ambosModulosActivos, subScreenProductos, setSubScreenProductos,
-  misProductosSinFiltrar, setMisProductos, loadingProductos,
+  misProductosSinFiltrar, setMisProductos, loadingProductos, tiendaId,
   ofertaShowForm, setOfertaEditing, setOfertaForm, setOfertaFotoFile, setOfertaFotoPreview,
   setOfertaIntentoGuardar, setOfertaFotoRemoved, setOfertaFotoLoading, setOfertaShowForm,
   ofertaConfirmDelete, setOfertaConfirmDelete,
@@ -24,11 +24,14 @@ export function OfertasScreen({
   apiFetch, API_BASE, haptic,
   isDark, toggleTheme, onOpenAccount, renderAccountAvatar,
 }) {
+  const [vaciarConfirm, setVaciarConfirm] = useState(false);
+  const [vaciando, setVaciando] = useState(false);
   // Capa de UI ↔ historial: el atrás nativo cierra este modal en vez de
   // salir de la app (ver src/store/navegacion/uiStack.js). El formulario
   // de oferta (ofertaShowForm) se registra en StoreApp.jsx, donde vive su
   // estado.
   useCapaUI({ abierto: !!ofertaConfirmDelete, onCerrar: () => setOfertaConfirmDelete(null) });
+  useCapaUI({ abierto: vaciarConfirm, onCerrar: () => setVaciarConfirm(false) });
 
   // Shadowing intencional de misProductos (el estado real, sin filtrar,
   // sigue existiendo afuera de este componente — el badge del nav y la
@@ -94,6 +97,29 @@ export function OfertasScreen({
       if (!res.ok) throw new Error();
     } catch {
       if (original) setMisProductos(prev => [...prev, original]);
+    }
+  };
+
+  // Vaciado masivo — pensado para "quiero volver a cargar todo desde
+  // cero" (ej. después de haber importado por error a Ofertas en vez de
+  // Catálogo). Borra en el servidor de una sola vez (?tiendaId&all=1, ver
+  // ofertas.js) en vez de N deletes por id — con cientos de ítems, un
+  // delete-por-uno sería demasiado lento y frágil (cualquier fallo a mitad
+  // de camino deja el borrado a medias).
+  const vaciarTodas = async () => {
+    if (!tiendaId) return;
+    haptic('heavy');
+    setVaciando(true);
+    try {
+      const res = await apiFetch(`${API_BASE}/ofertas?tiendaId=${tiendaId}&all=1`, { method: 'DELETE', authRequired: true });
+      if (!res.ok) throw new Error();
+      setMisProductos(prev => prev.filter(o => String(o.tiendaId) !== String(tiendaId)));
+      haptic('success');
+    } catch {
+      haptic('error');
+    } finally {
+      setVaciando(false);
+      setVaciarConfirm(false);
     }
   };
 
@@ -240,6 +266,12 @@ export function OfertasScreen({
         actionSlot={(
           <>
             {loadingProductos && <Loader2 className="w-4 h-4 animate-spin text-ink-dim shrink-0" />}
+            {misProductos.length > 0 && (
+              <button onClick={() => setVaciarConfirm(true)} aria-label="Vaciar todas las ofertas" title="Vaciar todas"
+                className="flex items-center justify-center w-8 h-8 rounded-xl text-ink-dim hover:text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
             {/* Solo desktop: en móvil el FAB del bottom-nav ya crea */}
             <button onClick={openNew} className="hidden lg:flex items-center gap-1.5 bg-brand hover:bg-brand-light text-white text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0 shadow-sm shadow-brand/20">
               <Plus className="w-4 h-4" /><span className="hidden sm:inline">Nueva</span>
@@ -314,6 +346,26 @@ export function OfertasScreen({
             <button onClick={() => setOfertaConfirmDelete(null)} className="flex-1 py-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-sm font-bold text-ink-dim dark:text-ink-dim">Cancelar</button>
             <button onClick={() => { deleteOferta(ofertaConfirmDelete); setOfertaConfirmDelete(null); }} className="flex-1 py-2.5 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold transition-colors">
               Eliminar
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {vaciarConfirm && (
+      <div className="fixed inset-0 z-[6000] bg-black/50 flex items-center justify-center p-4" onClick={() => !vaciando && setVaciarConfirm(false)}>
+        <div className="bg-surface-card rounded-3xl p-6 max-w-xs w-full" onClick={e => e.stopPropagation()}>
+          <div className="w-12 h-12 rounded-2xl bg-danger/10 flex items-center justify-center mx-auto mb-4">
+            <Trash2 className="w-6 h-6 text-rose-500" />
+          </div>
+          <h3 className="font-black text-lg text-center mb-1">¿Vaciar todas las ofertas?</h3>
+          <p className="text-sm text-ink-dim text-center mb-6">
+            Se van a borrar las {misProductos.length} publicaciones de esta pantalla. Esta acción no se puede deshacer.
+          </p>
+          <div className="flex gap-3">
+            <button onClick={() => setVaciarConfirm(false)} disabled={vaciando} className="flex-1 py-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-sm font-bold text-ink-dim dark:text-ink-dim disabled:opacity-50">Cancelar</button>
+            <button onClick={vaciarTodas} disabled={vaciando} className="flex-1 py-2.5 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-70">
+              {vaciando ? <Loader2 className="w-4 h-4 animate-spin" /> : `Vaciar todas`}
             </button>
           </div>
         </div>
