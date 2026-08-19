@@ -22,7 +22,13 @@ export default function LazyImg({ src, alt = '', className = '', style = {}, ...
         transition: 'filter 0.35s ease, opacity 0.35s ease',
         filter:   loaded ? 'none' : 'blur(12px)',
         opacity:  loaded ? 1     : 0.6,
-        transform: 'translateZ(0)', // GPU layer
+        // translateZ(0) SOLO mientras transiciona (!loaded), no para
+        // siempre — con listas de cientos de ítems (ej. 446 ofertas), cada
+        // imagen ya cargada quedaba con su propia capa GPU permanente, y el
+        // navegador competía por recompositar cientos de capas a la vez
+        // durante el scroll: mismo bug documentado en el FAQ del landing
+        // (LandingScreen.jsx, FadeUp), acá multiplicado por toda la lista.
+        transform: loaded ? 'none' : 'translateZ(0)',
       }}
       {...props}
     />
