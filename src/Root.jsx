@@ -208,6 +208,15 @@ export default function Root() {
   const [firebaseUser, setFirebaseUser]       = useState(undefined); // undefined = sin resolver aún
   const [redirectChecked, setRedirectChecked] = useState(false);
   const [tiendaData, setTiendaData]           = useState(null);
+  // Sesión activa y la ruta actual es específicamente "/" (no una ruta
+  // reservada como /admin): alguien logueado que llega a la landing por URL
+  // directa rebota a /admin en vez de ver botones de login ambiguos con una
+  // sesión ya activa detrás. Declarado ACÁ (antes de los useEffect que lo
+  // usan) para que el fetch de tienda de abajo pueda arrancar en el mismo
+  // ciclo, sin esperar a que el pushState a /admin (ver el otro useEffect
+  // que lo consume, más abajo) complete un round-trip extra de render.
+  const enRaiz = window.location.pathname === '/';
+  const rebotarLandingLogueada = firebaseUser && enRaiz;
   // Arranca en true si entramos directo a /admin: así NO hay un render
   // intermedio con loadingTienda=false entre "auth resuelto" y "el useEffect
   // de carga de tienda arrancó" (el effect corre DESPUÉS del primer render).
@@ -245,8 +254,17 @@ export default function Root() {
   // Cargar la tienda DEL USUARIO logueado (multi-tienda real: por googleUid,
   // no por el slug fijo — antes cualquiera que se logueara veía "principal"
   // sin verificar ownership). 404 = no tiene tienda todavía → RegistroTienda.
+  // rebotarLandingLogueada también dispara este fetch UN CICLO ANTES de que
+  // el pushState a /admin complete — así isAdminRoute pasa a true recién en
+  // el próximo render, pero el
+  // fetch de tienda ya viene en vuelo. Sin esto, la cadena de renders con
+  // sesión activa en "/" pasaba por varias ramas de AppLoader en secuencia
+  // (esperando pushState → esperando isAdminRoute → esperando loadingTienda),
+  // y cada una remontaba el splash completo desde cero (animación de ~1.7s
+  // reiniciándose una y otra vez, se veía como "3 splashes cortándose").
+  const debeCargarTiendaDeUsuario = (isAdminRoute || rebotarLandingLogueada) && !!firebaseUser;
   useEffect(() => {
-    if (!isAdminRoute || !firebaseUser) return undefined;
+    if (!debeCargarTiendaDeUsuario) return undefined;
     let mounted = true;
     setLoadingTienda(true);
     setTiendaFetchError(null);
@@ -265,22 +283,15 @@ export default function Root() {
       .catch((err) => { if (mounted) { setTiendaData(null); setTiendaFetchError(err.message || 'No se pudo cargar tu tienda. Probá de nuevo.'); } })
       .finally(() => { if (mounted) setLoadingTienda(false); });
     return () => { mounted = false; };
-  }, [isAdminRoute, firebaseUser]);
+  }, [debeCargarTiendaDeUsuario, firebaseUser]);
 
   const handleLogout = () => { signOut(auth); setTiendaData(null); };
 
-  // Sesión activa y la ruta actual es específicamente "/" (no una ruta
-  // reservada como /admin, ya resueltas más abajo): alguien logueado que
-  // llega a la landing por URL directa (recarga, la tipeó a mano, un link
-  // viejo guardado) rebota a /admin en vez de ver botones de login
-  // ambiguos con una sesión ya activa detrás. No es el caso del botón
-  // atrás (eso lo cubre el centinela del listener de popstate más arriba)
-  // — acá location.pathname realmente cambió a "/". Este hook DEBE vivir
-  // antes de cualquier return condicional (ofertaRoute/carritoRoute/
-  // legalPage/etc. más abajo) — moverlo después de un return temprano
-  // violaría las reglas de hooks (se saltearía condicionalmente).
-  const enRaiz = window.location.pathname === '/';
-  const rebotarLandingLogueada = firebaseUser && enRaiz;
+  // enRaiz/rebotarLandingLogueada ya se declararon más arriba (justo
+  // después de firebaseUser) — este hook DEBE vivir antes de cualquier
+  // return condicional (ofertaRoute/carritoRoute/legalPage/etc. más abajo),
+  // no es el caso del botón atrás (eso lo cubre el centinela del listener
+  // de popstate más arriba) — acá location.pathname realmente cambió a "/".
   // Mientras Firebase Auth todavía no resolvió si hay sesión (undefined,
   // distinto de null = "resuelto, sin sesión"), NO hay que mostrar el
   // landing en la raíz todavía — si termina habiendo sesión activa, el
@@ -419,7 +430,13 @@ export default function Root() {
   }
 
   // ── Backoffice del dueño de la tienda ─────────────────────────────────────
-  if (isAdminRoute) {
+  // rebotarLandingLogueada entra por acá TAMBIÉN (no solo isAdminRoute): con
+  // sesión activa en "/", el destino final siempre es este mismo bloque, así
+  // que tratarlo como una rama aparte (como antes) hacía que React viera un
+  // árbol JSX distinto entre "esperando el pushState" y "ya en /admin",
+  // remontando el splash de la nada — ver debeCargarTiendaDeUsuario más
+  // arriba para el mismo criterio aplicado al fetch de tienda.
+  if (isAdminRoute || rebotarLandingLogueada) {
     if (firebaseUser === undefined || !redirectChecked) return <AppLoader />;
     if (!firebaseUser) return (
       <AdminLogin
@@ -499,7 +516,8 @@ export default function Root() {
   //    que entrara sin slug veía la tienda de UN negocio concreto, que no
   //    es lo que espera alguien que llega a la raíz del producto.
   //    Las tiendas siguen sirviéndose por su slug propio (/:tienda). ──────
-  if (rebotarLandingLogueada) return <AppLoader />;
+  // (rebotarLandingLogueada ya se resolvió arriba, dentro del bloque
+  // isAdminRoute unificado — nunca llega hasta acá con sesión activa.)
   // Sesión todavía sin resolver en la raíz: esperar acá (mismo loader que
   // ya usa el resto de la app, primer pintado real de React) en vez de
   // mostrar el landing y recién después rebotar si resulta haber sesión
