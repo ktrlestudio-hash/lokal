@@ -2932,10 +2932,19 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         )}
 
 
+        {/* Sin willChange: 'opacity' acá — crea su propio stacking context,
+            así que cualquier z-index alto DENTRO de este div (el importador
+            de precios, z-[6000]) queda atrapado compitiendo solo contra
+            hermanos internos, sin poder ganarle a BottomNav (z-[4500]),
+            que vive AFUERA de este div como hermano posterior. Resultado
+            real: el footer con el botón "Continuar"/"Aplicar cambios" del
+            importador quedaba tapado por la bottom-nav pese a tener z-index
+            mayor en el papel. will-change es solo una pista de rendimiento
+            para el navegador — sacarla no cambia la animación de opacity,
+            solo evita este efecto colateral de aislar el stacking. */}
         <div style={{
           opacity: screenVisible ? 1 : 0,
           transition: screenVisible ? 'opacity 0.18s ease' : 'opacity 0.10s ease',
-          willChange: 'opacity',
         }}>
           {screen === 'mensajes' && isModuleActive(tiendaData, 'mensajes') && MensajesScreen()}
           {screen === 'stats' && StatsScreen()}

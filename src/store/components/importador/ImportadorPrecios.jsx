@@ -319,7 +319,7 @@ export function ImportadorPrecios({ tiendaId, sidebarExpanded, onClose, onAplica
 
       {/* Footer de acción — solo en calibrar y revisar (subir tiene su propio CTA visual, resultado también) */}
       {paso === 'calibrar' && (
-        <div className="shrink-0 px-5 pt-4 border-t border-slate-100 dark:border-white/8" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}>
+        <div className="shrink-0 px-5 pt-4 border-t border-slate-100 dark:border-white/8 lg:pb-4" style={{ paddingBottom: 'calc(var(--store-bottom-nav-h, 0px) + env(safe-area-inset-bottom) + 1rem)' }}>
           {error && <p className="text-xs text-danger font-medium mb-2 text-center">{error}</p>}
           <button
             onClick={confirmarCalibracion}
@@ -331,7 +331,7 @@ export function ImportadorPrecios({ tiendaId, sidebarExpanded, onClose, onAplica
         </div>
       )}
       {paso === 'revisar' && !cargando && diff && (diff.altas.length > 0 || diff.actualizaciones.length > 0 || diff.posiblesBajas.length > 0) && (
-        <div className="shrink-0 px-5 pt-4 border-t border-slate-100 dark:border-white/8" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}>
+        <div className="shrink-0 px-5 pt-4 border-t border-slate-100 dark:border-white/8 lg:pb-4" style={{ paddingBottom: 'calc(var(--store-bottom-nav-h, 0px) + env(safe-area-inset-bottom) + 1rem)' }}>
           {error && <p className="text-xs text-danger font-medium mb-2 text-center">{error}</p>}
           <button
             onClick={aplicar}
