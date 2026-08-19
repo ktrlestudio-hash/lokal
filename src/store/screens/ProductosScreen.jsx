@@ -2,7 +2,7 @@
 // 'catalogo'). Segunda de las 5 pantallas grandes extraídas en la Fase 3 —
 // mismo criterio que OfertasScreen: recibe todo por props explícitas, sin
 // rediseñar su manejo de estado.
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Loader2, Zap, Plus, Package, AlertTriangle, Search, ArrowUpDown, CheckCircle,
   ListFilter, LayoutGrid, LayoutList, ToggleRight, ToggleLeft, Edit3, Trash2,
@@ -15,7 +15,7 @@ import { ProductosOfertasToggle } from '../components/ProductosOfertasToggle.jsx
 import { useCapaUI } from '../navegacion/useCapaUI.js';
 
 export function ProductosScreen({
-  onAbrirImportador,
+  onAbrirImportador, tiendaId,
   ambosModulosActivos, subScreenProductos, setSubScreenProductos,
   misProductosSinFiltrar, setMisProductos, loadingProductos,
   productoShowForm, setProductoShowForm, productoEditing, setProductoEditing,
@@ -48,6 +48,9 @@ export function ProductosScreen({
   useCapaUI({ abierto: !!prodDetail, onCerrar: () => setProdDetail(null) });
   useCapaUI({ abierto: !!prodFilterSheet, onCerrar: () => setProdFilterSheet(false) });
   useCapaUI({ abierto: !!confirmDelete, onCerrar: () => setConfirmDelete(null) });
+  const [vaciarConfirm, setVaciarConfirm] = useState(false);
+  const [vaciando, setVaciando] = useState(false);
+  useCapaUI({ abierto: vaciarConfirm, onCerrar: () => setVaciarConfirm(false) });
   // Shadowing simétrico al de OfertasScreen (ver comentario ahí): con
   // ambos módulos activos, esta pantalla solo muestra ítems CON precio
   // (productos de catálogo reales) — sin este filtro, mostraba también las
@@ -124,6 +127,26 @@ export function ProductosScreen({
     } catch {
       // Rollback
       if (original) setMisProductos(prev => [...prev, original]);
+    }
+  };
+
+  // Vaciado masivo — mismo patrón que OfertasScreen.jsx (ver su propio
+  // comentario): borra en el servidor de una sola vez en vez de N deletes
+  // por id, pensado para "quiero volver a cargar todo desde cero".
+  const vaciarTodos = async () => {
+    if (!tiendaId) return;
+    haptic('heavy');
+    setVaciando(true);
+    try {
+      const res = await apiFetch(`${API_BASE}/productos?tiendaId=${tiendaId}&all=1`, { method: 'DELETE', authRequired: true });
+      if (!res.ok) throw new Error();
+      setMisProductos(prev => prev.filter(o => String(o.tiendaId) !== String(tiendaId)));
+      haptic('success');
+    } catch {
+      haptic('error');
+    } finally {
+      setVaciando(false);
+      setVaciarConfirm(false);
     }
   };
 
@@ -526,6 +549,12 @@ export function ProductosScreen({
             <button onClick={onAbrirImportador} className="w-10 h-10 flex items-center justify-center bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-ink dark:text-ink-dim hover:text-brand rounded-xl transition-colors shrink-0" title="Importar lista de precios desde Excel, CSV o JSON">
               <UploadCloud className="w-4 h-4" />
             </button>
+            {misProductos.length > 0 && (
+              <button onClick={() => setVaciarConfirm(true)} aria-label="Vaciar todo el catálogo" title="Vaciar todo"
+                className="w-10 h-10 flex items-center justify-center rounded-xl text-ink-dim hover:text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
             {activos.length > 0 && (
               <button onClick={() => setQuickPriceOpen(true)} className="h-10 flex items-center gap-1.5 bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-ink dark:text-ink-dim hover:text-brand text-sm font-bold px-3 rounded-xl transition-colors shrink-0" title="Editar precios uno por uno">
                 <Zap className="w-4 h-4" /><span className="hidden sm:inline">Precio rápido</span>
@@ -803,6 +832,27 @@ export function ProductosScreen({
           <div className="flex gap-3">
             <button onClick={() => setConfirmDelete(null)} className="flex-1 py-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-sm font-bold text-ink-dim dark:text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/5 transition-colors">Cancelar</button>
             <button onClick={() => { deleteProducto(confirmDelete); setConfirmDelete(null); }} className="flex-1 py-2.5 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold transition-colors">Eliminar</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {vaciarConfirm && (
+      <div className="fixed inset-0 z-[9000] flex items-center justify-center p-4" onClick={() => !vaciando && setVaciarConfirm(false)}>
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+        <div className="relative bg-surface-card rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-fade-in" onClick={e => e.stopPropagation()}>
+          <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center mx-auto mb-4">
+            <Trash2 className="w-6 h-6 text-rose-500" />
+          </div>
+          <h3 className="font-black text-lg text-center mb-1">¿Vaciar todo el catálogo?</h3>
+          <p className="text-sm text-ink-dim text-center mb-6">
+            Se van a borrar los {misProductos.length} productos de esta pantalla. Esta acción no se puede deshacer.
+          </p>
+          <div className="flex gap-3">
+            <button onClick={() => setVaciarConfirm(false)} disabled={vaciando} className="flex-1 py-2.5 rounded-2xl border border-slate-200 dark:border-white/10 text-sm font-bold text-ink-dim dark:text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/5 transition-colors disabled:opacity-50">Cancelar</button>
+            <button onClick={vaciarTodos} disabled={vaciando} className="flex-1 py-2.5 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-70">
+              {vaciando ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Vaciar todo'}
+            </button>
           </div>
         </div>
       </div>

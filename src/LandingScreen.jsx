@@ -174,7 +174,7 @@ function PalabraRotativa({ palabras = PALABRAS_HERO, intervalo = 2600 }) {
 // Aparición al entrar en viewport — IntersectionObserver nativo en vez de
 // motion/react: la landing es lo primero que carga un visitante nuevo, no
 // conviene sumarle una librería de animación al bundle crítico.
-function FadeUp({ children, delay = 0, className = '' }) {
+function FadeUp({ children, delay = 0, className = '', forzarFinAnimacion = false }) {
   const ref = useRef(null);
   const [inView, setInView] = useState(false);
   // Se apaga solo cuando la transición termina: mientras tanto, will-change
@@ -196,6 +196,17 @@ function FadeUp({ children, delay = 0, className = '' }) {
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
+  // forzarFinAnimacion: para hijos que animan su PROPIO overflow-hidden
+  // (ej. el acordeón del FAQ) — si el usuario interactúa (toca para abrir)
+  // ANTES de que termine la transición de entrada de 700ms de este FadeUp
+  // (muy probable en la primera fila, la única que ya es interactuable
+  // apenas carga la página), will-change seguía activo mientras DOS
+  // animaciones recomponían capas a la vez, dejando el mismo texto
+  // fantasma documentado arriba. onTransitionEnd no alcanza a tiempo en
+  // ese caso porque la interacción del usuario llega primero.
+  useEffect(() => {
+    if (forzarFinAnimacion) setAnimando(false);
+  }, [forzarFinAnimacion]);
   return (
     <div
       ref={ref}
@@ -1551,7 +1562,7 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
           {FAQ.map((item, i) => {
             const abierto = faqOpen === i;
             return (
-              <FadeUp key={item.q} delay={i * 50}>
+              <FadeUp key={item.q} delay={i * 50} forzarFinAnimacion={abierto}>
                 <div className="rounded-2xl border overflow-hidden" style={CARD_TINTED}>
                   <button
                     onClick={() => setFaqOpen(abierto ? null : i)}

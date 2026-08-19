@@ -2771,7 +2771,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       ambosModulosActivos={ambosModulosActivos} subScreenProductos={subScreenProductos} setSubScreenProductos={setSubScreenProductos}
       misProductosSinFiltrar={misProductosSinFiltrar}
       setMisProductos={setMisProductos} loadingProductos={loadingProductos}
-      tiendaId={tiendaData?.id}
+      tiendaId={tiendaData?.id} onAbrirImportador={abrirImportador}
       ofertaShowForm={ofertaShowForm} setOfertaEditing={setOfertaEditing} setOfertaForm={setOfertaForm}
       setOfertaFotoFile={setOfertaFotoFile} setOfertaFotoPreview={setOfertaFotoPreview}
       setOfertaIntentoGuardar={setOfertaIntentoGuardar} setOfertaFotoRemoved={setOfertaFotoRemoved}
@@ -2794,7 +2794,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   // segunda de las 5 pantallas grandes).
   const ProductosScreen = () => (
     <ProductosScreenBase
-      onAbrirImportador={abrirImportador}
+      onAbrirImportador={abrirImportador} tiendaId={tiendaData?.id}
       ambosModulosActivos={ambosModulosActivos} subScreenProductos={subScreenProductos} setSubScreenProductos={setSubScreenProductos}
       misProductosSinFiltrar={misProductosSinFiltrar}
       setMisProductos={setMisProductos} loadingProductos={loadingProductos}

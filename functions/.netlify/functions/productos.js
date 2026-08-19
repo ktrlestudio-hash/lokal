@@ -174,6 +174,24 @@ export async function onRequestDelete({ request, env }) {
     const user = await requireAuth(event, env);
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const tiendaId = searchParams.get('tiendaId');
+    const all = searchParams.get('all');
+
+    // Vaciado masivo: ?tiendaId=X&all=1 borra TODOS los productos de esa
+    // tienda de una — mismo patrón que ofertas.js, pensado para "quiero
+    // volver a cargar todo desde cero" antes de reimportar.
+    if (tiendaId && all === '1') {
+      const tiendas = await readTiendas(bucket);
+      const tienda = findTiendaById(tiendas, tiendaId);
+      ensureStoreOwner(user, tienda);
+
+      const productos = await readProductos(bucket);
+      const restantes = productos.filter((item) => String(item.tiendaId) !== String(tiendaId));
+      const borradas = productos.length - restantes.length;
+      await writeProductos(bucket, restantes);
+      return jsonResponse(event, 200, { ok: true, borradas }, { ...HTTP_OPTIONS, env });
+    }
+
     if (!id) throw new HttpError(400, 'id requerido');
 
     const productos = await readProductos(bucket);
