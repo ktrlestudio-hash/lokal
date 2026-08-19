@@ -22,30 +22,9 @@ export function OfertasScreen({
   ofertaConfirmDelete, setOfertaConfirmDelete,
   handleCancelarOfertaAdmin, handleReintentarOfertaAdmin,
   apiFetch, API_BASE, haptic,
-  isDark, toggleTheme, onOpenAccount, renderAccountAvatar,
 }) {
   const [vaciarConfirm, setVaciarConfirm] = useState(false);
   const [vaciando, setVaciando] = useState(false);
-  // TEMPORAL — diagnóstico del bug "vacío la lista pero al refrescar
-  // vuelve": llama a _debug-ofertas.js (endpoint temporal, solo-admin) vía
-  // apiFetch, que sí arma el header Authorization — pegar la URL directo
-  // en la barra del navegador no manda ese token, por eso hacía falta este
-  // botón. BORRAR junto con _debug-ofertas.js una vez resuelto.
-  const [debugResult, setDebugResult] = useState(null);
-  const [debugLoading, setDebugLoading] = useState(false);
-  const correrDiagnostico = async () => {
-    setDebugLoading(true);
-    setDebugResult(null);
-    try {
-      const res = await apiFetch(`${API_BASE}/_debug-ofertas?tiendaId=${tiendaId}`, { authRequired: true });
-      const data = await res.json();
-      setDebugResult(res.ok ? data : { error: data?.error || `HTTP ${res.status}` });
-    } catch (e) {
-      setDebugResult({ error: e.message });
-    } finally {
-      setDebugLoading(false);
-    }
-  };
   // Capa de UI ↔ historial: el atrás nativo cierra este modal en vez de
   // salir de la app (ver src/store/navegacion/uiStack.js). El formulario
   // de oferta (ofertaShowForm) se registra en StoreApp.jsx, donde vive su
@@ -280,15 +259,13 @@ export function OfertasScreen({
         subtitle={`${misProductos.length} publicación${misProductos.length !== 1 ? 'es' : ''}`}
         icon={Tag}
         leftSlot={ambosModulosActivos ? <ProductosOfertasToggle value={subScreenProductos} onChange={setSubScreenProductos} /> : null}
-        isDark={isDark} toggleTheme={toggleTheme}
-        onOpenAccount={onOpenAccount} renderAccountAvatar={renderAccountAvatar}
         actionSlot={(
           <>
-            {loadingProductos && <Loader2 className="w-4 h-4 animate-spin text-ink-dim shrink-0" />}
-            {/* TEMPORAL — ver comentario junto a correrDiagnostico arriba */}
-            <button onClick={correrDiagnostico} disabled={debugLoading} className="h-10 px-3 flex items-center gap-1.5 bg-amber-500/15 text-amber-600 dark:text-amber-400 text-xs font-bold rounded-xl transition-colors shrink-0" title="Diagnóstico temporal">
-              {debugLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Debug'}
-            </button>
+            {/* Sin indicador de sincronización de fondo: con contenido ya
+                visible (de caché) revalidando contra el servidor, el
+                usuario no necesita saberlo salvo que algo cambie — y la
+                lista vacía ya muestra su propio skeleton mientras carga
+                por primera vez. */}
             {misProductos.length > 0 && (
               // 40x40 — misma altura/ancho que el avatar de cuenta y el
               // resto de acciones del header (antes w-8 h-8, más chico).
@@ -328,7 +305,7 @@ export function OfertasScreen({
                 en la misma área disponible. invisible + pointer-events:none
                 reserva el alto real (mismo padding/texto) sin duplicar el
                 cálculo a mano si el botón real cambia de tamaño. */}
-            <span aria-hidden="true" className="invisible pointer-events-none flex items-center gap-1.5 text-sm font-bold px-6 py-3 rounded-2xl">
+            <span aria-hidden="true" className="invisible pointer-events-none h-10 px-6 flex items-center gap-1.5 text-sm font-bold rounded-2xl">
               Placeholder
             </span>
           </div>
@@ -404,19 +381,6 @@ export function OfertasScreen({
               {vaciando ? <Loader2 className="w-4 h-4 animate-spin" /> : `Vaciar todas`}
             </button>
           </div>
-        </div>
-      </div>
-    )}
-
-    {/* TEMPORAL — ver comentario junto a correrDiagnostico arriba */}
-    {debugResult && (
-      <div className="fixed inset-0 z-[6000] bg-black/50 flex items-center justify-center p-4" onClick={() => setDebugResult(null)}>
-        <div className="bg-surface-card rounded-3xl p-6 max-w-sm w-full" onClick={e => e.stopPropagation()}>
-          <h3 className="font-black text-lg mb-3">Diagnóstico (temporal)</h3>
-          <pre className="text-xs bg-surface-card-2 dark:bg-white/8 rounded-xl p-3 overflow-auto max-h-80 whitespace-pre-wrap">
-            {JSON.stringify(debugResult, null, 2)}
-          </pre>
-          <button onClick={() => setDebugResult(null)} className="w-full mt-4 py-2.5 rounded-2xl bg-brand text-white text-sm font-bold">Cerrar</button>
         </div>
       </div>
     )}

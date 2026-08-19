@@ -1,10 +1,18 @@
 // StorePageHeader — header compartido de todas las pantallas del admin de
-// tienda (título/subtítulo, back, acciones, toggle de tema, avatar de
-// cuenta). Primer componente de "shell" extraído de StoreApp.jsx en la
-// Fase 3 del plan de profesionalización — ya recibía todo por props, así
-// que no necesitó rediseño de estado, solo mover el archivo.
+// tienda (título/subtítulo, back, acciones). Primer componente de "shell"
+// extraído de StoreApp.jsx en la Fase 3 del plan de profesionalización —
+// ya recibía todo por props, así que no necesitó rediseño de estado, solo
+// mover el archivo.
+//
+// Sin avatar de cuenta ni toggle de tema: eran redundantes con el acceso
+// real (StoreSidebar.jsx en desktop, StoreMoreSheet.jsx — el "Más" del
+// bottom-nav — en mobile, ambos ya tienen "Cerrar sesión"/modo oscuro).
+// Sacarlos libera espacio para que el resto de acciones del header (Debug,
+// Vaciar, Importar, Precio rápido, Nuevo) se acomode con menos
+// apretujamiento — antes competían por el mismo ancho con 2 controles que
+// ya estaban duplicados en otro lado.
 import React from 'react';
-import { ArrowLeft, Sun, Moon } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 export function StorePageHeader({
   title,
@@ -24,10 +32,6 @@ export function StorePageHeader({
   // inmediato de "dónde estoy", igual que ya pasa con el avatar de tienda o
   // el botón de nav activo.
   icon: Icon = null,
-  isDark,
-  toggleTheme,
-  onOpenAccount,
-  renderAccountAvatar,
 }) {
   return (
     <div className="bg-surface-card sticky top-0 z-20 shrink-0">
@@ -72,33 +76,6 @@ export function StorePageHeader({
         {/* Acciones */}
         <div className={`flex items-center gap-1 shrink-0 ${hideActionsOnMobile ? 'hidden lg:flex' : 'flex'}`}>
           {actionSlot}
-          {/* Mismo diseño/comportamiento que el toggle de tema del footer de
-              tienda pública (TiendaFooter.jsx: .tp-footer-theme) — antes
-              usaba ui-icon-btn, que trae un scale(1.05) en :hover pensado
-              para botones de ícono puro; sobre este botón se notaba como un
-              salto de ~1px del ícono. El del footer no tiene ningún
-              transform en hover, solo cambia fondo/color al primario (regla
-              .sa-theme-toggle:hover vive en styles/components.css). */}
-          <button
-            onClick={toggleTheme}
-            className="sa-theme-toggle hidden lg:inline-flex"
-            title={isDark ? 'Modo claro' : 'Modo oscuro'}
-            style={{
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              width: 40, height: 40, borderRadius: '50%', border: 'none', cursor: 'pointer',
-              background: 'transparent', color: 'var(--text-secondary)',
-              transition: 'background-color .15s ease, color .15s ease',
-            }}
-          >
-            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
-          <button
-            onClick={onOpenAccount}
-            className="ui-avatar-btn ring-2 ring-transparent hover:ring-brand transition-all shrink-0"
-            title="Mi cuenta"
-          >
-            {renderAccountAvatar?.()}
-          </button>
         </div>
       </div>
 

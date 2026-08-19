@@ -1125,18 +1125,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     </>
   );
 
-  // StorePageHeader vive en src/store/components/StorePageHeader.jsx (Fase 3:
-  // primer componente de "shell" extraído — ya recibía todo por props salvo
-  // isDark/toggleTheme/el toggle de MoreSheet/el avatar, que quedaron
-  // implícitos por closure). Este wrapper inyecta esas 4 dependencias del
-  // componente raíz para no tener que tocar los 8 call sites existentes.
-  const StorePageHeader = (props) => (
-    <StorePageHeaderBase {...props}
-      isDark={isDark} toggleTheme={toggleTheme}
-      onOpenAccount={() => setMoreSheetOpen(v => !v)}
-      renderAccountAvatar={renderAccountAvatar}
-    />
-  );
+  const StorePageHeader = StorePageHeaderBase;
 
   const closeCreateSheet = () => { setCreateSheetClosing(true); setTimeout(() => { setCreateSheetOpen(false); setCreateSheetClosing(false); }, 220); };
 
@@ -1342,8 +1331,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       inboxReply={inboxReply} setInboxReply={setInboxReply} inboxSending={inboxSending} inboxSendReply={inboxSendReply}
       inboxInfoOpen={inboxInfoOpen} setInboxInfoOpen={setInboxInfoOpen}
       inboxScrollRef={inboxScrollRef} inboxMobileScrollRef={inboxMobileScrollRef}
-      isDark={isDark} toggleTheme={toggleTheme}
-      onOpenAccount={() => setMoreSheetOpen(v => !v)} renderAccountAvatar={renderAccountAvatar}
     />
   );
 
@@ -1958,8 +1945,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       aiLoading={aiLoading} setAiLoading={setAiLoading} aiError={aiError} setAiError={setAiError}
       aiData={aiData} setAiData={setAiData}
       apiFetch={apiFetch} API_BASE={API_BASE}
-      isDark={isDark} toggleTheme={toggleTheme}
-      onOpenAccount={() => setMoreSheetOpen(v => !v)} renderAccountAvatar={renderAccountAvatar}
     />
   );
 
@@ -2771,7 +2756,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       ambosModulosActivos={ambosModulosActivos} subScreenProductos={subScreenProductos} setSubScreenProductos={setSubScreenProductos}
       misProductosSinFiltrar={misProductosSinFiltrar}
       setMisProductos={setMisProductos} loadingProductos={loadingProductos}
-      tiendaId={tiendaData?.id} onAbrirImportador={abrirImportador}
+      tiendaId={tiendaData?.id}
       ofertaShowForm={ofertaShowForm} setOfertaEditing={setOfertaEditing} setOfertaForm={setOfertaForm}
       setOfertaFotoFile={setOfertaFotoFile} setOfertaFotoPreview={setOfertaFotoPreview}
       setOfertaIntentoGuardar={setOfertaIntentoGuardar} setOfertaFotoRemoved={setOfertaFotoRemoved}
@@ -2779,8 +2764,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       ofertaConfirmDelete={ofertaConfirmDelete} setOfertaConfirmDelete={setOfertaConfirmDelete}
       handleCancelarOfertaAdmin={handleCancelarOfertaAdmin} handleReintentarOfertaAdmin={handleReintentarOfertaAdmin}
       apiFetch={apiFetch} API_BASE={API_BASE} haptic={haptic}
-      isDark={isDark} toggleTheme={toggleTheme}
-      onOpenAccount={() => setMoreSheetOpen(v => !v)} renderAccountAvatar={renderAccountAvatar}
     />
   );
 
@@ -2821,8 +2804,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       prodDetailSaving={prodDetailSaving} setProdDetailSaving={setProdDetailSaving}
       prodDetailPhotoConfirm={prodDetailPhotoConfirm} setProdDetailPhotoConfirm={setProdDetailPhotoConfirm}
       primerBadge={primerBadge} apiFetch={apiFetch} API_BASE={API_BASE} haptic={haptic}
-      isDark={isDark} toggleTheme={toggleTheme}
-      onOpenAccount={() => setMoreSheetOpen(v => !v)} renderAccountAvatar={renderAccountAvatar}
     />
   );
 

@@ -32,7 +32,6 @@ export function ProductosScreen({
   prodDetailEditField, setProdDetailEditField, prodDetailDraft, setProdDetailDraft,
   prodDetailSaving, setProdDetailSaving, prodDetailPhotoConfirm, setProdDetailPhotoConfirm,
   primerBadge, apiFetch, API_BASE, haptic,
-  isDark, toggleTheme, onOpenAccount, renderAccountAvatar,
 }) {
   // Cada capa de UI que se abre encima de la lista se registra en el
   // uiStack, así el atrás nativo cierra exactamente esa capa (la de
@@ -201,7 +200,7 @@ export function ProductosScreen({
     return (
       <div onClick={() => { setProdDetail(o); setProdDetailPhotoIdx(0); setProdDetailEditField(null); }} className={`bg-surface-card rounded-2xl overflow-hidden border transition-all group cursor-pointer ${o.activa !== false ? 'border-slate-100 dark:border-white/8 hover:shadow-md hover:shadow-black/5' : 'border-dashed border-slate-200 dark:border-white/10 opacity-50'}`}>
         {/* Foto */}
-        <div className="aspect-square bg-gradient-to-br from-surface-card-2 to-surface-card-2 dark:from-white/6 dark:to-white/10 relative overflow-hidden">
+        <div className="aspect-square bg-surface-card-2 dark:bg-white/6 relative overflow-hidden">
           {img ? <LazyImg src={img} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Package className="w-10 h-10 text-ink-dim dark:text-white/20" /></div>}
           {/* Badge ventaja */}
           {vc && <span className={`absolute top-2 left-2 ${vc.badgeClass} text-[9px] font-bold px-1.5 py-0.5 rounded-xl flex items-center gap-1 shadow`}><vc.Icon className={`w-2.5 h-2.5 ${vc.iconClass}`} />{vc.label}</span>}
@@ -258,7 +257,7 @@ export function ProductosScreen({
     return (
       <div onClick={() => { setProdDetail(o); setProdDetailPhotoIdx(0); setProdDetailEditField(null); }} className={`bg-surface-card rounded-2xl border overflow-hidden flex gap-0 transition-all cursor-pointer ${o.activa !== false ? 'border-slate-100 dark:border-white/8 hover:shadow-md hover:shadow-black/5' : 'border-dashed border-slate-200 dark:border-white/10 opacity-55'}`}>
         {/* Foto */}
-        <div className="relative w-24 shrink-0 bg-gradient-to-br from-surface-card-2 to-surface-card-2 dark:from-white/6 dark:to-white/10 overflow-hidden">
+        <div className="relative w-24 shrink-0 bg-surface-card-2 dark:bg-white/6 overflow-hidden">
           {img ? <LazyImg src={img} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Package className="w-7 h-7 text-ink-dim dark:text-white/20" /></div>}
           {vc && <span className={`absolute top-1.5 left-1.5 ${vc.badgeClass} text-[8px] font-bold px-1 py-0.5 rounded-lg flex items-center gap-0.5 shadow`}><vc.Icon className={`w-2 h-2 ${vc.iconClass}`} />{vc.label}</span>}
           {sinStock && <span className="absolute bottom-1.5 left-1.5 bg-danger text-white text-[8px] font-bold px-1 py-0.5 rounded-lg shadow">Sin stock</span>}
@@ -539,16 +538,18 @@ export function ProductosScreen({
         title="Mis productos"
         subtitle={`${misProductos.length} publicación${misProductos.length !== 1 ? 'es' : ''} · ${activos.length} activa${activos.length !== 1 ? 's' : ''}`}
         leftSlot={ambosModulosActivos ? <ProductosOfertasToggle value={subScreenProductos} onChange={setSubScreenProductos} /> : null}
-        isDark={isDark} toggleTheme={toggleTheme}
-        onOpenAccount={onOpenAccount} renderAccountAvatar={renderAccountAvatar}
         actionSlot={(
           <>
-            {loadingProductos && <Loader2 className="w-4 h-4 animate-spin text-ink-dim shrink-0" />}
+            {/* Sin indicador de sincronización de fondo: con contenido ya
+                visible (de caché) revalidando contra el servidor, el
+                usuario no necesita saberlo salvo que algo cambie — y la
+                lista vacía ya muestra su propio skeleton mientras carga
+                por primera vez. */}
             {/* Solo ícono, 40x40 — misma altura/ancho que el avatar de
                 cuenta y el resto de acciones del header (antes tenía texto
                 y quedaba más bajo que el avatar por el padding vertical
                 del texto en vez de una altura fija). */}
-            <button onClick={onAbrirImportador} className="w-10 h-10 flex items-center justify-center bg-brand hover:bg-brand-light text-white rounded-xl transition-colors shrink-0 shadow-sm shadow-brand/20" title="Importar lista de precios desde Excel, CSV o JSON">
+            <button onClick={onAbrirImportador} className="w-10 h-10 flex items-center justify-center rounded-xl text-ink-dim hover:text-brand hover:bg-brand/10 transition-colors shrink-0" title="Importar lista de precios desde Excel, CSV o JSON">
               <UploadCloud className="w-4 h-4" />
             </button>
             {misProductos.length > 0 && (
@@ -589,13 +590,13 @@ export function ProductosScreen({
           </div>
           <div>
             <h3 className="font-black text-xl mb-1">Sin productos aún</h3>
-            <p className="text-sm text-ink-dim max-w-[220px]">Publicá tu primer producto para que tus clientes lo encuentren</p>
+            <p className="text-sm text-ink-dim max-w-[220px]">Publicá tu primer producto para que te encuentren</p>
           </div>
           <div className="flex flex-col items-center gap-2.5">
-            <button onClick={openNew} className="px-6 py-3 bg-brand hover:bg-brand-light text-white rounded-2xl font-bold transition-colors shadow-lg shadow-brand/25">
+            <button onClick={openNew} className="h-10 px-6 flex items-center justify-center text-sm bg-brand hover:bg-brand-light text-white rounded-2xl font-bold transition-colors shadow-lg shadow-brand/25">
               Crear primer producto
             </button>
-            <button onClick={onAbrirImportador} className="flex items-center gap-1.5 bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-sm font-bold text-ink-dim hover:text-brand transition-colors px-6 py-3 rounded-2xl">
+            <button onClick={onAbrirImportador} className="h-10 px-6 flex items-center justify-center gap-1.5 bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-sm font-bold text-ink-dim hover:text-brand transition-colors rounded-2xl">
               <UploadCloud className="w-4 h-4" /> o importar desde Excel/CSV
             </button>
           </div>
