@@ -206,14 +206,22 @@ export function ImportadorPrecios({
               {cargando ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Continuar'}
             </button>
           )}
-          {paso === 'revisar' && !cargando && diff && (diff.altas.length > 0 || diff.actualizaciones.length > 0 || diff.posiblesBajas.length > 0) && (
-            <button
-              onClick={aplicar}
-              className="w-full sm:max-w-sm sm:mx-auto flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-brand hover:bg-brand-light text-white font-bold text-sm transition-colors mb-2"
-            >
-              {`Aplicar cambios (${seleccion.altas.size + seleccion.actualizaciones.size + seleccion.bajas.size})`}
-            </button>
-          )}
+          {paso === 'revisar' && !cargando && diff && (diff.altas.length > 0 || diff.actualizaciones.length > 0 || diff.posiblesBajas.length > 0) && (() => {
+            // Mismo criterio que PasoRevisar.jsx (esPrimeraImportacion): con
+            // el catálogo vacío TODO cae en altas — "Aplicar cambios" no
+            // tiene sentido cuando no hay ningún "antes" del que se esté
+            // cambiando algo, se siente como importar por primera vez.
+            const esPrimeraImportacion = diff.actualizaciones.length === 0 && diff.posiblesBajas.length === 0 && diff.altas.length > 0;
+            const total = seleccion.altas.size + seleccion.actualizaciones.size + seleccion.bajas.size;
+            return (
+              <button
+                onClick={aplicar}
+                className="w-full sm:max-w-sm sm:mx-auto flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-brand hover:bg-brand-light text-white font-bold text-sm transition-colors mb-2"
+              >
+                {esPrimeraImportacion ? `Importar catálogo (${total})` : `Aplicar cambios (${total})`}
+              </button>
+            );
+          })()}
 
           {hayTrabajoEnCurso && (
             <div className="flex gap-2 w-full sm:max-w-sm sm:mx-auto">

@@ -19,7 +19,8 @@
 import { requireAuth } from './_lib/auth.js';
 import { handleError, handleOptions, HttpError, jsonResponse, parseJsonBody } from './_lib/http.js';
 import { sanitizeText } from './_lib/validation.js';
-import { ensureStoreOwner, findTiendaById, readTiendas } from './_lib/tiendas-store.js';
+import { ensureStoreOwner, findTiendaById, readTiendas, readTiendasWithEtag, writeTiendasSafe } from './_lib/tiendas-store.js';
+import { isModuleActive } from './_lib/modules.js';
 import { readProductos } from './_lib/productos-read.js';
 import { safeRead, safeWrite } from './_lib/r2-safe-write.js';
 import { extraerTabla, ExtractorError } from './_lib/importador/extractores.js';
@@ -241,6 +242,33 @@ async function accionAplicar({ event, env, body }) {
   const altasAplicadas = altas.length - errores.filter((e) => e.tipo === 'alta').length;
 
   await safeWrite(bucket, PRODUCTOS_KEY, productos, etag);
+
+  // Activar el módulo 'catalogo' si todavía no lo estaba — el propósito
+  // mismo de este importador es cargar un catálogo, así que exigirle al
+  // dueño ir a "Diseño de página" a prenderlo a mano antes de poder ver lo
+  // que acaba de importar es fricción innecesaria (y, sin esto, Catálogo/
+  // Ofertas se mostraban mezclados en el admin porque el filtro que las
+  // separa solo corre cuando AMBOS módulos están activos — ver
+  // ambosModulosActivos en StoreApp.jsx). Solo escribe si hace falta:
+  // no pisa ninguna otra configuración de la tienda en el camino común.
+  if (!isModuleActive(tienda, 'catalogo')) {
+    const { data: tiendas, etag: etagTiendas } = await readTiendasWithEtag(bucket);
+    const idx = tiendas.findIndex((t) => String(t.id) === String(tiendaId));
+    if (idx !== -1) {
+      const seccionActual = tiendas[idx].pagina?.secciones?.catalogo;
+      tiendas[idx] = {
+        ...tiendas[idx],
+        pagina: {
+          ...tiendas[idx].pagina,
+          secciones: {
+            ...tiendas[idx].pagina?.secciones,
+            catalogo: { ...seccionActual, activa: true, orden: seccionActual?.orden ?? 2, label: seccionActual?.label ?? 'Catálogo', desc: seccionActual?.desc ?? 'Productos con precio, stock y carrito de compra.' },
+          },
+        },
+      };
+      await writeTiendasSafe(bucket, tiendas, etagTiendas);
+    }
+  }
 
   if (corrida) {
     for (const amb of ambiguosConfirmados) {

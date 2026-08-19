@@ -38,9 +38,27 @@ export function construirDiff({ resultados, productos }) {
       continue;
     }
 
-    idsEncontrados.add(r.productoId);
     const producto = productos.find((p) => p.id === r.productoId);
-    if (!producto) continue;
+    // El productoId puede venir de un match previamente confirmado en D1
+    // (matches_confirmados) de una corrida vieja, apuntando a un producto
+    // que ya no existe (ej. se vació el catálogo para reimportar desde
+    // cero) — sin este fallback, la fila se descartaba en silencio (no
+    // aparecía ni como alta ni como actualización), dando la sensación de
+    // que el importador "perdía" filas al reimportar un archivo conocido.
+    if (!producto) {
+      altas.push({
+        nombre: r.fila.nombre || null,
+        precio: numeroValido(r.fila.precio),
+        precioOriginal: numeroValido(r.fila.precioOriginal),
+        stock: numeroValido(r.fila.stock),
+        descripcion: r.fila.descripcion || null,
+        presentacion: r.fila.presentacion || null,
+        codigoBarra: r.fila.codigoBarra || null,
+        skuProveedor: r.fila.skuProveedor || null,
+      });
+      continue;
+    }
+    idsEncontrados.add(r.productoId);
 
     const cambios = {};
     const precioNuevo = numeroValido(r.fila.precio);
