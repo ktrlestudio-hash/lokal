@@ -99,8 +99,20 @@ if (IS_FIRST_LOAD) localStorage.setItem(SPLASH_TS_KEY, String(Date.now()));
 // se reinicia y vuelve a animarse". Con la key estable el nodo persiste y la
 // animación sigue su curso sin cortes aunque la condición que lo muestra
 // cambie de rama (undefined→loading→loadingTienda).
+//
+// Módulo-level (no state de Root): incluso unificando ramas del árbol
+// (isAdminRoute || rebotarLandingLogueada) React puede llegar a remontar
+// AppLoader en algún punto de la cadena real de carga (auth, redirect,
+// fetch de tienda, chunk de Suspense). El PRIMER montaje en la vida de la
+// página sí debe correr la secuencia completa una vez — pero un remontaje
+// posterior, DESPUÉS de que ya se vio completa, no debe repetirla desde
+// cero (se vería como "una segunda animación cortándose", igual de raro
+// que la original). Una vez mostrada completa, cualquier AppLoader
+// siguiente en esta misma carga de módulo usa el loader liviano.
+let _splashCompletoYaMostrado = false;
 function AppLoader() {
-  return IS_FIRST_LOAD
+  const mostrarCompleto = IS_FIRST_LOAD && !_splashCompletoYaMostrado;
+  return mostrarCompleto
     ? <SplashScreenFull key="app-loader" />
     : <InlineLoader key="app-loader" />;
 }
@@ -110,6 +122,28 @@ export default function Root() {
   // se registra una sola vez — evita reconectar ese listener en cada
   // login/logout solo para tener el valor fresco de firebaseUser.
   const firebaseUserRef = useRef(undefined);
+
+  // Piso de tiempo mínimo para el splash completo (SOLO primera carga real,
+  // IS_FIRST_LOAD) — sin esto, en una conexión rápida los datos (auth +
+  // tienda) podían estar listos antes de que la animación del logo+wordmark
+  // (ring 0.85s → dot 0.7s+0.5s → "lokal" 1.0s+0.45s → "creado por KTRL"
+  // 1.2s+0.5s, termina a los ~1.7s) llegara a completarse, cortándola a
+  // mitad de camino. 1700ms cubre esa secuencia completa una sola vez; no
+  // aplica a InlineLoader (pull-to-refresh, navegación interna), que no
+  // tiene el mismo problema — ahí solo gira el logo sin secuencia.
+  const [splashMinCumplido, setSplashMinCumplido] = useState(!IS_FIRST_LOAD);
+  useEffect(() => {
+    if (!IS_FIRST_LOAD) return;
+    const t = setTimeout(() => {
+      // Marcado ANTES del setState: así, aunque este mismo cambio de
+      // estado dispare un remontaje de AppLoader en otra rama del árbol,
+      // ese remontaje ya lee _splashCompletoYaMostrado=true en el mismo
+      // ciclo y usa el loader liviano, no la secuencia completa de nuevo.
+      _splashCompletoYaMostrado = true;
+      setSplashMinCumplido(true);
+    }, 1700);
+    return () => clearTimeout(t);
+  }, []);
 
   const [legalPage, setLegalPage] = useState(() => pathToLegal(window.location.pathname));
   const [ofertaRoute, setOfertaRoute] = useState(() => pathToOferta(window.location.pathname));
@@ -318,6 +352,15 @@ export default function Root() {
     window.history.replaceState({}, '', '/admin');
     forceUrlRecheck();
   }, [rebotarLandingLogueada]);
+
+  // Gate único: en la primera carga real de la página (IS_FIRST_LOAD), no
+  // dejar pasar a NINGUNA ruta (oferta compartida, tienda pública, landing,
+  // admin) hasta que se cumplan los 1700ms del splash completo — antes esto
+  // vivía disperso, y una ruta con datos listos antes de tiempo directamente
+  // se saltaba el splash o lo cortaba a mitad de animación. Después de esta
+  // carga de módulo (SPA ya abierta, splashMinCumplido true de entrada) no
+  // aplica ningún piso, todo responde a la velocidad real de los datos.
+  if (IS_FIRST_LOAD && !splashMinCumplido) return <AppLoader />;
 
   // ── Oferta individual (/:tienda/o/:oferta) — vista React que reusa los
   //    componentes del home. El link lo comparten WhatsApp/FB; el SSR
