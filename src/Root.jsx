@@ -30,6 +30,16 @@ import { SplashScreenFull, InlineLoader } from './LokalLoader.jsx';
 
 const API_BASE = '/.netlify/functions';
 
+// Color de la barra de estado (PWA/móvil). Sigue al FONDO real de la app,
+// nunca al celeste de marca: si el manifest, el <meta> del <head>, el
+// splash y la app no coinciden, la barra salta de color varias veces en
+// cada apertura (era el caso: manifest celeste → meta oscuro → JS celeste).
+// Estos valores son los MISMOS que public/theme-init.js pinta en <html> y
+// <body> antes de que React monte, y los que declara site.webmanifest —
+// los cuatro puntos tienen que moverse juntos si se cambia el fondo.
+const STATUS_BAR_DARK = '#060d1a';
+const STATUS_BAR_LIGHT = '#ffffff';
+
 const LEGAL_PATHS = {
   '/terminos-y-condiciones': 'terminos',
   '/politica-de-privacidad': 'privacidad',
@@ -188,6 +198,16 @@ export default function Root() {
       document.documentElement.classList.remove('dark');
     }
     localStorage.setItem('lokal-theme', isDark ? 'dark' : 'light');
+
+    // La barra de estado de la PWA sigue al FONDO de la app, no al color de
+    // marca: así no salta de color en ningún momento de la carga (manifest →
+    // meta del <head> → splash → admin usan todos el mismo valor, ver
+    // STATUS_BAR_DARK). Lo único que la mueve es cambiar de tema, que es
+    // justamente cuando el fondo real cambia. Antes esto se recalculaba al
+    // terminar el splash y lo devolvía al celeste de marca, produciendo el
+    // salto celeste→oscuro→celeste en cada apertura.
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', isDark ? STATUS_BAR_DARK : STATUS_BAR_LIGHT);
   }, [isDark]);
 
   const toggleTheme = () => {
@@ -394,19 +414,6 @@ export default function Root() {
   const vaAlBackoffice = (isAdminRoute || rebotarLandingLogueada) && !!firebaseUser;
   const backofficeSinPreparar = vaAlBackoffice && (loadingTienda || !chunksAdminListos);
   const mostrandoSplash = !splashMinCumplido || authSinResolver || backofficeSinPreparar;
-
-  // El <meta theme-color> del <head> arranca en el oscuro del splash
-  // (#040a14, ver index.html) para no saltar celeste→oscuro→celeste en la
-  // barra de estado de la PWA durante la carga (Android/iOS la calculan
-  // del color de fondo real, no solo de la meta tag). Una vez que el
-  // splash se retira y hay contenido real en pantalla, hay que devolverla
-  // al color de marca — sin esto quedaría oscura para siempre, incluso
-  // dentro del admin en tema claro.
-  useEffect(() => {
-    if (mostrandoSplash) return;
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', '#00B8D9');
-  }, [mostrandoSplash]);
 
   if (mostrandoSplash) return <AppLoader />;
 

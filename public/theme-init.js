@@ -25,4 +25,17 @@
   }
   if (document.body) setBodyBg();
   else document.addEventListener('DOMContentLoaded', setBodyBg);
+
+  // Barra de estado en el tema correcto desde el primer frame. La <meta> del
+  // <head> está fija en el oscuro (el caso más común); si el usuario tiene
+  // tema claro guardado hay que corregirla ACÁ y no esperar a que React
+  // monte, o la barra arranca oscura y salta a blanca al montar. Mismos
+  // valores que STATUS_BAR_DARK/LIGHT en src/Root.jsx, que la mantiene de
+  // ahí en más.
+  try {
+    if (localStorage.getItem('lokal-theme') === 'light') {
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', '#ffffff');
+    }
+  } catch (e) {}
 })();

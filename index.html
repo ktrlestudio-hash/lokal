@@ -6,14 +6,15 @@
     <link rel="icon" type="image/png" href="/icon-favicon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <link rel="apple-touch-icon" href="/icon-dark.jpg" />
-    <!-- Oscuro (no el celeste de marca) para que coincida con el fondo real
-         que theme-init.js aplica al <html> ANTES de que React monte, y con
-         el splash inicial (#040a14/#060d1a) — antes quedaba celeste acá,
-         así que la barra de estado de la PWA (Android/iOS toman este color
-         como referencia inicial) mostraba celeste→oscuro→celeste en la
-         carga: dos saltos en vez de uno solo prolijo (oscuro durante todo
-         el splash, celeste recién cuando el admin real ya está en pantalla). -->
-    <meta name="theme-color" content="#040a14" />
+    <!-- Barra de estado: el MISMO #060d1a que declara site.webmanifest
+         (theme_color/background_color), que theme-init.js pinta en <html> y
+         <body> antes de que React monte, y que Root.jsx mantiene después
+         (STATUS_BAR_DARK). Los cuatro tienen que coincidir: cuando no lo
+         hacían —manifest celeste, esta meta oscura, y el JS devolviéndola a
+         celeste al terminar el splash— la barra saltaba de color dos veces
+         en cada apertura de la PWA. En tema claro, Root.jsx la pasa a
+         blanco, que es el fondo real de la app en ese tema. -->
+    <meta name="theme-color" content="#060d1a" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
