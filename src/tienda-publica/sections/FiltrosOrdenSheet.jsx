@@ -188,23 +188,28 @@ export function FiltrosSheet({
         </div>
       </div>
 
-      <div style={{ marginBottom: activeFilterCount > 0 ? 20 : 0 }}>
-        <p style={sectionLabel}>Vista</p>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setLayout('lista')} style={{
-            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0',
-            borderRadius: RADIUS.md, border: `1.5px solid ${layout === 'lista' ? 'var(--tp-primary)' : 'var(--tp-border)'}`,
-            background: layout === 'lista' ? 'var(--tp-primary-soft)' : 'var(--tp-surface2)',
-            color: layout === 'lista' ? 'var(--tp-primary)' : 'var(--tp-text)', cursor: 'pointer', fontSize: 13, fontWeight: 700, ...F,
-          }}><List size={16} />Lista</button>
-          <button onClick={() => setLayout('grilla')} style={{
-            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0',
-            borderRadius: RADIUS.md, border: `1.5px solid ${layout === 'grilla' ? 'var(--tp-primary)' : 'var(--tp-border)'}`,
-            background: layout === 'grilla' ? 'var(--tp-primary-soft)' : 'var(--tp-surface2)',
-            color: layout === 'grilla' ? 'var(--tp-primary)' : 'var(--tp-text)', cursor: 'pointer', fontSize: 13, fontWeight: 700, ...F,
-          }}><LayoutGrid size={16} />Grilla</button>
+      {/* setLayout es opcional: Ofertas reusa este sheet pero su grilla es
+          fija (sin toggle lista/grilla) — sin setLayout, esta sección
+          entera no tiene sentido mostrarla. */}
+      {setLayout && (
+        <div style={{ marginBottom: activeFilterCount > 0 ? 20 : 0 }}>
+          <p style={sectionLabel}>Vista</p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setLayout('lista')} style={{
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0',
+              borderRadius: RADIUS.md, border: `1.5px solid ${layout === 'lista' ? 'var(--tp-primary)' : 'var(--tp-border)'}`,
+              background: layout === 'lista' ? 'var(--tp-primary-soft)' : 'var(--tp-surface2)',
+              color: layout === 'lista' ? 'var(--tp-primary)' : 'var(--tp-text)', cursor: 'pointer', fontSize: 13, fontWeight: 700, ...F,
+            }}><List size={16} />Lista</button>
+            <button onClick={() => setLayout('grilla')} style={{
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0',
+              borderRadius: RADIUS.md, border: `1.5px solid ${layout === 'grilla' ? 'var(--tp-primary)' : 'var(--tp-border)'}`,
+              background: layout === 'grilla' ? 'var(--tp-primary-soft)' : 'var(--tp-surface2)',
+              color: layout === 'grilla' ? 'var(--tp-primary)' : 'var(--tp-text)', cursor: 'pointer', fontSize: 13, fontWeight: 700, ...F,
+            }}><LayoutGrid size={16} />Grilla</button>
+          </div>
         </div>
-      </div>
+      )}
 
       {activeFilterCount > 0 && (
         <button onClick={onLimpiar} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 13.5, fontWeight: 700, color: '#ef4444', ...F }}>

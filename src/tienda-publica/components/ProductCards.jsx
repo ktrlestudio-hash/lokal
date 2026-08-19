@@ -9,14 +9,18 @@
  * `onPrimary`) siguen viniendo por props: cada consumidor decide de dónde
  * los resuelve (paleta de marca de la tienda vs. tokens generales del Home).
  */
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Plus, Minus, Star, Clock, ShoppingBag, Users, MoreVertical,
   UtensilsCrossed, Coffee, Pizza, Beef, Sandwich, IceCream, CupSoda, Salad,
   Croissant, Cookie, Soup, Fish, Drumstick, Wheat, Leaf, Snowflake,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { formatPrice } from '../utils.js';
-import { RADIUS, SHADOW } from '../tokens.js';
+import { RADIUS, SHADOW, FONT, TRANSITION } from '../tokens.js';
+import { calcularBadges, BADGE_CONFIG } from '../../utils/productBadges.js';
+
+const F = { fontFamily: FONT.family };
 
 /* ── Botón de 3 puntos, SOLO para el dueño de la tienda logueado en su
    propia vista pública (ver OfertaAdminSheet.jsx) — abre el sheet de
@@ -409,6 +413,129 @@ export function ProductCardVertical({ p, qty, onOpen, onAdd, onRemove, surf, sur
             carrito) QtyControl se auto-oculta — ver su propio comentario. */}
         <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
           <Precio p={p} txt={txt} stacked />
+          <QtyControl qty={qty} onAdd={onAdd} onRemove={onRemove} p={p} primary={primary} onPrimary={onPrimary} surf2={surf2} border={border} txt={txt} size="sm" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Chip de categoría/filtro rápido — compartido entre commerce-modern
+   (chips de categoría de Catálogo/Ofertas) y cualquier consumidor futuro que
+   necesite el mismo pill toggle. Extraído tal cual de commerce-modern.jsx,
+   sin cambios de comportamiento. ── */
+export function Chip({ label, Icon, active, onClick, primary, onPrimary, surf2, border, txt }) {
+  return (
+    <button className="cm-chip" onClick={onClick} style={{
+      flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 7,
+      padding: '9px 14px', borderRadius: RADIUS.md, cursor: 'pointer',
+      border: `1.5px solid ${active ? primary : border}`,
+      background: active ? primary : surf2, color: active ? onPrimary : txt,
+      fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', transition: TRANSITION.fast, ...F,
+    }}>
+      {Icon && <Icon size={15} style={{ opacity: active ? 1 : 0.75 }} />}
+      {label}
+    </button>
+  );
+}
+
+/* ── Carrusel horizontal con flechas + fade en los bordes — mismo patrón
+   visual que LOKAL usa en TiendaDetailScreen (useScrollEdges + NavArrowBtn),
+   reimplementado acá con los tokens de tienda-publica para no acoplar este
+   componente al resto de la app. Extraído tal cual de commerce-modern.jsx. ── */
+export function Carrusel({ children, gap = 12, className = 'cm-chips', padding = '0', arrowOffset = 2 }) {
+  const ref = useRef(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+
+  const update = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    setEdges({ left: el.scrollLeft > 4, right: el.scrollLeft < el.scrollWidth - el.clientWidth - 4 });
+  }, []);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => { el.removeEventListener('scroll', update); ro.disconnect(); };
+  }, [update]);
+
+  const scrollBy = dir => ref.current?.scrollBy({ left: dir * 180, behavior: 'smooth' });
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div ref={ref} style={{ display: 'flex', gap, overflowX: 'auto', padding, scrollbarWidth: 'none' }} className={className}>
+        {children}
+      </div>
+      {/* Fade con stops explícitos (no solo color→transparent) para evitar el
+          artefacto de 1px que deja el navegador al interpolar transparencia
+          en un color con canal alpha implícito — mismo tono en ambos
+          extremos del gradiente, solo cambia la opacidad. */}
+      {edges.left && (
+        <>
+          <div style={{ pointerEvents: 'none', position: 'absolute', left: 0, top: 0, bottom: 0, width: 28, background: 'linear-gradient(to right, var(--tp-bg) 0%, var(--tp-bg) 15%, transparent 100%)' }} />
+          {/* top:50% + translateY(-50%) en vez de un % fijo (era 38%,
+              ajustado a ojo para las cards altas del catálogo) — así queda
+              centrado de verdad sin importar la altura del contenido
+              (chips bajitos, cards altas, lo que sea). */}
+          <button onClick={() => scrollBy(-1)} aria-label="Anterior" className="no-press cm-carousel-arrow"
+            style={{ position: 'absolute', left: -arrowOffset, top: '50%', transform: 'translateY(-50%)', width: 30, height: 30, borderRadius: 10, border: '1px solid var(--tp-border)', background: 'var(--tp-surface)', color: 'var(--tp-text)', display: 'grid', placeItems: 'center', cursor: 'pointer', boxShadow: SHADOW.sm, zIndex: 2 }}>
+            <ChevronLeft size={16} />
+          </button>
+        </>
+      )}
+      {edges.right && (
+        <>
+          <div style={{ pointerEvents: 'none', position: 'absolute', right: 0, top: 0, bottom: 0, width: 28, background: 'linear-gradient(to left, var(--tp-bg) 0%, var(--tp-bg) 15%, transparent 100%)' }} />
+          <button onClick={() => scrollBy(1)} aria-label="Siguiente" className="no-press cm-carousel-arrow"
+            style={{ position: 'absolute', right: -arrowOffset, top: '50%', transform: 'translateY(-50%)', width: 30, height: 30, borderRadius: 10, border: '1px solid var(--tp-border)', background: 'var(--tp-surface)', color: 'var(--tp-text)', display: 'grid', placeItems: 'center', cursor: 'pointer', boxShadow: SHADOW.sm, zIndex: 2 }}>
+            <ChevronRight size={16} />
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── Card GRILLA: foto arriba, info abajo (catálogo visual). Con carrito
+   activo, el selector de cantidad (QtyControl) se auto-oculta si no viene
+   onAdd — ver su propio comentario más arriba. Extraída tal cual de
+   commerce-modern.jsx. ── */
+export function ProductCardGrid({ p, onOpen, surf, surf2, border, txt, txtM, primary, onPrimary, onOpenAdminMenu, qty, onAdd, onRemove }) {
+  const img = fotoDe(p);
+  const pct = descuentoPct(p);
+  // "oferta" ya lo cubre el -X% de arriba (mismo dato, precioOriginal >
+  // precio) — mostrar los dos sería redundante. Acá solo se suman
+  // "nuevo"/"por_vencer", que no tienen ningún equivalente visual todavía.
+  const otrosBadges = calcularBadges(p).filter((id) => id !== 'oferta');
+  const badgeId = otrosBadges[0]; // uno solo, mismo criterio que el admin (no saturar la card chica)
+  const badge = badgeId ? BADGE_CONFIG[badgeId] : null;
+  return (
+    <div onClick={onOpen} role="button" tabIndex={0} className="no-press cm-card"
+      style={{ background: surf, border: `1px solid ${border}`, borderRadius: RADIUS.lg, overflow: 'hidden', cursor: 'pointer', boxShadow: SHADOW.sm, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'relative', aspectRatio: '1 / 1', background: surf2 }}>
+        {img ? <img src={img} alt={nombreDe(p)} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center' }}><ShoppingBag size={26} style={{ color: txtM, opacity: 0.5 }} /></div>}
+        {pct && <span style={{ position: 'absolute', top: 8, left: 8, padding: '3px 8px', borderRadius: RADIUS.sm, background: 'var(--tp-secondary)', color: 'var(--tp-on-secondary)', fontSize: 11, fontWeight: 900 }}>-{pct}%</span>}
+        {!pct && badge && (
+          <span style={{ position: 'absolute', top: 8, left: 8, padding: '3px 8px', borderRadius: RADIUS.sm, display: 'inline-flex', alignItems: 'center', gap: 3, background: 'var(--tp-surface)', color: txt, fontSize: 10, fontWeight: 800, boxShadow: SHADOW.sm }}>
+            <badge.Icon size={11} />
+            {badge.label}
+          </span>
+        )}
+        <OfertaMenuButton onOpen={onOpenAdminMenu ? () => onOpenAdminMenu(p) : null} />
+      </div>
+      <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 5, flex: 1 }}>
+        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: txt, lineHeight: 1.2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{nombreDe(p)}</h3>
+        {p.rating && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, color: txtM }}>
+            <Star size={11} style={{ fill: '#fbbf24', color: '#fbbf24' }} />{p.rating}
+          </span>
+        )}
+        <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+          <Precio p={p} txt={txt} />
           <QtyControl qty={qty} onAdd={onAdd} onRemove={onRemove} p={p} primary={primary} onPrimary={onPrimary} surf2={surf2} border={border} txt={txt} size="sm" />
         </div>
       </div>

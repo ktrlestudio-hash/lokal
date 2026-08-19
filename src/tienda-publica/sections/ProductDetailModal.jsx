@@ -19,8 +19,11 @@ export function ProductDetailModal({ producto, onClose, onCompartir, qty = 0, on
 
   const img = producto.foto || producto.galeria?.[0] || producto.fotos?.[0];
 
+  // zIndex 4750: por encima de CatalogoModal/OfertasModal (4700, Fase 6 del
+  // plan) — el detalle de producto se abre DESDE dentro de esos modales
+  // fullscreen y debe quedar apilado encima, no debajo.
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 4700, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 4750, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.6)' }} />
       <div className="tp-sheet-scroll" style={{
         position: 'relative', width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto',

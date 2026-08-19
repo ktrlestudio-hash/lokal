@@ -17,37 +17,32 @@
  */
 export const META = { label: 'Commerce', desc: 'Estilo Rappi/PedidosYa: hero, chips con ícono, catálogo agrupado, vista lista/grilla, carrito.' };
 
-import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
-  Star, MapPin, Clock, Search, Share2, ShoppingBag,
-  Tag, Users, ChevronLeft, ChevronRight, Navigation, Store, Globe, Filter, ArrowUpDown, X, Check, Plus, BarChart3, MoreVertical, Pencil,
-  Loader2, RotateCw, User,
+  Star, MapPin, Clock, Share2,
+  Users, ChevronLeft, ChevronRight, Navigation, Store, Globe, X, Check, Plus, BarChart3, Pencil,
+  User,
 } from 'lucide-react';
 
 import { LogoSymbol } from '../../Brand.jsx';
 import { MapaSection, MapaModal } from '../sections/MapaSection.jsx';
+import { CatalogoSection, CatalogoModal } from '../sections/CatalogoSection.jsx';
+import { OfertasSection, OfertasModal } from '../sections/OfertasSection.jsx';
 import { HorariosSheet } from '../sections/HorariosSheet.jsx';
-import { FiltrosSheet, OrdenarSheet } from '../sections/FiltrosOrdenSheet.jsx';
 import { CarritoSheet } from '../sections/CarritoSheet.jsx';
 import { TiendaNavBar } from '../sections/TiendaNavBar.jsx';
 import { TiendaFooter } from '../sections/TiendaFooter.jsx';
 import { ShareSheet } from '../sections/ShareSheet.jsx';
 import { ProductDetailModal } from '../sections/ProductDetailModal.jsx';
 
-import { getEstadoApertura, formatPrice } from '../utils.js';
+import { getEstadoApertura } from '../utils.js';
 import { usePhotoSwipe, PhotoSwipeStyles, PhotoSwipeOverlay } from '../hooks/usePhotoSwipe.jsx';
-import { trackPageview, trackClick, trackCompartir, trackBusqueda, useTiempoEnPagina } from '../track.js';
+import { trackPageview, trackClick, trackCompartir, useTiempoEnPagina } from '../track.js';
 import { OfertaQuickForm } from '../sections/OfertaQuickForm.jsx';
 import { TiendaStatsSheet } from '../sections/TiendaStatsSheet.jsx';
-import { FONT, RADIUS, SHADOW, TRANSITION, DESKTOP_QUERY } from '../tokens.js';
-import {
-  nombreDe, fotoDe, descuentoPct, Precio, TituloDescripcion,
-  ProductCardList, ProductCardVertical, OfertaMenuButton, QtyControl,
-  CM_LIST_H, CM_LIST_SIDE, CM_VERT_W, CM_VERT_IMG, CM_VERT_BODY,
-  iconoDeCategoria, esCategoriaVertical,
-} from '../components/ProductCards.jsx';
+import { FONT, RADIUS, SHADOW, DESKTOP_QUERY } from '../tokens.js';
+import { Carrusel } from '../components/ProductCards.jsx';
 import { OfertaAdminSheet } from '../sections/OfertaAdminSheet.jsx';
-import { calcularBadges, BADGE_CONFIG } from '../../utils/productBadges.js';
 
 const F = { fontFamily: FONT.family };
 
@@ -303,13 +298,10 @@ const GLOBAL_CSS = `
   }
 `;
 
-// Lectura tolerante: catálogo real usa `titulo`/`fotos[]`; mock usa `nombre`/`foto`.
-// (nombreDe/fotoDe viven en components/ProductCards.jsx, compartidos con el Home)
-const catDe    = p => p.categoria || p.categoryId || null;
-
-// iconoDeCategoria / esCategoriaVertical viven en components/ProductCards.jsx
-// (compartidos con HomeScreen, que arma secciones globales por rubro con el
-// mismo criterio visual).
+// nombreDe/fotoDe/iconoDeCategoria/esCategoriaVertical/catDe viven en
+// CatalogoSection.jsx/OfertasSection.jsx/components/ProductCards.jsx — ya
+// no se usan directo acá (Catálogo y Ofertas se movieron a sus modales,
+// Fase 6 del plan).
 
 export function TemplateCommerceModern({
   tienda, secciones, isDark,
@@ -369,16 +361,18 @@ export function TemplateCommerceModern({
   const productos = (tienda.productos || []).filter(p => p.activo !== false && p.disponible !== false);
 
   const [detalle, setDetalle] = useState(null);
-  const [query, setQuery] = useState('');
-  const [catActiva, setCatActiva] = useState('__todas');
-  const [layout, setLayout] = useState('lista');
-  const searchInputRef = useRef(null);
+  // Catálogo: solo el interruptor del modal fullscreen queda acá — todo el
+  // estado de búsqueda/filtro/orden/categoría vive dentro de CatalogoModal
+  // (self-contained, Fase 6 del plan), sin consumidores fuera de su UI.
+  const [catalogoModalOpen, setCatalogoModalOpen] = useState(false);
 
   // ── Carrito — reemplaza el patrón viejo de "armar un mensaje y mandarlo
   // por WhatsApp": acá se arma un pedido con link propio (POST /carrito, ya
   // construido en el backend) en vez de texto plano. Estado local simple
   // {ofertaId: qty} — se resetea si se recarga la página (mismo criterio que
-  // un carrito de compra típico, no hace falta persistirlo).
+  // un carrito de compra típico, no hace falta persistirlo). Se queda a
+  // nivel de página (no dentro de CatalogoModal) para que el ícono con
+  // contador de TiendaNavBar siga accesible con el catálogo cerrado.
   const [carritoQty, setCarritoQty] = useState({});
   const [carritoOpen, setCarritoOpen] = useState(false);
   const carritoCount = Object.values(carritoQty).reduce((a, b) => a + b, 0);
@@ -390,103 +384,16 @@ export function TemplateCommerceModern({
     return next;
   });
 
-  // Tracking de búsqueda — debounce 800ms: sin esto se mandaría un evento
-  // por cada tecla tipeada. No se trackea al propio dueño (ver pageview).
-  useEffect(() => {
-    if (esDueño || !query.trim()) return undefined;
-    const t = setTimeout(() => trackBusqueda(tienda.id, query.trim()), 800);
-    return () => clearTimeout(t);
-  }, [query, tienda.id, esDueño]);
-
-  // Filtro + orden — subconjunto acotado del sistema completo de
-  // TodasOfertasScreen.jsx (categoría se cubre con los chips ya
-  // existentes, no se duplica en el sheet de filtros).
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [sortOpen, setSortOpen] = useState(false);
-  const [precioMin, setPrecioMin] = useState('');
-  const [precioMax, setPrecioMax] = useState('');
-  const [filtroBadges, setFiltroBadges] = useState([]);
-  const [filtrosAtributos, setFiltrosAtributos] = useState({});
-  const [sortBy, setSortBy] = useState('relevancia');
-  const SORT_OPTIONS = [
-    { value: 'relevancia',  label: 'Relevancia' },
-    { value: 'precio-asc',  label: 'Menor precio' },
-    { value: 'precio-desc', label: 'Mayor precio' },
-    { value: 'nombre-az',   label: 'Nombre A-Z' },
-    { value: 'destacados',  label: 'Destacados' },
-  ];
-  const activeAttrCount = Object.values(filtrosAtributos).filter(v => v && v.length > 0).length;
-  const activeFilterCount = [precioMin !== '' || precioMax !== '', filtroBadges.length > 0].filter(Boolean).length + activeAttrCount;
-
-  // Atributos dinámicos — derivados de tienda.productos[].attributes (ej.
-  // tamaño, apto_celiaco, con_extra), mismo criterio que
-  // TodasOfertasScreen.jsx: solo aparece si hay 2+ valores distintos.
-  const atributosDisponibles = useMemo(() => {
-    const map = {};
-    const SKIP_KEYS = new Set(['modelo', 'estado']);
-    productos.forEach(p => {
-      if (!p.attributes) return;
-      Object.entries(p.attributes).forEach(([k, v]) => {
-        if (SKIP_KEYS.has(k) || !v) return;
-        if (!map[k]) map[k] = { key: k, label: k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, ' '), values: new Set() };
-        map[k].values.add(String(v));
-      });
-    });
-    return Object.values(map).filter(a => a.values.size >= 2).map(a => ({ ...a, values: [...a.values].sort() }));
-  }, [productos]);
-
   const { abierta, texto } = getEstadoApertura(tienda.horarios);
 
-  const categorias = useMemo(() => {
-    const vistas = [];
-    for (const p of productos) {
-      const c = catDe(p);
-      if (c && !vistas.includes(c)) vistas.push(c);
-    }
-    return vistas;
-  }, [productos]);
-
-  const filtrados = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const pMin = precioMin !== '' ? Number(precioMin) : null;
-    const pMax = precioMax !== '' ? Number(precioMax) : null;
-    const base = productos.filter(p => {
-      if (catActiva !== '__todas' && catDe(p) !== catActiva) return false;
-      if (q && !nombreDe(p).toLowerCase().includes(q) && !(p.descripcion || '').toLowerCase().includes(q)) return false;
-      if (filtroBadges.length && !calcularBadges(p).some(id => filtroBadges.includes(id))) return false;
-      if (pMin !== null && (p.precio == null || Number(p.precio) < pMin)) return false;
-      if (pMax !== null && (p.precio == null || Number(p.precio) > pMax)) return false;
-      for (const [key, vals] of Object.entries(filtrosAtributos)) {
-        if (!vals || vals.length === 0) continue;
-        if (!p.attributes || !vals.includes(String(p.attributes[key]))) return false;
-      }
-      return true;
-    });
-    if (sortBy === 'relevancia') return base;
-    return [...base].sort((a, b) => {
-      if (sortBy === 'precio-asc')  return (a.precio ?? Infinity) - (b.precio ?? Infinity);
-      if (sortBy === 'precio-desc') return (b.precio ?? 0) - (a.precio ?? 0);
-      if (sortBy === 'nombre-az')   return nombreDe(a).localeCompare(nombreDe(b), 'es');
-      if (sortBy === 'destacados')  return (b.rating ?? 0) - (a.rating ?? 0);
-      return 0;
-    });
-  }, [productos, query, catActiva, filtroBadges, precioMin, precioMax, filtrosAtributos, sortBy]);
-
-  // Con orden explícito (no "relevancia"), el agrupado por categoría no
-  // tiene sentido — el usuario pidió ordenar TODOS los resultados, no cada
-  // grupo por separado. Colapsa a una sola sección "Resultados".
-  const grupos = useMemo(() => {
-    if (sortBy !== 'relevancia') {
-      return filtrados.length > 0 ? [['Resultados', filtrados]] : [];
-    }
-    const map = new Map();
-    for (const p of filtrados) {
-      const c = catDe(p) || 'Otros';
-      if (!map.has(c)) map.set(c, []);
-      map.get(c).push(p);
-    }
-    return [...map.entries()];
-  }, [filtrados, sortBy]);
+  // ── Ofertas: solo el interruptor del modal fullscreen y los arrays base
+  // quedan acá — todo el estado de búsqueda/filtro/orden/categoría vive
+  // dentro de OfertasModal (self-contained, Fase 6 del plan).
+  const [ofertasModalOpen, setOfertasModalOpen] = useState(false);
+  const ofertasBase = useMemo(() => (tienda.ofertas || []).filter(o => !o._localId), [tienda.ofertas]);
+  // Las cards "pendiente"/error (o._localId) no participan del filtro/orden
+  // — siempre se muestran primero, igual que antes de este cambio.
+  const ofertasPendientes = useMemo(() => (tienda.ofertas || []).filter(o => o._localId), [tienda.ofertas]);
 
   // Carrusel de fotos del hero — crossfade por opacity (evita el parpadeo
   // de cambiar el src), mismo patrón que usaba TiendaDetailScreen.jsx.
@@ -562,11 +469,6 @@ export function TemplateCommerceModern({
   // /:slug de un único segmento — /t/:slug no resuelve a ninguna tienda.
   const shareUrl = tienda.slug ? `${window.location.origin}/${tienda.slug}` : window.location.href;
   const compartir = () => setShareOpen(true);
-
-  const cardProps = {
-    surf, surf2, border, txt, txtM, primary, onPrimary,
-    onOpenAdminMenu: esDueño ? setOfertaAdminTarget : null,
-  };
 
   // Props de carrito por producto — solo si el catálogo (módulo "productos")
   // está activo. El dueño viendo su propia tienda no necesita agregar al
@@ -780,330 +682,21 @@ export function TemplateCommerceModern({
         );
       })()}
 
-      {/* ── Barra sticky: buscador + chips + toggle ── */}
-      {s.productos?.activa && productos.length > 0 && (
-        <div className="cm-sticky-bar" style={{ position: 'sticky', top: 0, zIndex: 50, paddingTop: 16, marginTop: 18, borderBottom: `1px solid ${border}` }}>
-          <div style={{ padding: '0 16px', display: 'flex', gap: 10, marginBottom: 12 }}>
-            <div className="cm-search-wrap" style={{ position: 'relative', flex: 1 }}>
-              <Search size={17} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: txtM, pointerEvents: 'none' }} />
-              <input
-                ref={searchInputRef}
-                className="cm-input"
-                value={query} onChange={e => setQuery(e.target.value)}
-                placeholder="Buscar productos…"
-                style={{
-                  width: '100%', padding: `12px ${query ? '36px' : '14px'} 12px 38px`, borderRadius: RADIUS.md,
-                  borderWidth: '1.5px', borderStyle: 'solid', outline: 'none', fontSize: 14, fontWeight: 500,
-                  ...F,
-                }}
-              />
-              {query && (
-                <button onClick={() => setQuery('')} aria-label="Limpiar búsqueda" className="no-press cm-clear-btn"
-                  style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 22, height: 22, borderRadius: '50%', border: 'none', background: surf2, color: txtM, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'filter .15s ease, transform .12s ease' }}>
-                  <X size={13} />
-                </button>
-              )}
-            </div>
-            {/* Filtro y Ordenar — reemplazan el toggle lista/grilla en la
-                barra; ambos abren un sheet (patrón portado tal cual de
-                TodasOfertasScreen.jsx: botón SÓLIDO cuando hay filtros
-                activos, con un dot chico en la esquina — no un contador
-                numérico, eso queda solo para el sidebar desktop). */}
-            <button
-              className="cm-toggle-btn"
-              onClick={() => setFiltersOpen(true)}
-              aria-label="Filtros" data-tooltip="Filtros"
-              style={{
-                width: 46, borderRadius: RADIUS.md, border: `1.5px solid ${activeFilterCount > 0 ? primary : border}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, position: 'relative',
-                background: activeFilterCount > 0 ? primary : surf2, color: activeFilterCount > 0 ? onPrimary : txt,
-              }}>
-              <Filter size={18} />
-              {activeFilterCount > 0 && (
-                <span style={{ position: 'absolute', top: -1, right: -1, width: 8, height: 8, borderRadius: '50%', background: primary, boxShadow: `0 0 0 2px ${surf}` }} />
-              )}
-            </button>
-            <button
-              className="cm-toggle-btn"
-              onClick={() => setSortOpen(true)}
-              aria-label="Ordenar" data-tooltip="Ordenar"
-              style={{ width: 46, borderRadius: RADIUS.md, border: `1.5px solid ${sortBy !== 'relevancia' ? primary : border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, background: surf2, color: sortBy !== 'relevancia' ? primary : txt }}>
-              <ArrowUpDown size={18} />
-            </button>
-          </div>
-
-          {categorias.length > 0 && (
-            <div style={{ padding: '0 16px 13px' }}>
-              {/* Mismo sistema de scroll que HomeScreen.jsx: fade en el
-                  borde con más chips por descubrir + flechas que aparecen
-                  solo cuando hay overflow en esa dirección (reusa el
-                  componente Carrusel ya usado en el catálogo). */}
-              <Carrusel gap={8} className="cm-chips" arrowOffset={10}>
-                <Chip label="Todos" Icon={Tag} active={catActiva === '__todas'} onClick={() => setCatActiva('__todas')}
-                  primary={primary} onPrimary={onPrimary} surf2={surf2} border={border} txt={txt} />
-                {categorias.map(c => (
-                  <Chip key={c} label={c} Icon={iconoDeCategoria(c)} active={catActiva === c}
-                    onClick={() => setCatActiva(catActiva === c ? '__todas' : c)}
-                    primary={primary} onPrimary={onPrimary} surf2={surf2} border={border} txt={txt} />
-                ))}
-              </Carrusel>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Catálogo agrupado ── */}
-      {/* s.productos viene undefined si la sección nunca se activó (no está
-          en el array de getSeccionesActivas) — antes `undefined !== false`
-          daba true y mostraba el catálogo (con su empty state "no hay
-          productos") igual, aunque la tienda no use ese módulo. */}
+      {/* ── Catálogo — card-preview + modal fullscreen (Fase 6 del plan,
+          mismo patrón que Mapa: MapaSection/MapaModal). Todo el contenido
+          de búsqueda/filtro/orden/grilla vive en CatalogoModal, montado
+          fuera de este scroll (portal a document.body). ── */}
       {s.productos?.activa && (
-        <div style={{ padding: '18px 16px 0' }}>
-          {filtrados.length === 0 ? (
-            // Dos vacíos distintos: búsqueda sin resultados (ícono lupa,
-            // enfocado en "probá otra búsqueda") vs. catálogo realmente
-            // vacío (ícono bolsa, "todavía no hay productos"). Antes
-            // compartían el mismo ícono de bolsa (poco lógico para un
-            // resultado de búsqueda) con mal centrado (marginBottom en vez
-            // de flex real).
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '48px 20px' }}>
-              <div style={{ width: 56, height: 56, borderRadius: RADIUS.full, background: surf2, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-                {query
-                  ? <Search size={24} style={{ color: txtM }} />
-                  : <ShoppingBag size={24} style={{ color: txtM }} />}
-              </div>
-              {query ? (
-                <>
-                  <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: txt }}>Sin resultados para &quot;{query}&quot;</p>
-                  <p style={{ margin: '0 0 16px', fontSize: 13, color: txtM }}>Probá con otra palabra o revisá la ortografía</p>
-                  <button onClick={() => setQuery('')} style={{ padding: '9px 18px', borderRadius: RADIUS.md, border: `1.5px solid ${border}`, background: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: txt, ...F }}>
-                    Limpiar búsqueda
-                  </button>
-                </>
-              ) : (
-                <p style={{ margin: 0, fontSize: 14, color: txtM }}>Todavía no hay productos</p>
-              )}
-            </div>
-          ) : (
-            grupos.map(([cat, items]) => {
-              const SecIcon = iconoDeCategoria(cat);
-              const vertical = esCategoriaVertical(cat);
-              // Con pocos productos, un carrusel scrolleable queda con
-              // cards angostas flotando y espacio vacío al lado — no tiene
-              // sentido "poder scrollear" cuando entran todos igual. Solo a
-              // partir de 4 ítems el carrusel aporta (hay algo para
-              // descubrir scrolleando). Con 2-3, se ajustan al ancho en
-              // grilla; con 1 sola, cae a la card horizontal normal (misma
-              // que cualquier otra categoría, no tiene sentido una card
-              // vertical sola).
-              const pocasVerticales = vertical && items.length <= 3;
-              return (
-                <section key={cat} style={{ marginBottom: 26 }}>
-                  {(catActiva === '__todas' && categorias.length > 0) && (
-                    <h2 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 800, letterSpacing: '-0.01em', color: txt, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 30, height: 30, borderRadius: RADIUS.md, background: primarySoft, color: primary, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                        <SecIcon size={16} />
-                      </span>
-                      {cat}
-                      <span style={{ fontSize: 12, fontWeight: 600, color: txtM }}>· {items.length}</span>
-                      {/* "Ver todos" con filtro por ESTA categoría — solo modo
-                          plataforma. Standalone ya muestra el 100% del
-                          catálogo de esta tienda acá mismo, no aplica un
-                          "ver más" hacia otro lado. Antes era un único
-                          botón global flotando sobre el buscador, sin
-                          relación con ninguna categoría puntual — ahora
-                          cada sección tiene el suyo. */}
-                      {onVerTodosFiltrado && (
-                        <button onClick={() => onVerTodosFiltrado(cat)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12.5, fontWeight: 700, color: primary, ...F }}>
-                          Ver todos →
-                        </button>
-                      )}
-                    </h2>
-                  )}
-
-                  {vertical && items.length > 3 ? (
-                    // 4+ bebidas: carrusel horizontal con cards más altas
-                    // que anchas (foto vertical), flechas + fade en los bordes
-                    // — mismo patrón que LOKAL usa en TiendaDetailScreen.
-                    <Carrusel>
-                      {items.map(p => (
-                        <ProductCardVertical key={p.id} p={p} onOpen={() => setDetalle(p)} {...cardProps} {...carritoPropsDe(p)} />
-                      ))}
-                    </Carrusel>
-                  ) : items.length === 1 ? (
-                    // 1 sola: card horizontal normal, como cualquier otra categoría.
-                    <ProductCardList p={items[0]} onOpen={() => setDetalle(items[0])} {...cardProps} {...carritoPropsDe(items[0])} />
-                  ) : pocasVerticales ? (
-                    // 2-3 bebidas: se ajustan al ancho disponible, sin scroll.
-                    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${items.length}, 1fr)`, gap: 10 }}>
-                      {items.map(p => (
-                        <ProductCardVertical key={p.id} p={p} onOpen={() => setDetalle(p)} fluida {...cardProps} {...carritoPropsDe(p)} />
-                      ))}
-                    </div>
-                  ) : layout === 'grilla' ? (
-                    <div className="cm-grid">
-                      {items.map(p => (
-                        <ProductCardGrid key={p.id} p={p} onOpen={() => setDetalle(p)} {...cardProps} {...carritoPropsDe(p)} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {items.map(p => (
-                        <ProductCardList key={p.id} p={p} onOpen={() => setDetalle(p)} {...cardProps} {...carritoPropsDe(p)} />
-                      ))}
-                    </div>
-                  )}
-                </section>
-              );
-            })
-          )}
-        </div>
+        <CatalogoSection productos={productos} onAbrirModal={() => setCatalogoModalOpen(true)} />
       )}
 
-      {/* ── Ofertas — módulo LOKAL LINKS: imágenes con link individual y
-          Open Graph dinámico al compartir (netlify/functions/ofertas.js +
-          oferta-ssr.js). Sin precio/stock — solo imagen + nombre + compartir,
-          a diferencia del catálogo. Ver MODULES.md. ── */}
-      {s.ofertas?.activa && (() => {
-        const ofertasList = tienda.ofertas || [];
-        return (
-          <section style={{ padding: '18px 16px 20px' }}>
-            {/* Título con ícono — mismo diseño literal del viejo LOKAL LINKS
-                (section-ico: 34x34, radius 11, fondo brand-muted). */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '4px 0 14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ width: 34, height: 34, borderRadius: 11, flexShrink: 0, background: primarySoft, color: primary, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Tag size={18} />
-                </span>
-                <h2 style={{ margin: 0, fontSize: 15, fontWeight: 800, letterSpacing: '-0.01em', color: txt, ...F }}>Ofertas</h2>
-              </div>
-              {ofertasList.length > 0 && (
-                <span style={{ fontSize: 12, fontWeight: 600, color: txtM, ...F }}>
-                  {ofertasList.length} {ofertasList.length === 1 ? 'oferta' : 'ofertas'}
-                </span>
-              )}
-            </div>
-
-            {ofertasList.length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '48px 20px' }}>
-                <div style={{ width: 56, height: 56, borderRadius: RADIUS.full, background: surf2, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-                  <Tag size={24} style={{ color: txtM }} />
-                </div>
-                <p style={{ margin: 0, fontSize: 14, color: txtM, ...F }}>Todavía no hay ofertas publicadas</p>
-              </div>
-            ) : (
-              <div className="cm-grid">
-                {ofertasList.map((o) => {
-                  // Card "pendiente" — recién publicada, todavía subiendo en
-                  // segundo plano (o._localId) o falló (o._status==='error').
-                  // Sin id/slug real todavía: no es clickeable como oferta
-                  // (no hay adónde navegar), no tiene compartir ni menú de
-                  // gestión — solo su propio feedback de progreso.
-                  if (o._localId) {
-                    const isError = o._status === 'error';
-                    return (
-                      <div key={o._localId} style={{ position: 'relative', display: 'block', aspectRatio: '1/1.414', borderRadius: RADIUS.lg, overflow: 'hidden', background: surf2, border: `1px solid ${isError ? '#EF4444' : border}` }}>
-                        <img src={o.thumbUrl} alt={o.nombre} loading="lazy"
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', opacity: isError ? 0.4 : 0.75, filter: isError ? 'grayscale(.3)' : 'none' }} />
-                        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, background: isError ? 'rgba(0,0,0,.35)' : 'rgba(0,0,0,.2)' }}>
-                          {isError ? (
-                            <>
-                              <span style={{ padding: '4px 10px', borderRadius: RADIUS.sm, background: '#EF4444', color: '#fff', fontSize: 11, fontWeight: 800 }}>No se pudo publicar</span>
-                              <div style={{ display: 'flex', gap: 6 }}>
-                                <button onClick={() => onOfertaReintentar?.(o._localId)} aria-label="Reintentar" className="no-press"
-                                  style={{ width: 32, height: 32, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,.9)', color: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                                  <RotateCw size={15} />
-                                </button>
-                                <button onClick={() => onOfertaCancelarPendiente?.(o._localId)} aria-label="Descartar" className="no-press"
-                                  style={{ width: 32, height: 32, borderRadius: 10, border: 'none', background: 'rgba(0,0,0,.55)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                                  <X size={15} />
-                                </button>
-                              </div>
-                            </>
-                          ) : (
-                            <>
-                              <Loader2 size={26} color="#fff" className="cm-spin" />
-                              <button onClick={() => onOfertaCancelarPendiente?.(o._localId)} aria-label="Cancelar" className="no-press"
-                                style={{ width: 28, height: 28, borderRadius: 9, border: 'none', background: 'rgba(0,0,0,.5)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                                <X size={14} />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                        <div style={{ position: 'absolute', inset: 'auto 0 0 0', padding: '10px', background: 'linear-gradient(to top, rgba(0,0,0,.7), transparent)', color: '#fff', fontSize: 12, fontWeight: 700 }}>
-                          {o.nombre}
-                        </div>
-                      </div>
-                    );
-                  }
-                  // Vencida/oculta: solo pueden llegar acá cuando esDueño
-                  // (el fetch público ya las filtra) — atenuadas + badge,
-                  // mismo criterio visual que el panel admin completo
-                  // (StoreApp.jsx → OfertaCard), para que el dueño reconozca
-                  // de un vistazo cuál necesita reactivar.
-                  const ofVencida = o.expireAt && new Date(o.expireAt).getTime() < Date.now();
-                  const ofOculta = o.visible === false;
-                  const ofInactiva = ofVencida || ofOculta;
-                  return (
-                  <a key={o.id} href={`/${tienda.slug}/o/${o.slug || o.id}`}
-                    onClick={(e) => {
-                      trackClick(tienda.id, 'card', { productoId: o.id });
-                      // Clic izquierdo normal → navegación SPA interna (sin
-                      // re-fetch): la oferta ya está en memoria. Ctrl/Cmd/click
-                      // medio (abrir en pestaña nueva) NO se intercepta —
-                      // dejamos que el href haga su trabajo. Igual el crawler
-                      // y el SEO ven el href real.
-                      if (onVerOferta && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
-                        e.preventDefault();
-                        onVerOferta(tienda, o);
-                      }
-                    }}
-                    style={{ position: 'relative', display: 'block', aspectRatio: '1/1.414', borderRadius: RADIUS.lg, overflow: 'hidden', background: surf2, border: `1px solid ${border}`, textDecoration: 'none', opacity: ofInactiva ? 0.55 : 1 }}>
-                    <img src={o.thumbUrl || o.imageUrl} alt={o.nombre} loading="lazy"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                    {ofInactiva && (
-                      <span style={{ position: 'absolute', top: 8, left: 8, zIndex: 3, padding: '3px 8px', borderRadius: RADIUS.sm, background: ofVencida ? '#EF4444' : 'rgba(0,0,0,.6)', color: '#fff', fontSize: 10, fontWeight: 800 }}>
-                        {ofVencida ? 'Vencida' : 'Oculta'}
-                      </span>
-                    )}
-                    {/* Botón compartir flotante — igual que .card-share del viejo
-                        LOKAL LINKS: círculo semitransparente sobre la foto, sin
-                        barra de texto abajo. Cuando el dueño está viendo su
-                        propia tienda, el botón de gestión (3 puntos) toma la
-                        esquina y comparte se desplaza a su izquierda — mismo
-                        criterio que las cards del catálogo (ver ProductCards.jsx). */}
-                    <button
-                      onClick={(e) => {
-                        // preventDefault: no seguir el href del <a> padre.
-                        // stopPropagation: sin esto, el click seguía
-                        // burbujeando hasta el onClick de la card completa
-                        // (línea de arriba) y disparaba onVerOferta — abría
-                        // la oferta en vez de (o además de) el sheet.
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setOfertaCompartir(o);
-                        setShareOfertaOpen(true);
-                      }}
-                      aria-label="Compartir oferta" className="no-press cm-hero-share-btn"
-                      style={{ position: 'absolute', top: 8, right: esDueño ? 46 : 8, zIndex: 3, width: 32, height: 32, borderRadius: 10, border: 'none', background: 'rgba(0,0,0,.45)', color: '#fff', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background-color .15s ease' }}>
-                      <Share2 size={15} />
-                    </button>
-                    {esDueño && (
-                      <button
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOfertaAdminTarget(o); }}
-                        aria-label="Gestionar oferta" className="no-press cm-hero-share-btn"
-                        style={{ position: 'absolute', top: 8, right: 8, zIndex: 3, width: 32, height: 32, borderRadius: 10, border: 'none', background: 'rgba(0,0,0,.45)', color: '#fff', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <MoreVertical size={15} />
-                      </button>
-                    )}
-                  </a>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        );
-      })()}
+      {/* ── Ofertas — card-preview + modal fullscreen (Fase 6 del plan,
+          mismo patrón que Catálogo/Mapa). Todo el contenido de búsqueda/
+          filtro/orden/grilla vive en OfertasModal, montado fuera de este
+          scroll (portal a document.body). ── */}
+      {s.ofertas?.activa && (
+        <OfertasSection ofertasBase={ofertasBase} ofertasPendientes={ofertasPendientes} onAbrirModal={() => setOfertasModalOpen(true)} />
+      )}
       {ofertaCompartir && (
         <ShareSheet
           open={shareOfertaOpen}
@@ -1154,7 +747,24 @@ export function TemplateCommerceModern({
       {footer && <TiendaFooter dark={footer.dark} toggleDark={footer.toggleDark} tiendaId={tienda.id} ctaBannerRef={esDueño ? ctaBannerRef : undefined} />}
       </div>{/* fin scroll interno */}
 
-      {/* ── Detalle — vista tipo flyer (imagen + compartir, sin carrito) ── */}
+      {/* ── Catálogo — modal fullscreen (zIndex 4700), montado a nivel raíz
+          como el resto de sheets. onOpenDetalle/onOpenAdminMenu delegan al
+          mismo detalle/ofertaAdminTarget que ya usa el resto de la página
+          — un solo ProductDetailModal/OfertaAdminSheet, no uno por modal. ── */}
+      {catalogoModalOpen && (
+        <CatalogoModal
+          tienda={tienda} esDueño={esDueño} productos={productos}
+          onClose={() => setCatalogoModalOpen(false)}
+          carritoPropsDe={carritoPropsDe}
+          onOpenDetalle={setDetalle}
+          onOpenAdminMenu={esDueño ? setOfertaAdminTarget : null}
+          onVerTodosFiltrado={onVerTodosFiltrado}
+        />
+      )}
+
+      {/* ── Detalle — vista tipo flyer (imagen + compartir, sin carrito).
+          zIndex 4750 (ver ProductDetailModal.jsx) — queda por encima de
+          CatalogoModal cuando se abre desde adentro. ── */}
       {detalle && (
         <ProductDetailModal producto={detalle} onClose={() => setDetalle(null)} onCompartir={compartir}
           {...(detalle ? carritoPropsDe(detalle) : {})} />
@@ -1174,19 +784,25 @@ export function TemplateCommerceModern({
       {/* ── Horarios (abierto desde el badge del hero) ── */}
       <HorariosSheet open={horariosOpen} onClose={() => setHorariosOpen(false)} horarios={tienda.horarios} abierta={abierta} texto={texto} />
 
-      {/* ── Filtro / Ordenar del catálogo ── */}
-      <FiltrosSheet
-        open={filtersOpen} onClose={() => setFiltersOpen(false)}
-        precioMin={precioMin} setPrecioMin={setPrecioMin}
-        precioMax={precioMax} setPrecioMax={setPrecioMax}
-        filtroBadges={filtroBadges} setFiltroBadges={setFiltroBadges}
-        atributosDisponibles={atributosDisponibles}
-        filtrosAtributos={filtrosAtributos} setFiltrosAtributos={setFiltrosAtributos}
-        layout={layout} setLayout={setLayout}
-        activeFilterCount={activeFilterCount}
-        onLimpiar={() => { setPrecioMin(''); setPrecioMax(''); setFiltroBadges([]); setFiltrosAtributos({}); setFiltersOpen(false); }}
-      />
-      <OrdenarSheet open={sortOpen} onClose={() => setSortOpen(false)} sortBy={sortBy} setSortBy={setSortBy} options={SORT_OPTIONS} />
+      {/* ── Filtro / Ordenar de Catálogo y Ofertas: ahora dentro de
+          CatalogoModal/OfertasModal (Fase 6 del plan) — ya no se montan
+          acá a nivel raíz. ── */}
+
+      {/* ── Ofertas — modal fullscreen (zIndex 4700). onOpenAdminTarget/
+          onOpenShareOferta delegan al mismo ofertaAdminTarget/
+          shareOfertaOpen que ya usa el resto de la página. ── */}
+      {ofertasModalOpen && (
+        <OfertasModal
+          tienda={tienda} esDueño={esDueño}
+          ofertasBase={ofertasBase} ofertasPendientes={ofertasPendientes}
+          onClose={() => setOfertasModalOpen(false)}
+          onVerOferta={onVerOferta}
+          onOfertaReintentar={onOfertaReintentar}
+          onOfertaCancelarPendiente={onOfertaCancelarPendiente}
+          onOpenAdminTarget={setOfertaAdminTarget}
+          onOpenShareOferta={(o) => { setOfertaCompartir(o); setShareOfertaOpen(true); }}
+        />
+      )}
 
       {/* ── Compartir — sheet con opciones (hero + TiendaNavBar) ── */}
       <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} url={shareUrl} titulo={tienda.nombre}
@@ -1820,126 +1436,3 @@ function HeroEditorial({ tienda, fotos, multiFoto, photoIdx, setPhotoIdx, wa, ig
   );
 }
 
-/* ── Chip de categoría con ícono (estilo LOKAL: rounded parcial) ── */
-function Chip({ label, Icon, active, onClick, primary, onPrimary, surf2, border, txt }) {
-  return (
-    <button className="cm-chip" onClick={onClick} style={{
-      flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 7,
-      padding: '9px 14px', borderRadius: RADIUS.md, cursor: 'pointer',
-      border: `1.5px solid ${active ? primary : border}`,
-      background: active ? primary : surf2, color: active ? onPrimary : txt,
-      fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', transition: TRANSITION.fast, ...F,
-    }}>
-      {Icon && <Icon size={15} style={{ opacity: active ? 1 : 0.75 }} />}
-      {label}
-    </button>
-  );
-}
-
-/* ── Precio / TituloDescripcion / descuentoPct / QtyControl / ProductCardList: ver ../components/ProductCards.jsx ── */
-
-
-/* ── Carrusel horizontal con flechas + fade en los bordes — mismo patrón
-   visual que LOKAL usa en TiendaDetailScreen (useScrollEdges + NavArrowBtn),
-   reimplementado acá con los tokens de tienda-publica para no acoplar este
-   template al resto de la app. ── */
-function Carrusel({ children, gap = 12, className = 'cm-chips', padding = '0', arrowOffset = 2 }) {
-  const ref = useRef(null);
-  const [edges, setEdges] = useState({ left: false, right: false });
-
-  const update = useCallback(() => {
-    const el = ref.current;
-    if (!el) return;
-    setEdges({ left: el.scrollLeft > 4, right: el.scrollLeft < el.scrollWidth - el.clientWidth - 4 });
-  }, []);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return undefined;
-    update();
-    el.addEventListener('scroll', update, { passive: true });
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => { el.removeEventListener('scroll', update); ro.disconnect(); };
-  }, [update]);
-
-  const scrollBy = dir => ref.current?.scrollBy({ left: dir * 180, behavior: 'smooth' });
-
-  return (
-    <div style={{ position: 'relative' }}>
-      <div ref={ref} style={{ display: 'flex', gap, overflowX: 'auto', padding, scrollbarWidth: 'none' }} className={className}>
-        {children}
-      </div>
-      {/* Fade con stops explícitos (no solo color→transparent) para evitar el
-          artefacto de 1px que deja el navegador al interpolar transparencia
-          en un color con canal alpha implícito — mismo tono en ambos
-          extremos del gradiente, solo cambia la opacidad. */}
-      {edges.left && (
-        <>
-          <div style={{ pointerEvents: 'none', position: 'absolute', left: 0, top: 0, bottom: 0, width: 28, background: 'linear-gradient(to right, var(--tp-bg) 0%, var(--tp-bg) 15%, transparent 100%)' }} />
-          {/* top:50% + translateY(-50%) en vez de un % fijo (era 38%,
-              ajustado a ojo para las cards altas del catálogo) — así queda
-              centrado de verdad sin importar la altura del contenido
-              (chips bajitos, cards altas, lo que sea). */}
-          <button onClick={() => scrollBy(-1)} aria-label="Anterior" className="no-press cm-carousel-arrow"
-            style={{ position: 'absolute', left: -arrowOffset, top: '50%', transform: 'translateY(-50%)', width: 30, height: 30, borderRadius: 10, border: '1px solid var(--tp-border)', background: 'var(--tp-surface)', color: 'var(--tp-text)', display: 'grid', placeItems: 'center', cursor: 'pointer', boxShadow: SHADOW.sm, zIndex: 2 }}>
-            <ChevronLeft size={16} />
-          </button>
-        </>
-      )}
-      {edges.right && (
-        <>
-          <div style={{ pointerEvents: 'none', position: 'absolute', right: 0, top: 0, bottom: 0, width: 28, background: 'linear-gradient(to left, var(--tp-bg) 0%, var(--tp-bg) 15%, transparent 100%)' }} />
-          <button onClick={() => scrollBy(1)} aria-label="Siguiente" className="no-press cm-carousel-arrow"
-            style={{ position: 'absolute', right: -arrowOffset, top: '50%', transform: 'translateY(-50%)', width: 30, height: 30, borderRadius: 10, border: '1px solid var(--tp-border)', background: 'var(--tp-surface)', color: 'var(--tp-text)', display: 'grid', placeItems: 'center', cursor: 'pointer', boxShadow: SHADOW.sm, zIndex: 2 }}>
-            <ChevronRight size={16} />
-          </button>
-        </>
-      )}
-    </div>
-  );
-}
-
-/* ── Card VERTICAL: ver ProductCardVertical en ../components/ProductCards.jsx ── */
-
-/* ── Card GRILLA: foto arriba, info abajo (catálogo visual). Con carrito
-   activo, el selector de cantidad (QtyControl) se auto-oculta si no viene
-   onAdd — ver su propio comentario en ProductCards.jsx. ── */
-function ProductCardGrid({ p, onOpen, surf, surf2, border, txt, txtM, primary, onPrimary, onOpenAdminMenu, qty, onAdd, onRemove }) {
-  const img = fotoDe(p);
-  const pct = descuentoPct(p);
-  // "oferta" ya lo cubre el -X% de arriba (mismo dato, precioOriginal >
-  // precio) — mostrar los dos sería redundante. Acá solo se suman
-  // "nuevo"/"por_vencer", que no tienen ningún equivalente visual todavía.
-  const otrosBadges = calcularBadges(p).filter((id) => id !== 'oferta');
-  const badgeId = otrosBadges[0]; // uno solo, mismo criterio que el admin (no saturar la card chica)
-  const badge = badgeId ? BADGE_CONFIG[badgeId] : null;
-  return (
-    <div onClick={onOpen} role="button" tabIndex={0} className="no-press cm-card"
-      style={{ background: surf, border: `1px solid ${border}`, borderRadius: RADIUS.lg, overflow: 'hidden', cursor: 'pointer', boxShadow: SHADOW.sm, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ position: 'relative', aspectRatio: '1 / 1', background: surf2 }}>
-        {img ? <img src={img} alt={nombreDe(p)} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center' }}><ShoppingBag size={26} style={{ color: txtM, opacity: 0.5 }} /></div>}
-        {pct && <span style={{ position: 'absolute', top: 8, left: 8, padding: '3px 8px', borderRadius: RADIUS.sm, background: 'var(--tp-secondary)', color: 'var(--tp-on-secondary)', fontSize: 11, fontWeight: 900 }}>-{pct}%</span>}
-        {!pct && badge && (
-          <span style={{ position: 'absolute', top: 8, left: 8, padding: '3px 8px', borderRadius: RADIUS.sm, display: 'inline-flex', alignItems: 'center', gap: 3, background: 'var(--tp-surface)', color: txt, fontSize: 10, fontWeight: 800, boxShadow: SHADOW.sm }}>
-            <badge.Icon size={11} />
-            {badge.label}
-          </span>
-        )}
-        <OfertaMenuButton onOpen={onOpenAdminMenu ? () => onOpenAdminMenu(p) : null} />
-      </div>
-      <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 5, flex: 1 }}>
-        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: txt, lineHeight: 1.2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{nombreDe(p)}</h3>
-        {p.rating && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, color: txtM }}>
-            <Star size={11} style={{ fill: '#fbbf24', color: '#fbbf24' }} />{p.rating}
-          </span>
-        )}
-        <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-          <Precio p={p} txt={txt} />
-          <QtyControl qty={qty} onAdd={onAdd} onRemove={onRemove} p={p} primary={primary} onPrimary={onPrimary} surf2={surf2} border={border} txt={txt} size="sm" />
-        </div>
-      </div>
-    </div>
-  );
-}
