@@ -100,22 +100,30 @@ if (IS_FIRST_LOAD) localStorage.setItem(SPLASH_TS_KEY, String(Date.now()));
 // animación sigue su curso sin cortes aunque la condición que lo muestra
 // cambie de rama (undefined→loading→loadingTienda).
 //
-// Módulo-level (no state de Root): incluso unificando ramas del árbol
-// (isAdminRoute || rebotarLandingLogueada) React puede llegar a remontar
-// AppLoader en algún punto de la cadena real de carga (auth, redirect,
-// fetch de tienda, chunk de Suspense). El PRIMER montaje en la vida de la
-// página sí debe correr la secuencia completa una vez — pero un remontaje
-// posterior, DESPUÉS de que ya se vio completa, no debe repetirla desde
-// cero (se vería como "una segunda animación cortándose", igual de raro
-// que la original). Una vez mostrada completa, cualquier AppLoader
-// siguiente en esta misma carga de módulo usa el loader liviano.
-let _splashCompletoYaMostrado = false;
+// La variante se decide UNA sola vez por carga de página (constante de
+// módulo), NO por render. Una versión anterior la recalculaba en cada
+// render contra un flag mutable ("¿ya se mostró el completo?"), y eso
+// producía justo el bug que quería evitar: el splash completo aparecía,
+// y a mitad de la espera el flag cambiaba, React veía otro tipo de
+// componente en la misma posición, desmontaba SplashScreenFull y montaba
+// InlineLoader — se veía como "un splash que se corta y arranca otro con
+// solo el logo". Un loader que cambia de forma mientras está en pantalla
+// nunca es correcto: la variante es una propiedad de ESTA carga, no del
+// momento. Si es la primera carga real (IS_FIRST_LOAD), toda espera de
+// esta carga muestra el splash de marca completo; si no, todas muestran
+// el liviano.
 function AppLoader() {
-  const mostrarCompleto = IS_FIRST_LOAD && !_splashCompletoYaMostrado;
-  return mostrarCompleto
+  return IS_FIRST_LOAD
     ? <SplashScreenFull key="app-loader" />
     : <InlineLoader key="app-loader" />;
 }
+
+// Duración real de la secuencia de SplashScreenFull (LokalLoader.jsx): el
+// último elemento en entrar es "creado por KTRL" con delay 1.2s + 0.5s de
+// animación = 1.7s. Se mantiene en pantalla ese tiempo mínimo aunque los
+// datos ya estén listos: cortar la animación de marca a mitad se ve peor
+// que esperar 300ms de más. Solo aplica a la primera carga real.
+const SPLASH_MIN_MS = 1700;
 
 export default function Root() {
   // Ref (no state) leída por el listener global de popstate más abajo, que
@@ -134,14 +142,7 @@ export default function Root() {
   const [splashMinCumplido, setSplashMinCumplido] = useState(!IS_FIRST_LOAD);
   useEffect(() => {
     if (!IS_FIRST_LOAD) return;
-    const t = setTimeout(() => {
-      // Marcado ANTES del setState: así, aunque este mismo cambio de
-      // estado dispare un remontaje de AppLoader en otra rama del árbol,
-      // ese remontaje ya lee _splashCompletoYaMostrado=true en el mismo
-      // ciclo y usa el loader liviano, no la secuencia completa de nuevo.
-      _splashCompletoYaMostrado = true;
-      setSplashMinCumplido(true);
-    }, 1700);
+    const t = setTimeout(() => setSplashMinCumplido(true), SPLASH_MIN_MS);
     return () => clearTimeout(t);
   }, []);
 
@@ -242,6 +243,10 @@ export default function Root() {
   const [firebaseUser, setFirebaseUser]       = useState(undefined); // undefined = sin resolver aún
   const [redirectChecked, setRedirectChecked] = useState(false);
   const [tiendaData, setTiendaData]           = useState(null);
+  // Chunks lazy del backoffice (StoreApp/RegistroTienda) ya descargados —
+  // el gate del splash los espera para no soltar el splash y caer en el
+  // fallback del Suspense (ver el precargado en el listener de auth).
+  const [chunksAdminListos, setChunksAdminListos] = useState(false);
   // Sesión activa y la ruta actual es específicamente "/" (no una ruta
   // reservada como /admin): alguien logueado que llega a la landing por URL
   // directa rebota a /admin en vez de ver botones de login ambiguos con una
@@ -277,9 +282,18 @@ export default function Root() {
       // para que el chunk esté listo cuando toque renderizar: así dividir el
       // bundle no agrega una espera visible, sólo la mueve a un momento en
       // que la pantalla ya estaba esperando datos.
+      //
+      // El resultado se marca en estado (no se descarta): el gate del splash
+      // lo espera. Sin esto, al liberarse el gate con el chunk todavía en
+      // vuelo, el <Suspense fallback={<AppLoader/>}> de más abajo montaba un
+      // loader NUEVO en otra posición del árbol — otro remontaje, otra
+      // animación cortada. Marcar el fallo igual que el éxito es a propósito:
+      // si el chunk no baja, que el Suspense muestre su fallback y el error
+      // salga por su camino normal, sin dejar el splash colgado para siempre.
       if (user) {
-        import('./StoreApp');
-        import('./RegistroTienda');
+        Promise.all([import('./StoreApp'), import('./RegistroTienda')])
+          .catch(() => {})
+          .finally(() => { if (mounted) setChunksAdminListos(true); });
       }
     });
     return () => { mounted = false; unsub(); };
@@ -353,24 +367,23 @@ export default function Root() {
     forceUrlRecheck();
   }, [rebotarLandingLogueada]);
 
-  // Gate único: en la primera carga real de la página (IS_FIRST_LOAD), no
-  // dejar pasar a NINGUNA ruta hasta que se cumplan los 1700ms del splash
-  // completo. Además, SOLO para rutas que dependen de auth (admin/panel, o
-  // la raíz que puede rebotar a admin con sesión activa) — nunca para
-  // oferta/tienda pública/legal, que no dependen de sesión y no deben
-  // esperar a Firebase de más — se suma esperar a que auth (y, yendo a
-  // admin, también la tienda del usuario) resuelva. Sin esto, al cumplirse
-  // el mínimo de tiempo con esos datos todavía en vuelo, el siguiente
-  // return caía en OTRA posición del árbol (esperandoAuthEnRaiz/loadingTienda
-  // más abajo, cada una un <AppLoader/> distinto) y remontaba el splash de
-  // nuevo. Con esta única condición combinada, todo el período de espera
-  // —tiempo Y datos, cuando aplica— vive en la MISMA línea, un solo nodo,
-  // cero remontajes. Después de esta carga de módulo (SPA ya abierta,
-  // splashMinCumplido true de entrada) no aplica ningún piso.
+  // Gate único de la primera carga: mientras esté activo, TODA la app
+  // muestra un solo <AppLoader/> desde esta misma línea — un único nodo que
+  // nunca se desmonta, así la animación de marca corre entera una vez y no
+  // se reinicia. Se sale del gate recién cuando no queda nada por resolver
+  // que fuera a mostrar OTRO loader después (auth, tienda del usuario,
+  // chunk lazy del backoffice); cada una de esas esperas vive más abajo en
+  // una rama distinta del árbol, y soltar el splash antes de tiempo hacía
+  // que React montara un loader nuevo ahí — el "segundo splash cortado".
+  //
+  // Las esperas de sesión aplican SOLO a rutas que dependen de auth (admin,
+  // admin/panel, o la raíz que puede rebotar a admin): una oferta
+  // compartida o una tienda pública no deben esperar a Firebase.
   const rutaDependeDeAuth = isAdminRoute || isAdminPanelRoute || enRaiz;
   const authSinResolver = rutaDependeDeAuth && (firebaseUser === undefined || !redirectChecked);
-  const vaAAdminYTiendaSinResolver = (isAdminRoute || rebotarLandingLogueada) && !!firebaseUser && loadingTienda;
-  const mostrandoSplash = IS_FIRST_LOAD && (!splashMinCumplido || authSinResolver || vaAAdminYTiendaSinResolver);
+  const vaAlBackoffice = (isAdminRoute || rebotarLandingLogueada) && !!firebaseUser;
+  const backofficeSinPreparar = vaAlBackoffice && (loadingTienda || !chunksAdminListos);
+  const mostrandoSplash = IS_FIRST_LOAD && (!splashMinCumplido || authSinResolver || backofficeSinPreparar);
 
   // El <meta theme-color> del <head> arranca en el oscuro del splash
   // (#040a14, ver index.html) para no saltar celeste→oscuro→celeste en la
