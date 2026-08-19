@@ -318,9 +318,20 @@ export function OfertasScreen({
             <h3 className="font-black text-xl mb-1">Sin ofertas aún</h3>
             <p className="text-sm text-ink-dim max-w-[220px]">Publicá tu primera oferta para que tus clientes la vean</p>
           </div>
-          <button onClick={openNew} className="h-10 px-6 flex items-center bg-brand hover:bg-brand-light text-white rounded-2xl font-bold transition-colors shadow-lg shadow-brand/25">
-            Crear primera oferta
-          </button>
+          <div className="flex flex-col items-center gap-2.5">
+            <button onClick={openNew} className="h-10 px-6 flex items-center bg-brand hover:bg-brand-light text-white rounded-2xl font-bold transition-colors shadow-lg shadow-brand/25">
+              Crear primera oferta
+            </button>
+            {/* Botón fantasma — Catálogo tiene un 2do botón acá (Importar)
+                que Ofertas no necesita; sin ocupar ese mismo espacio, el
+                grupo entero queda más abajo que en Catálogo al centrarse
+                en la misma área disponible. invisible + pointer-events:none
+                reserva el alto real (mismo padding/texto) sin duplicar el
+                cálculo a mano si el botón real cambia de tamaño. */}
+            <span aria-hidden="true" className="invisible pointer-events-none flex items-center gap-1.5 text-sm font-bold px-6 py-3 rounded-2xl">
+              Placeholder
+            </span>
+          </div>
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto no-scrollbar p-4 pb-[calc(var(--store-bottom-nav-h)_+_1rem)] lg:pb-4">
