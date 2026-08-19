@@ -2915,8 +2915,11 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       <div className="flex-1 min-w-0">
         {/* Banner suscripción — vencida o por vencer. Compacto: título corto
             + detalle mucho más chico al lado (no un párrafo largo en una
-            sola línea de texto, que forzaba más altura). */}
-        {!isActiva && (
+            sola línea de texto, que forzaba más altura). Oculto para
+            admins (isAdmin): el estado real de vencimiento sigue visible
+            en la pantalla "Suscripción" del menú, solo se saltea este
+            banner de arriba que interrumpe la navegación normal. */}
+        {!isActiva && !isAdmin && (
           <div className="bg-rose-500 text-white px-4 py-2 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
               <Lock className="w-3.5 h-3.5 shrink-0" />
@@ -2931,7 +2934,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             </button>
           </div>
         )}
-        {isActiva && dias !== null && dias <= 7 && (
+        {isActiva && dias !== null && dias <= 7 && !isAdmin && (
           <div className="bg-amber-500 text-white px-4 py-2 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
               <CalendarDays className="w-3.5 h-3.5 shrink-0" />
