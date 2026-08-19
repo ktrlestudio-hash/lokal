@@ -9,7 +9,6 @@ import {
   ShieldCheck, LogOut,
 } from 'lucide-react';
 import { isModuleActive, getEstadoApertura } from '../../tienda-publica/utils.js';
-import { StorePageHeader } from '../components/StorePageHeader.jsx';
 
 export function PerfilScreen({
   tiendaData, tiendaInfo, misProductosSinFiltrar,
@@ -82,20 +81,11 @@ export function PerfilScreen({
 
   return (
     <div className="flex flex-col sa-page-bg" style={{ height: 'calc(100dvh - var(--store-banner-h))' }}>
-      {/* Sin title: el nombre de la tienda ya se lee grande en el hero de
-          abajo — repetirlo acá era ruido. "Ver página" va en leftSlot
-          (izquierda, no derecha): es la acción principal de esta pantalla,
-          mismo botón sólido que antes vivía en la card "Diseño de mi
-          página" (bg-brand, más protagónico que un ícono chico). */}
-      <StorePageHeader
-        title=""
-        leftSlot={tiendaInfo.slug && (
-          <a href={`/${tiendaInfo.slug}`} target="_blank" rel="noreferrer"
-            className="inline-flex items-center gap-1.5 bg-brand hover:bg-brand-light text-white text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shadow-sm shadow-brand/20">
-            <Globe className="w-4 h-4" /><span>Ver página</span>
-          </a>
-        )}
-      />
+      {/* Sin StorePageHeader acá: el nombre de la tienda ya se lee grande
+          en el hero de abajo, y "Ver página" se movió a la fila de
+          acciones rápidas (junto a "Editar diseño"/"Editar URL") — el
+          header quedaba con un único botón suelto flotando en una barra
+          vacía, más ruido que ayuda. El hero arranca directo. */}
       <div className="flex-1 overflow-y-auto lg:pb-8 no-scrollbar">
 
       {/* ── Hero — clon LITERAL del hero REALMENTE en uso hoy en la vista
@@ -123,12 +113,11 @@ export function PerfilScreen({
           (heroBg), logrando la ilusión de desvanecimiento del banner
           contra el fondo real que lo rodea. */}
       <style>{`
-        .sa-hero-ed-row { position: relative; z-index: 2; display: flex; align-items: flex-end; gap: 14px; padding: 0 18px; margin-top: -40px; }
+        .sa-hero-ed-row { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 0 18px; margin-top: -40px; }
         .sa-hero-ed-logo { width: 84px; height: 84px; border-radius: 20px; flex-shrink: 0; overflow: hidden;
           border: 4px solid rgb(var(--surface-solid-2-rgb)); box-shadow: 0 4px 10px rgba(0,0,0,.15); display: grid; place-items: center; }
         .dark .sa-hero-ed-logo { border-color: rgba(255,255,255,.10); box-shadow: 0 4px 14px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.08); }
-        .sa-hero-ed-name { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em;
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sa-hero-ed-name { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
         /* Flechas del carrusel — clon literal de .cm-hero-arrow (hero público real) */
         .sa-hero-arrow { background: rgba(255,255,255,.9); color: #18181b; border: 1px solid rgba(0,0,0,.08);
           transition: transform .12s cubic-bezier(0.34,1.56,0.64,1), filter .15s ease; }
@@ -194,15 +183,20 @@ export function PerfilScreen({
           </button>
         </div>
 
-        {/* Fila logo (izquierda) + nombre (derecha) — SIN card flotante,
-            directo contra el fondo de página, igual que HeroEditorial real. */}
+        {/* Logo + nombre centrados (columna) — antes era una fila (logo
+            izquierda, texto a la derecha); el usuario lo pidió centrado
+            tipo perfil, dejando de usar el espacio a la derecha para
+            nada (no se sumaron redes sociales ahí: el hero público real
+            ya las tiene y no convencía repetir el patrón acá). SIN card
+            flotante, directo contra el fondo de página, igual que
+            HeroEditorial real. */}
         <div className="sa-hero-ed-row">
           {/* Wrapper SIN overflow — el badge tiene que sobresalir del
               cuadrado del logo, pero .sa-hero-ed-logo tiene overflow:
               hidden (necesario para recortar la foto/ícono adentro). Sin
               este wrapper aparte, el propio overflow:hidden del logo
               recortaba el badge que sobresalía por encima del borde. */}
-          <div className="relative shrink-0" style={{ width: 84, height: 84 }}>
+          <div className="relative" style={{ width: 84, height: 84 }}>
             <div className="sa-hero-ed-logo" style={{ width: '100%', height: '100%', background: tiendaInfo.foto ? 'rgb(var(--brand) / .15)' : 'rgb(var(--brand))' }}>
               {tiendaInfo.foto
                 ? <img src={tiendaInfo.foto} alt="" className="w-full h-full object-cover" />
@@ -218,8 +212,8 @@ export function PerfilScreen({
             </button>
           </div>
 
-          <div className="flex-1 min-w-0 pb-1">
-            <div className="flex items-center gap-2 flex-wrap">
+          <div className="min-w-0 flex flex-col items-center">
+            <div className="flex items-center justify-center gap-2 flex-wrap">
               {editingNombre ? (
                 <input
                   autoFocus
@@ -242,7 +236,7 @@ export function PerfilScreen({
                     if (e.key === 'Enter') e.target.blur();
                     if (e.key === 'Escape') { setEditingNombre(false); setNombreDraft(tiendaInfo.nombre || ''); }
                   }}
-                  className="sa-hero-ed-name bg-transparent border-b-2 border-brand outline-none max-w-[220px]"
+                  className="sa-hero-ed-name bg-transparent border-b-2 border-brand outline-none max-w-[220px] text-center"
                   maxLength={120}
                 />
               ) : (
@@ -261,10 +255,11 @@ export function PerfilScreen({
                 la fila separada bajo el hero. Con texto: se muestra
                 clickeable (mismo lugar donde se lee en la vista pública).
                 Sin texto: placeholder tipo "+ agregar", mismo lenguaje
-                punteado que el resto del checklist. */}
+                punteado que el resto del checklist. max-w para que no se
+                estire de punta a punta al centrar sobre pantallas anchas. */}
             {tiendaInfo.descripcion ? (
               <p onClick={openDescripcionEditor}
-                className="text-xs text-ink-dim mt-1 cursor-pointer hover:text-brand transition-colors line-clamp-2">
+                className="text-xs text-ink-dim mt-1 cursor-pointer hover:text-brand transition-colors line-clamp-2 max-w-[280px]">
                 {tiendaInfo.descripcion}
               </p>
             ) : (
@@ -287,12 +282,19 @@ export function PerfilScreen({
 
       {/* ── Acciones rápidas — reemplaza la vieja fila de Ver página /
           Portada / Descripción (esas se integraron donde corresponde
-          visualmente: "Ver página" en el header, "Portada" como hover
-          sobre la foto, "Descripción" bajo el título del hero). Este
-          hueco ahora tiene lo que SÍ quedaba suelto sin atajo rápido:
-          editar diseño y editar URL — antes solo vivían más abajo del
-          todo, en la card "Diseño de mi página". */}
-      <div className="max-w-3xl mx-auto px-5 lg:px-8 pt-5 grid grid-cols-2 gap-2">
+          visualmente: "Portada" como hover sobre la foto, "Descripción"
+          bajo el título del hero). Este hueco ahora tiene "Ver página"
+          (antes vivía sola en el header, que quedaba con un único botón
+          flotando en una barra vacía — más ruido que ayuda) junto con lo
+          que ya quedaba suelto sin atajo rápido: editar diseño y editar
+          URL, antes solo en la card "Diseño de mi página" más abajo. */}
+      <div className="max-w-3xl mx-auto px-5 lg:px-8 pt-5 grid grid-cols-3 gap-2">
+        {tiendaInfo.slug && (
+          <a href={`/${tiendaInfo.slug}`} target="_blank" rel="noreferrer"
+            className="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-brand hover:bg-brand-light text-white text-xs font-bold transition-colors shadow-sm shadow-brand/20">
+            <Globe className="w-3.5 h-3.5" /> Ver página
+          </a>
+        )}
         <button
           onClick={() => {
             setPaginaForm({ template: tiendaInfo.pagina?.template || 'commerce-modern', color: tiendaInfo.pagina?.color || '#e4002b', modoOscuro: tiendaInfo.pagina?.modoOscuro || false });

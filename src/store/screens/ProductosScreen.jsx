@@ -548,8 +548,12 @@ export function ProductosScreen({
             {/* Solo ícono, 40x40 — misma altura/ancho que el avatar de
                 cuenta y el resto de acciones del header (antes tenía texto
                 y quedaba más bajo que el avatar por el padding vertical
-                del texto en vez de una altura fija). */}
-            <button onClick={onAbrirImportador} className="w-10 h-10 flex items-center justify-center rounded-xl text-ink-dim hover:text-brand hover:bg-brand/10 transition-colors shrink-0" title="Importar lista de precios desde Excel, CSV o JSON">
+                del texto en vez de una altura fija). Oculto en mobile con
+                la lista vacía: el empty state ya tiene su propio botón
+                "o importar desde Excel/CSV" bien visible ahí abajo, este
+                de acá quedaba redundante compitiendo espacio en el header.
+                En desktop se deja siempre visible (no compite con nada). */}
+            <button onClick={onAbrirImportador} className={`${misProductos.length === 0 ? 'hidden lg:flex' : 'flex'} w-10 h-10 items-center justify-center rounded-xl text-ink-dim hover:text-brand hover:bg-brand/10 transition-colors shrink-0`} title="Importar lista de precios desde Excel, CSV o JSON">
               <UploadCloud className="w-4 h-4" />
             </button>
             {misProductos.length > 0 && (
