@@ -279,7 +279,29 @@ export default function Root() {
   // antes de cualquier return condicional (ofertaRoute/carritoRoute/
   // legalPage/etc. más abajo) — moverlo después de un return temprano
   // violaría las reglas de hooks (se saltearía condicionalmente).
-  const rebotarLandingLogueada = firebaseUser && window.location.pathname === '/';
+  const enRaiz = window.location.pathname === '/';
+  const rebotarLandingLogueada = firebaseUser && enRaiz;
+  // Mientras Firebase Auth todavía no resolvió si hay sesión (undefined,
+  // distinto de null = "resuelto, sin sesión"), NO hay que mostrar el
+  // landing en la raíz todavía — si termina habiendo sesión activa, el
+  // rebote de arriba entra recién en el efecto siguiente, así que sin este
+  // loader se veía el landing "flashear" un par de segundos antes de saltar
+  // al admin en cada carga con sesión guardada (aunque la tab ya hubiera
+  // estado en segundo plano con la app cargada, el listener de auth vuelve
+  // a arrancar en undefined en cada montaje de Root).
+  // Timeout de seguridad: onAuthStateChanged con sesión persistida resuelve
+  // casi instantáneo en el caso normal (lectura local, no espera red), pero
+  // si por lo que sea tarda de más, no hay que dejar a un visitante SIN
+  // sesión mirando un loader vacío más de un instante — mejor mostrarle el
+  // landing igual y, en el caso raro de que después resulte haber sesión,
+  // rebotarLandingLogueada ya se encarga de saltar a /admin apenas resuelva.
+  const [authTimedOut, setAuthTimedOut] = useState(false);
+  useEffect(() => {
+    if (firebaseUser !== undefined) return;
+    const t = setTimeout(() => setAuthTimedOut(true), 3000);
+    return () => clearTimeout(t);
+  }, [firebaseUser]);
+  const esperandoAuthEnRaiz = firebaseUser === undefined && enRaiz && !authTimedOut;
   useEffect(() => {
     if (!rebotarLandingLogueada) return;
     window.history.replaceState({}, '', '/admin');
@@ -478,6 +500,12 @@ export default function Root() {
   //    es lo que espera alguien que llega a la raíz del producto.
   //    Las tiendas siguen sirviéndose por su slug propio (/:tienda). ──────
   if (rebotarLandingLogueada) return <AppLoader />;
+  // Sesión todavía sin resolver en la raíz: esperar acá (mismo loader que
+  // ya usa el resto de la app, primer pintado real de React) en vez de
+  // mostrar el landing y recién después rebotar si resulta haber sesión
+  // — sin esto, cualquier carga con sesión guardada mostraba el landing
+  // "flasheando" un instante antes de saltar al admin.
+  if (esperandoAuthEnRaiz) return <AppLoader />;
 
   if (!pathToTiendaSlug(window.location.pathname)) {
     return (

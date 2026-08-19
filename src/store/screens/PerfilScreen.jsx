@@ -288,11 +288,15 @@ export function PerfilScreen({
           flotando en una barra vacía — más ruido que ayuda) junto con lo
           que ya quedaba suelto sin atajo rápido: editar diseño y editar
           URL, antes solo en la card "Diseño de mi página" más abajo. */}
+      {/* Ícono grande arriba + texto abajo (en vez de la fila ícono+texto
+          en línea de antes) — mismo lenguaje que los chips de categoría de
+          LOKAL Global/Comidas, les da más presencia de acción real en vez
+          de leerse como links de texto chicos. */}
       <div className="max-w-3xl mx-auto px-5 lg:px-8 pt-5 grid grid-cols-3 gap-2">
         {tiendaInfo.slug && (
           <a href={`/${tiendaInfo.slug}`} target="_blank" rel="noreferrer"
-            className="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-brand hover:bg-brand-light text-white text-xs font-bold transition-colors shadow-sm shadow-brand/20">
-            <Globe className="w-3.5 h-3.5" /> Ver página
+            className="flex flex-col items-center justify-center gap-1 py-3 rounded-2xl bg-brand hover:bg-brand-light text-white text-xs font-bold transition-colors shadow-sm shadow-brand/20">
+            <Globe className="w-5 h-5" /> Ver página
           </a>
         )}
         <button
@@ -302,8 +306,8 @@ export function PerfilScreen({
             setPublicPageError(null);
             setScreen('mi-pagina');
           }}
-          className="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-surface-card dark:bg-white/8 text-xs font-bold hover:bg-brand/10 hover:text-brand transition-colors">
-          <Palette className="w-3.5 h-3.5" /> Editar diseño
+          className="flex flex-col items-center justify-center gap-1 py-3 rounded-2xl bg-surface-card dark:bg-white/8 text-xs font-bold hover:bg-brand/10 hover:text-brand transition-colors">
+          <Palette className="w-5 h-5" /> Editar diseño
         </button>
         <button
           onClick={() => {
@@ -311,8 +315,8 @@ export function PerfilScreen({
             setPublicPageError(null);
             setEditingPublicPage(true);
           }}
-          className="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-surface-card dark:bg-white/8 text-xs font-bold hover:bg-brand/10 hover:text-brand transition-colors">
-          <Link2 className="w-3.5 h-3.5" /> Editar URL
+          className="flex flex-col items-center justify-center gap-1 py-3 rounded-2xl bg-surface-card dark:bg-white/8 text-xs font-bold hover:bg-brand/10 hover:text-brand transition-colors">
+          <Link2 className="w-5 h-5" /> Editar URL
         </button>
       </div>
 
