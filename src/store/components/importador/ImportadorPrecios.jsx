@@ -106,10 +106,12 @@ export function ImportadorPrecios({
         </div>
       )}
 
-      {/* Header — solo título + volver (paso previo) + spinner. Minimizar/
-          Cancelar viven abajo como botones de texto completo, ver footer:
-          son acciones GLOBALES del wizard (no de un paso puntual), y como
-          texto se entienden sin depender de leer un ícono chico. */}
+      {/* Header — título + volver (paso previo) + spinner/cerrar.
+          Minimizar/Cancelar (footer, texto completo) solo aparecen cuando
+          hay trabajo real en curso — ver comentario en el footer. Antes de
+          eso (paso "subir" sin elegir archivo, nada que perder todavía),
+          alcanza con una X simple acá: cerrar directo, sin confirmación,
+          como cualquier modal común. */}
       <div className="shrink-0 flex items-center gap-2 px-3 h-14 border-b border-slate-100 dark:border-white/8">
         {puedeVolver ? (
           <button onClick={volver} className="ui-icon-btn bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8 transition-colors shrink-0">
@@ -117,7 +119,13 @@ export function ImportadorPrecios({
           </button>
         ) : <div className="w-9" />}
         <p className="font-black flex-1 truncate text-sm text-center">{TITULOS_PASO[paso]}</p>
-        {cargando ? <Loader2 className="w-4 h-4 animate-spin text-brand shrink-0" /> : <div className="w-9" />}
+        {cargando ? (
+          <Loader2 className="w-4 h-4 animate-spin text-brand shrink-0" />
+        ) : !hayTrabajoEnCurso ? (
+          <button onClick={pedirCancelar} className="ui-icon-btn bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:bg-danger/10 hover:text-danger transition-colors shrink-0">
+            <X className="w-4 h-4" />
+          </button>
+        ) : <div className="w-9" />}
       </div>
 
       {/* Progreso — 3 segmentos discretos (uno por paso real), no una barra
@@ -168,18 +176,26 @@ export function ImportadorPrecios({
       )}
 
       {/* Footer de acción — la acción principal del paso (si hay una) arriba,
-          Minimizar/Cancelar siempre debajo como botones de texto completo.
-          Nunca en "resultado": ahí ya no hay nada en curso que minimizar o
-          cancelar, solo Listo/Importar otro (ver PasoResultado).
+          Minimizar/Cancelar debajo como botones de texto completo, pero
+          SOLO cuando hay algo real que minimizar/cancelar: en "subir" sin
+          elegir archivo todavía no hay ningún trabajo en curso (nada que
+          "seguir en segundo plano"), así que ahí no se muestran — cerrar
+          con la X de siempre ya es equivalente a cancelar, sin necesitar
+          confirmación porque no hay nada que perder. Aparecen recién con
+          hayTrabajoEnCurso (calibrar/revisar, o un fetch en vuelo incluido
+          "subir" mientras cargando) y nunca en "resultado" (ya terminó,
+          solo Listo/Importar otro, ver PasoResultado).
           Padding-bottom: SOLO safe-area (notch/gestos del sistema), sin
           --store-bottom-nav-h — el wizard es un overlay fixed inset-0 que
           TAPA la bottom-nav por completo (mismo patrón que el formulario
           de producto/detalle), no convive con ella como las screens
           normales. Sumar la altura de una barra que no se ve dejaba un
           hueco de aire vacío innecesario debajo del botón. */}
-      {paso !== 'resultado' && (
+      {paso !== 'resultado' && (paso !== 'subir' || hayTrabajoEnCurso) && (
         <div className="shrink-0 px-5 pt-4 border-t border-slate-100 dark:border-white/8" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}>
-          {error && <p className="text-xs text-danger font-medium mb-2 text-center">{error}</p>}
+          {/* El error de "subir" ya se muestra dentro de PasoSubir.jsx —
+              acá solo para calibrar/revisar/aplicar. */}
+          {error && paso !== 'subir' && <p className="text-xs text-danger font-medium mb-2 text-center">{error}</p>}
 
           {paso === 'calibrar' && (
             <button
@@ -199,27 +215,28 @@ export function ImportadorPrecios({
             </button>
           )}
 
-          <div className="flex gap-2 w-full sm:max-w-sm sm:mx-auto">
-            {/* Minimizar: siempre disponible, incluso mientras carga — el
-                trabajo sigue corriendo en segundo plano, no hay nada que
-                "interrumpir" al ocultar la UI. */}
-            <button
-              onClick={pedirMinimizar}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:bg-brand/10 hover:text-brand text-xs font-bold transition-colors"
-            >
-              <Minus className="w-3.5 h-3.5" /> Minimizar
-            </button>
-            {/* Cancelar de verdad: descarta el progreso. Pide confirmación si
-                hay algo que perder. No se deshabilita durante cargando —
-                minimizar ya cubre ese caso; cancelar significa "no quiero
-                seguir ni en segundo plano". */}
-            <button
-              onClick={pedirCancelar}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:bg-danger/10 hover:text-danger text-xs font-bold transition-colors"
-            >
-              <X className="w-3.5 h-3.5" /> Cancelar
-            </button>
-          </div>
+          {hayTrabajoEnCurso && (
+            <div className="flex gap-2 w-full sm:max-w-sm sm:mx-auto">
+              {/* Minimizar: siempre disponible mientras hay trabajo en
+                  curso, incluso cargando — el trabajo sigue corriendo en
+                  segundo plano, no hay nada que "interrumpir" al ocultar
+                  la UI. */}
+              <button
+                onClick={pedirMinimizar}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:bg-brand/10 hover:text-brand text-xs font-bold transition-colors"
+              >
+                <Minus className="w-3.5 h-3.5" /> Minimizar
+              </button>
+              {/* Cancelar de verdad: descarta el progreso, pide
+                  confirmación (hay algo real que perder acá). */}
+              <button
+                onClick={pedirCancelar}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-surface-card-2 dark:bg-white/8 text-ink-dim hover:bg-danger/10 hover:text-danger text-xs font-bold transition-colors"
+              >
+                <X className="w-3.5 h-3.5" /> Cancelar
+              </button>
+            </div>
+          )}
         </div>
       )}
 
