@@ -27,16 +27,29 @@ export function useProductosOfertas(tiendaId) {
   // all=1: el dueño ve también vencidas/ocultas en su panel (para poder
   // reactivarlas); el listado público (GET ?slug=...) sigue filtrando solo
   // vigentes del lado del backend.
+  //
+  // Catálogo (con precio/stock/categoryId) y Ofertas (flyers simples, sin
+  // precio) viven en dos endpoints/archivos R2 separados desde esta sesión
+  // (productos.js → data/productos.json, ofertas.js → data/ofertas.json —
+  // antes todo se mezclaba en ofertas.json). Este hook sigue exponiendo un
+  // único array `items` combinado: ProductosScreen/OfertasScreen ya lo
+  // filtran client-side por `typeof precio === 'number'`, así que el shape
+  // de salida no cambia — solo la fuente pasa de 1 fetch a 2 en paralelo.
   const fetchAll = useCallback(async () => {
     if (!tiendaId) return;
     setLoading(true);
     try {
-      const res = await apiFetch(`${API_BASE}/ofertas?tiendaId=${tiendaId}&all=1`, { authRequired: true });
-      if (res.ok) {
-        const data = await res.json();
-        cacheSet(cacheKey, data, CACHE_TTL_MS);
-        setItems(data);
-      }
+      const [resProductos, resOfertas] = await Promise.all([
+        apiFetch(`${API_BASE}/productos?tiendaId=${tiendaId}&all=1`, { authRequired: true }),
+        apiFetch(`${API_BASE}/ofertas?tiendaId=${tiendaId}&all=1`, { authRequired: true }),
+      ]);
+      const [productos, ofertas] = await Promise.all([
+        resProductos.ok ? resProductos.json() : [],
+        resOfertas.ok ? resOfertas.json() : [],
+      ]);
+      const data = [...productos, ...ofertas];
+      cacheSet(cacheKey, data, CACHE_TTL_MS);
+      setItems(data);
     } catch { /* silencioso */ } finally {
       setLoading(false);
     }

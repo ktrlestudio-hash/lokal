@@ -33,6 +33,11 @@ export default function TiendaPublica({ slug, isDark, toggleTheme, firebaseUser,
   const cachedTiendaInicial = cacheGet(`tp-tienda-${slug}`);
   const [tienda, setTienda] = useState(cachedTiendaInicial || null);
   const [ofertas, setOfertas] = useState(() => cacheGet(`tp-ofertas-${slug}`) || []);
+  // productos: catálogo real (precio/stock/categoryId), backend separado de
+  // ofertas desde esta sesión (data/productos.json vs data/ofertas.json) —
+  // antes tienda.productos siempre llegaba vacío porque nunca hubo fetch
+  // propio acá, mismo patrón que ofertas pero a /productos.
+  const [productos, setProductos] = useState(() => cacheGet(`tp-productos-${slug}`) || []);
   // Splash full-screen SOLO en carga fría real (F5/link externo, isFirstLoad)
   // Y sin cache. En navegación interna SPA (isFirstLoad=false) nunca se
   // muestra el loader de logo: la pantalla anterior ya estaba montada y el
@@ -48,6 +53,7 @@ export default function TiendaPublica({ slug, isDark, toggleTheme, firebaseUser,
     const cacheKey = `tp-tienda-${slug}`;
     const cachedTienda = cacheGet(cacheKey);
     const cachedOfertas = cacheGet(`tp-ofertas-${slug}`);
+    const cachedProductos = cacheGet(`tp-productos-${slug}`);
     const startMs = Date.now();
     // Mínimo para ver la animación del logo — solo aplica en carga fría (el
     // único caso donde el loader se muestra). En navegación interna no hay
@@ -55,9 +61,10 @@ export default function TiendaPublica({ slug, isDark, toggleTheme, firebaseUser,
     // llegan, sin retención.
     const MIN_LOADER_MS = isFirstLoad ? 700 : 0;
 
-    const reveal = (t, os) => {
+    const reveal = (t, os, ps) => {
       // Carga datos inmediatamente — espera solo si el fetch fue muy rápido
       if (os) setOfertas(os);
+      if (ps) setProductos(ps);
       setTienda(t); // pre-cargar todo mientras loader aún está visible
       // Sin loader activo (navegación interna): setear datos directo, sin la
       // secuencia de fade-out — no hay nada que desvanecer.
@@ -72,7 +79,7 @@ export default function TiendaPublica({ slug, isDark, toggleTheme, firebaseUser,
     // Con cache ya sembramos tienda/ofertas en el useState inicial (sin
     // loader) — acá solo refrescamos en segundo plano más abajo, sin reveal.
     if (cachedTienda && !tienda) {
-      reveal(cachedTienda, cachedOfertas);
+      reveal(cachedTienda, cachedOfertas, cachedProductos);
     }
 
     // Esperar a que Firebase resuelva la sesión (undefined = sin resolver
@@ -93,14 +100,17 @@ export default function TiendaPublica({ slug, isDark, toggleTheme, firebaseUser,
         // como anónimo, sin importar que estuviera logueado en el navegador),
         // así que esDueño daba false siempre y el FAB/atajo al panel nunca
         // aparecían. ofertas sigue con fetch público normal, no lo necesita.
-        const [tRes, oRes] = await Promise.all([
+        const [tRes, oRes, pRes] = await Promise.all([
           apiFetch(`${API_BASE}/tiendas-crud?slug=${encodeURIComponent(slug)}`),
           fetch(`${API_BASE}/ofertas?slug=${encodeURIComponent(slug)}`),
+          fetch(`${API_BASE}/productos?slug=${encodeURIComponent(slug)}`),
         ]);
         if (!tRes.ok) throw new Error('Tienda no encontrada');
         const t = await tRes.json();
         const os = oRes.ok ? await oRes.json() : [];
+        const ps = pRes.ok ? await pRes.json() : [];
         const filtradas = Array.isArray(os) ? os.filter(o => o.activa !== false) : [];
+        const productosFiltrados = Array.isArray(ps) ? ps.filter(p => p.activa !== false) : [];
         if (cancelled) return; // el efecto se re-disparó (cambió slug/sesión)
         // No cachear la versión de dueño (trae googleUid): el cache lo lee
         // cualquiera; solo persistimos la forma pública. La copia de dueño
@@ -109,9 +119,10 @@ export default function TiendaPublica({ slug, isDark, toggleTheme, firebaseUser,
         if (!esVersionDueño) {
           cacheSet(cacheKey, t);
           cacheSet(`tp-ofertas-${slug}`, filtradas);
+          cacheSet(`tp-productos-${slug}`, productosFiltrados);
         }
-        if (!cachedTienda) reveal(t, filtradas);
-        else { setTienda(t); setOfertas(filtradas); }
+        if (!cachedTienda) reveal(t, filtradas, productosFiltrados);
+        else { setTienda(t); setOfertas(filtradas); setProductos(productosFiltrados); }
       } catch (err) {
         if (!cancelled && !cachedTienda) { setError(err.message); setLoading(false); }
       }
@@ -133,6 +144,13 @@ export default function TiendaPublica({ slug, isDark, toggleTheme, firebaseUser,
         if (!res.ok || cancelled) return;
         const os = await res.json();
         if (!cancelled && Array.isArray(os)) setOfertas(os);
+      })
+      .catch(() => {});
+    apiFetch(`${API_BASE}/productos?tiendaId=${encodeURIComponent(tienda.id)}&all=1`, { authRequired: true })
+      .then(async (res) => {
+        if (!res.ok || cancelled) return;
+        const ps = await res.json();
+        if (!cancelled && Array.isArray(ps)) setProductos(ps);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -243,7 +261,10 @@ export default function TiendaPublica({ slug, isDark, toggleTheme, firebaseUser,
   // Las ofertas del módulo "ofertas" (imagen + link compartible) ya NO se
   // mezclan dentro de tienda.productos — son otra cosa (sin precio/stock),
   // el módulo se renderiza en su propia sección dentro de commerce-modern.jsx.
-  const tiendaConOfertas = tienda ? { ...tienda, ofertas } : null;
+  // productos: catálogo real, backend separado (data/productos.json) —
+  // antes tienda.productos siempre llegaba vacío/undefined, nunca había
+  // fetch propio acá.
+  const tiendaConOfertas = tienda ? { ...tienda, ofertas, productos } : null;
 
   // ¿El visitante logueado es el dueño de ESTA tienda? Compara el uid de la
   // sesión Firebase con el googleUid guardado en la tienda — así el atajo al

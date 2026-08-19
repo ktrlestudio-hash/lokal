@@ -20,7 +20,7 @@ import { requireAuth } from './_lib/auth.js';
 import { handleError, handleOptions, HttpError, jsonResponse, parseJsonBody } from './_lib/http.js';
 import { sanitizeText } from './_lib/validation.js';
 import { ensureStoreOwner, findTiendaById, readTiendas } from './_lib/tiendas-store.js';
-import { readOfertas } from './_lib/ofertas-read.js';
+import { readProductos } from './_lib/productos-read.js';
 import { safeRead, safeWrite } from './_lib/r2-safe-write.js';
 import { extraerTabla, ExtractorError } from './_lib/importador/extractores.js';
 import { calcularHuella } from './_lib/importador/huella.js';
@@ -30,7 +30,10 @@ import { matchearFilas } from './_lib/importador/matcher.js';
 import { construirDiff } from './_lib/importador/diff.js';
 import { aplicarDiff } from './_lib/importador/aplicar-diff.js';
 
-const OFERTAS_KEY = 'data/ofertas.json';
+// Escribe en el catálogo (data/productos.json), separado de ofertas.json
+// desde esta sesión — antes todo lo importado (aunque fuera un catálogo
+// completo de precios) terminaba mezclado con ofertas puntuales.
+const PRODUCTOS_KEY = 'data/productos.json';
 
 const HTTP_OPTIONS = {
   allowHeaders: 'Content-Type, Authorization',
@@ -171,7 +174,7 @@ async function accionSincronizar({ event, env, body }) {
 
   try {
     const filasMapeadas = mapearFilas(tabla, body.mapeo);
-    const productos = (await readOfertas(env.LOKAL_BUCKET)).filter((o) => String(o.tiendaId) === String(tiendaId));
+    const productos = (await readProductos(env.LOKAL_BUCKET)).filter((o) => String(o.tiendaId) === String(tiendaId));
 
     const resultados = await matchearFilas(db, { tiendaId, huella, filasMapeadas, productos });
     const diff = construirDiff({ resultados, productos });
@@ -231,13 +234,13 @@ async function accionAplicar({ event, env, body }) {
   const bajas = Array.isArray(body.bajas) ? body.bajas.map((id) => sanitizeText(id, { max: 80, multiline: false })) : [];
   const ambiguosConfirmados = Array.isArray(body.ambiguosConfirmados) ? body.ambiguosConfirmados : [];
 
-  const { data: ofertasActuales, etag } = await safeRead(bucket, OFERTAS_KEY, []);
-  const { ofertas, actualizados, bajasAplicadas, errores } = aplicarDiff({
-    ofertas: ofertasActuales, tienda, tiendaId, altas, actualizaciones, bajas,
+  const { data: productosActuales, etag } = await safeRead(bucket, PRODUCTOS_KEY, []);
+  const { ofertas: productos, actualizados, bajasAplicadas, errores } = aplicarDiff({
+    ofertas: productosActuales, tienda, tiendaId, altas, actualizaciones, bajas,
   });
   const altasAplicadas = altas.length - errores.filter((e) => e.tipo === 'alta').length;
 
-  await safeWrite(bucket, OFERTAS_KEY, ofertas, etag);
+  await safeWrite(bucket, PRODUCTOS_KEY, productos, etag);
 
   if (corrida) {
     for (const amb of ambiguosConfirmados) {

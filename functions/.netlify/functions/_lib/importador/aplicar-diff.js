@@ -20,7 +20,7 @@ export function aplicarDiff({ ofertas, tienda, tiendaId, altas, actualizaciones,
   for (const alta of altas) {
     try {
       const nueva = {
-        id: `oferta_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        id: `prod_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         ...sanitizeOfertaInput(alta, tienda),
         views: 0,
         uniques: 0,

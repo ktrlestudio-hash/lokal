@@ -2531,12 +2531,12 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         };
         let savedProduct;
         if (productoEditing) {
-          const res = await apiFetch(`${API_BASE}/ofertas`, { method: 'PATCH', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: productoEditing.id, ...payload }) });
+          const res = await apiFetch(`${API_BASE}/productos`, { method: 'PATCH', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: productoEditing.id, ...payload }) });
           if (!res.ok) throw new Error('Error al actualizar');
           savedProduct = await res.json();
           setMisProductos(prev => prev.map(o => o.id === savedProduct.id ? savedProduct : o));
         } else {
-          const res = await apiFetch(`${API_BASE}/ofertas`, { method: 'POST', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+          const res = await apiFetch(`${API_BASE}/productos`, { method: 'POST', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
           if (!res.ok) throw new Error('Error al crear');
           savedProduct = await res.json();
           setMisProductos(prev => [savedProduct, ...prev]);
@@ -3232,7 +3232,7 @@ function QuickPriceEditor({ productos, onClose, onSaved }) {
     if (nuevo === (actual.precio ?? null)) { avanzar(); return; }
     setSaving(true);
     try {
-      const res = await apiFetch(`${API_BASE}/ofertas`, {
+      const res = await apiFetch(`${API_BASE}/productos`, {
         method: 'PATCH', authRequired: true,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: actual.id, precio: nuevo }),

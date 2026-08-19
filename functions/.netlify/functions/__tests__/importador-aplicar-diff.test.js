@@ -14,7 +14,7 @@ describe('aplicarDiff', () => {
     expect(ofertas[0].nombre).toBe('Producto Nuevo');
     expect(ofertas[0].precio).toBe(1000);
     expect(ofertas[0].tiendaId).toBe('t1');
-    expect(ofertas[0].id).toMatch(/^oferta_/);
+    expect(ofertas[0].id).toMatch(/^prod_/);
   });
 
   it('actualiza solo los campos indicados en cambios, sin perder los demás', () => {

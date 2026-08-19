@@ -9,7 +9,7 @@ import { sanitizeText, sanitizeNumber, sanitizePhone } from './_lib/validation.j
 import { ensureStoreOwner, findTiendaById, findTiendaBySlug, readTiendas } from './_lib/tiendas-store.js';
 import { safeRead, safeWrite } from './_lib/r2-safe-write.js';
 import { isModuleActive } from './_lib/modules.js';
-import { readOfertasParaCarrito } from './_lib/ofertas-read.js';
+import { readProductosParaCarrito } from './_lib/productos-read.js';
 
 const DATA_KEY = 'data/carritos.json';
 
@@ -137,8 +137,8 @@ export async function onRequestPost({ request, env }) {
       throw new HttpError(403, 'El módulo de Catálogo no está activo para esta tienda');
     }
 
-    const ofertasDeLaTienda = await readOfertasParaCarrito(bucket, tiendaId);
-    const items = sanitizeItems(body.items, ofertasDeLaTienda);
+    const productosDeLaTienda = await readProductosParaCarrito(bucket, tiendaId);
+    const items = sanitizeItems(body.items, productosDeLaTienda);
 
     const cliente = {
       nombre: sanitizeText(body.cliente?.nombre, { max: 120, multiline: false }) || null,

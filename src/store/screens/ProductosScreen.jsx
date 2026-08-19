@@ -103,7 +103,7 @@ export function ProductosScreen({
     // Optimistic — actualiza UI antes del server
     setMisProductos(prev => prev.map(o => o.id === producto.id ? updated : o));
     try {
-      const res = await apiFetch(`${API_BASE}/ofertas`, { method: 'PATCH', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: producto.id, activa: updated.activa }) });
+      const res = await apiFetch(`${API_BASE}/productos`, { method: 'PATCH', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: producto.id, activa: updated.activa }) });
       if (!res.ok) throw new Error();
       haptic('success');
     } catch {
@@ -119,7 +119,7 @@ export function ProductosScreen({
     const original = misProductos.find(o => o.id === id);
     setMisProductos(prev => prev.filter(o => o.id !== id));
     try {
-      const res = await apiFetch(`${API_BASE}/ofertas?id=${id}`, { method: 'DELETE', authRequired: true });
+      const res = await apiFetch(`${API_BASE}/productos?id=${id}`, { method: 'DELETE', authRequired: true });
       if (!res.ok) throw new Error();
     } catch {
       // Rollback
@@ -292,7 +292,7 @@ export function ProductosScreen({
       const parsed = field === 'precio' || field === 'precioOriginal' ? (value ? Number(value) : null) : value.trim() || null;
       setProdDetailSaving(true);
       try {
-        const res = await apiFetch(`${API_BASE}/ofertas`, {
+        const res = await apiFetch(`${API_BASE}/productos`, {
           method: 'PATCH', authRequired: true,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: o.id, [field]: parsed }),
@@ -310,7 +310,7 @@ export function ProductosScreen({
       const nuevasFotos = fotos.filter((_, i) => i !== idx);
       setProdDetailSaving(true);
       try {
-        const res = await apiFetch(`${API_BASE}/ofertas`, {
+        const res = await apiFetch(`${API_BASE}/productos`, {
           method: 'PATCH', authRequired: true,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: o.id, fotos: nuevasFotos }),
