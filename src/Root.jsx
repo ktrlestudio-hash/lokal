@@ -354,13 +354,38 @@ export default function Root() {
   }, [rebotarLandingLogueada]);
 
   // Gate único: en la primera carga real de la página (IS_FIRST_LOAD), no
-  // dejar pasar a NINGUNA ruta (oferta compartida, tienda pública, landing,
-  // admin) hasta que se cumplan los 1700ms del splash completo — antes esto
-  // vivía disperso, y una ruta con datos listos antes de tiempo directamente
-  // se saltaba el splash o lo cortaba a mitad de animación. Después de esta
-  // carga de módulo (SPA ya abierta, splashMinCumplido true de entrada) no
-  // aplica ningún piso, todo responde a la velocidad real de los datos.
-  if (IS_FIRST_LOAD && !splashMinCumplido) return <AppLoader />;
+  // dejar pasar a NINGUNA ruta hasta que se cumplan los 1700ms del splash
+  // completo. Además, SOLO para rutas que dependen de auth (admin/panel, o
+  // la raíz que puede rebotar a admin con sesión activa) — nunca para
+  // oferta/tienda pública/legal, que no dependen de sesión y no deben
+  // esperar a Firebase de más — se suma esperar a que auth (y, yendo a
+  // admin, también la tienda del usuario) resuelva. Sin esto, al cumplirse
+  // el mínimo de tiempo con esos datos todavía en vuelo, el siguiente
+  // return caía en OTRA posición del árbol (esperandoAuthEnRaiz/loadingTienda
+  // más abajo, cada una un <AppLoader/> distinto) y remontaba el splash de
+  // nuevo. Con esta única condición combinada, todo el período de espera
+  // —tiempo Y datos, cuando aplica— vive en la MISMA línea, un solo nodo,
+  // cero remontajes. Después de esta carga de módulo (SPA ya abierta,
+  // splashMinCumplido true de entrada) no aplica ningún piso.
+  const rutaDependeDeAuth = isAdminRoute || isAdminPanelRoute || enRaiz;
+  const authSinResolver = rutaDependeDeAuth && (firebaseUser === undefined || !redirectChecked);
+  const vaAAdminYTiendaSinResolver = (isAdminRoute || rebotarLandingLogueada) && !!firebaseUser && loadingTienda;
+  const mostrandoSplash = IS_FIRST_LOAD && (!splashMinCumplido || authSinResolver || vaAAdminYTiendaSinResolver);
+
+  // El <meta theme-color> del <head> arranca en el oscuro del splash
+  // (#040a14, ver index.html) para no saltar celeste→oscuro→celeste en la
+  // barra de estado de la PWA durante la carga (Android/iOS la calculan
+  // del color de fondo real, no solo de la meta tag). Una vez que el
+  // splash se retira y hay contenido real en pantalla, hay que devolverla
+  // al color de marca — sin esto quedaría oscura para siempre, incluso
+  // dentro del admin en tema claro.
+  useEffect(() => {
+    if (mostrandoSplash) return;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', '#00B8D9');
+  }, [mostrandoSplash]);
+
+  if (mostrandoSplash) return <AppLoader />;
 
   // ── Oferta individual (/:tienda/o/:oferta) — vista React que reusa los
   //    componentes del home. El link lo comparten WhatsApp/FB; el SSR
