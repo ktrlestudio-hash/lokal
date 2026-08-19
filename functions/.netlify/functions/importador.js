@@ -111,11 +111,23 @@ async function requireTienda(event, env, tiendaId) {
 }
 
 async function accionCalibrar({ event, env, body }) {
+  // Medido (2026-08-19): el costo real de este endpoint no está en
+  // parsear el archivo (leerArchivo ronda 0ms incluso con la librería
+  // xlsx) sino en la CANTIDAD de round-trips de red secuenciales:
+  // requireTienda (verificación de token Firebase + lectura de R2) y
+  // buscarCalibracion (D1) suman ~150-200ms CADA UNO por latencia de red
+  // normal, uno atrás del otro. leerArchivoDelBody no depende de
+  // requireTienda (no necesita saber la tienda para parsear el archivo),
+  // así que corren en paralelo — ahorra uno de los dos saltos de red del
+  // total percibido.
   const tiendaId = sanitizeText(String(body.tiendaId || ''), { max: 64, multiline: false });
   if (!tiendaId) throw new HttpError(400, 'tiendaId es requerido');
-  await requireTienda(event, env, tiendaId);
 
-  const tabla = await leerArchivoDelBody(body);
+  const [, tabla] = await Promise.all([
+    requireTienda(event, env, tiendaId),
+    leerArchivoDelBody(body),
+  ]);
+
   const huella = calcularHuella(tabla.headers);
   const existente = await buscarCalibracion(env.IMPORTADOR_DB, tiendaId, huella);
 

@@ -2,7 +2,7 @@
 // 'catalogo'). Segunda de las 5 pantallas grandes extraídas en la Fase 3 —
 // mismo criterio que OfertasScreen: recibe todo por props explícitas, sin
 // rediseñar su manejo de estado.
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Loader2, Zap, Plus, Package, AlertTriangle, Search, ArrowUpDown, CheckCircle,
   ListFilter, LayoutGrid, LayoutList, ToggleRight, ToggleLeft, Edit3, Trash2,
@@ -11,12 +11,11 @@ import {
 import { SkeletonProductosGrid } from '../../Skeletons';
 import LazyImg from '../../LazyImg';
 import { StorePageHeader } from '../components/StorePageHeader.jsx';
-import { ImportadorPrecios } from '../components/importador/ImportadorPrecios.jsx';
 import { ProductosOfertasToggle } from '../components/ProductosOfertasToggle.jsx';
 import { useCapaUI } from '../navegacion/useCapaUI.js';
 
 export function ProductosScreen({
-  tiendaId, fetchMisProductos, sidebarExpanded,
+  onAbrirImportador,
   ambosModulosActivos, subScreenProductos, setSubScreenProductos,
   misProductosSinFiltrar, setMisProductos, loadingProductos,
   productoShowForm, setProductoShowForm, productoEditing, setProductoEditing,
@@ -35,18 +34,17 @@ export function ProductosScreen({
   primerBadge, apiFetch, API_BASE, haptic,
   isDark, toggleTheme, onOpenAccount, renderAccountAvatar,
 }) {
-  const [importadorOpen, setImportadorOpen] = useState(false);
   // Cada capa de UI que se abre encima de la lista se registra en el
   // uiStack, así el atrás nativo cierra exactamente esa capa (la de
   // arriba) en vez de salir de la app — ver src/store/navegacion/uiStack.js.
   // Ninguna de estas acumula "borrador" sin guardar: el detalle autoguarda
   // cada campo al blur, y el resto son selecciones/confirmaciones — por eso
   // no piden confirmación al cerrarse.
-  // (productoShowForm/ofertaShowForm y los sheets globales se registran en
-  // StoreApp.jsx, que es donde vive su estado — acá solo las capas propias
-  // de esta pantalla.)
-  // (El importador se registra a sí mismo desde ImportadorPrecios.jsx,
-  // porque su cierre necesita confirmación cuando hay progreso a medias.)
+  // (productoShowForm/ofertaShowForm, los sheets globales, y el importador
+  // se registran en StoreApp.jsx, que es donde vive su estado ahora — el
+  // importador sobrevive a que esta pantalla se desmonte, para poder
+  // minimizarse y seguir corriendo mientras el usuario navega a otra
+  // pantalla. Acá solo las capas propias de esta pantalla.)
   useCapaUI({ abierto: !!prodDetail, onCerrar: () => setProdDetail(null) });
   useCapaUI({ abierto: !!prodFilterSheet, onCerrar: () => setProdFilterSheet(false) });
   useCapaUI({ abierto: !!confirmDelete, onCerrar: () => setConfirmDelete(null) });
@@ -521,7 +519,7 @@ export function ProductosScreen({
         actionSlot={(
           <>
             {loadingProductos && <Loader2 className="w-4 h-4 animate-spin text-ink-dim shrink-0" />}
-            <button onClick={() => setImportadorOpen(true)} className="flex items-center gap-1.5 bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-ink dark:text-ink-dim hover:text-brand text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0" title="Importar lista de precios desde Excel, CSV o JSON">
+            <button onClick={onAbrirImportador} className="flex items-center gap-1.5 bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-ink dark:text-ink-dim hover:text-brand text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0" title="Importar lista de precios desde Excel, CSV o JSON">
               <UploadCloud className="w-4 h-4" /><span>Importar</span>
             </button>
             {activos.length > 0 && (
@@ -545,15 +543,6 @@ export function ProductosScreen({
         />
       )}
 
-      {importadorOpen && (
-        <ImportadorPrecios
-          tiendaId={tiendaId}
-          sidebarExpanded={sidebarExpanded}
-          onClose={() => setImportadorOpen(false)}
-          onAplicado={() => fetchMisProductos?.()}
-        />
-      )}
-
       {loadingProductos && misProductos.length === 0 ? (
         <div className="flex-1 overflow-y-auto no-scrollbar p-4 pb-[calc(var(--store-bottom-nav-h)_+_1rem)] lg:pb-4">
           <SkeletonProductosGrid cols={2} count={6} />
@@ -571,7 +560,7 @@ export function ProductosScreen({
             <button onClick={openNew} className="px-6 py-3 bg-brand hover:bg-brand-light text-white rounded-2xl font-bold transition-colors shadow-lg shadow-brand/25">
               Crear primer producto
             </button>
-            <button onClick={() => setImportadorOpen(true)} className="flex items-center gap-1.5 text-sm font-bold text-ink-dim hover:text-brand transition-colors py-1.5">
+            <button onClick={onAbrirImportador} className="flex items-center gap-1.5 text-sm font-bold text-ink-dim hover:text-brand transition-colors py-1.5">
               <UploadCloud className="w-3.5 h-3.5" /> o importar desde Excel/CSV
             </button>
           </div>

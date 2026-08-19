@@ -12,6 +12,9 @@ import { useProductosOfertas } from './store/hooks/useProductosOfertas';
 import { useInbox } from './store/hooks/useInbox';
 import { useTiendaPatch } from './store/hooks/useTiendaPatch';
 import { useCapaUI } from './store/navegacion/useCapaUI.js';
+import { useImportador } from './store/components/importador/useImportador.js';
+import { ImportadorPrecios } from './store/components/importador/ImportadorPrecios.jsx';
+import { ImportadorFlotante } from './store/components/importador/ImportadorFlotante.jsx';
 import { StorePageHeader as StorePageHeaderBase } from './store/components/StorePageHeader.jsx';
 import { StoreSidebar as StoreSidebarBase } from './store/components/StoreSidebar.jsx';
 import { StoreBottomNav as StoreBottomNavBase } from './store/components/StoreBottomNav.jsx';
@@ -373,6 +376,20 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [prodDetailSaving,      setProdDetailSaving]      = useState(false);
   const [prodDetailPhotoConfirm,setProdDetailPhotoConfirm]= useState(null);
   const [quickPriceOpen, setQuickPriceOpen] = useState(false); // edición rápida en cadena (precio rápido)
+  // importadorVisible: si el wizard fullscreen está en pantalla. Separado
+  // del estado del hook (useImportador, más abajo) a propósito: minimizar
+  // solo cambia esto a false, el trabajo real (fetch en curso, progreso)
+  // sigue vivo en el hook sin importar si el wizard se ve o no — así
+  // sobrevive a que el usuario navegue a otra pantalla del admin.
+  const [importadorVisible, setImportadorVisible] = useState(false);
+  const importador = useImportador(tienda?.id || tiendaData?.id, { onAplicado: () => fetchMisProductos?.() });
+  const abrirImportador = () => setImportadorVisible(true);
+  const minimizarImportador = () => setImportadorVisible(false);
+  const cerrarImportadorDeVerdad = () => { importador.reiniciar(); setImportadorVisible(false); };
+  // El chip flotante aparece cuando hay algo real en curso Y el wizard no
+  // está a la vista — nunca cuando está en 'subir' sin nada elegido
+  // todavía (nada que "seguir en segundo plano" ahí).
+  const importadorFlotanteVisible = !importadorVisible && (importador.hayTrabajoEnCurso || importador.paso === 'resultado');
   const [productoShowForm, setProductoShowForm] = useState(false);
   const [productoEditing, setProductoEditing] = useState(null);
   const [productoForm, setProductoForm] = useState({ titulo: '', descripcion: '', precio: '', precioOriginal: '', badgesForzados: null, financiacion: '', stock: '1', condicion: 'nuevo', categoryId: null, contactoWhatsapp: '' });
@@ -2776,8 +2793,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   // segunda de las 5 pantallas grandes).
   const ProductosScreen = () => (
     <ProductosScreenBase
-      tiendaId={tienda?.id || tiendaData?.id} fetchMisProductos={fetchMisProductos}
-      sidebarExpanded={sidebarExpanded}
+      onAbrirImportador={abrirImportador}
       ambosModulosActivos={ambosModulosActivos} subScreenProductos={subScreenProductos} setSubScreenProductos={setSubScreenProductos}
       misProductosSinFiltrar={misProductosSinFiltrar}
       setMisProductos={setMisProductos} loadingProductos={loadingProductos}
@@ -2967,6 +2983,27 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           {screen === 'perfil' && PerfilScreen()}
         </div>
         {BottomNav()}
+        {/* Importador de precios — montado acá (no dentro de ProductosScreen)
+            para que sobreviva a que el usuario navegue a otra pantalla:
+            importadorVisible solo controla si el wizard se VE, el trabajo
+            real vive en el hook useImportador de más arriba. */}
+        {importadorVisible && (
+          <ImportadorPrecios
+            sidebarExpanded={sidebarExpanded}
+            onMinimizar={minimizarImportador}
+            onCerrarDeVerdad={cerrarImportadorDeVerdad}
+            {...importador}
+          />
+        )}
+        <ImportadorFlotante
+          visible={importadorFlotanteVisible}
+          paso={importador.paso}
+          cargando={importador.cargando}
+          error={importador.error}
+          archivoInfo={importador.archivoInfo}
+          onReabrir={() => setImportadorVisible(true)}
+          onDescartar={cerrarImportadorDeVerdad}
+        />
         {moreSheetOpen && MoreSheet()}
         {CreateSheet()}
         {ProductoFormOverlay()}
