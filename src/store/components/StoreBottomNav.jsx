@@ -12,26 +12,10 @@
 // dispositivo. Cuando el nav no se renderiza (return null más abajo) la
 // variable se limpia a 0 para que las screens que lo consultan no dejen un
 // padding fantasma.
-import React, { useLayoutEffect, useRef } from 'react';
+import React, { useRef } from 'react';
 import { Tag, MessageSquare, TrendingUp, Plus, Store, Menu } from 'lucide-react';
 import { isModuleActive } from '../../tienda-publica/utils.js';
-
-function usePublicarAlturaReal(ref, activo) {
-  useLayoutEffect(() => {
-    const root = document.documentElement;
-    if (!activo) {
-      root.style.setProperty('--store-bottom-nav-h', '0px');
-      return;
-    }
-    const el = ref.current;
-    if (!el) return;
-    const publicar = () => root.style.setProperty('--store-bottom-nav-h', `${el.offsetHeight}px`);
-    publicar();
-    const ro = new ResizeObserver(publicar);
-    ro.observe(el);
-    return () => { ro.disconnect(); root.style.setProperty('--store-bottom-nav-h', '0px'); };
-  }, [ref, activo]);
-}
+import { usePublicarAlturaReal } from '../hooks/usePublicarAlturaReal.js';
 
 export function StoreBottomNav({
   screen, inboxMobileView, tiendaData, unreadTotal, isEmprendimiento,
@@ -40,7 +24,7 @@ export function StoreBottomNav({
 }) {
   const navRef = useRef(null);
   const visible = !(screen === 'mi-pagina' || (screen === 'mensajes' && inboxMobileView === 'chat'));
-  usePublicarAlturaReal(navRef, visible);
+  usePublicarAlturaReal(navRef, visible, '--store-bottom-nav-h');
 
   if (!visible) return null;
 

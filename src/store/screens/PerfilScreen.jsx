@@ -81,7 +81,7 @@ export function PerfilScreen({
   const { abierta: heroAbierta } = getEstadoApertura(tiendaInfo.horarios);
 
   return (
-    <div className="h-[100dvh] flex flex-col sa-page-bg">
+    <div className="flex flex-col sa-page-bg" style={{ height: 'calc(100dvh - var(--store-banner-h))' }}>
       {/* Sin title: el nombre de la tienda ya se lee grande en el hero de
           abajo — repetirlo acá era ruido. "Ver página" va en leftSlot
           (izquierda, no derecha): es la acción principal de esta pantalla,

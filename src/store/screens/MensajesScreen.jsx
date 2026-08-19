@@ -1086,7 +1086,7 @@ export function MensajesScreen({
   };
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-surface-card">
+    <div className="flex flex-col bg-surface-card" style={{ height: 'calc(100dvh - var(--store-banner-h))' }}>
       {/* Header mobile — desktop usa el header interno del ThreadList */}
       <div className="lg:hidden shrink-0">
         <StorePageHeader

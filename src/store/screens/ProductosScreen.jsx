@@ -532,7 +532,7 @@ export function ProductosScreen({
   return (
     <>
     {ProductoDetail()}
-    <div className="h-[100dvh] flex flex-col sa-page-bg">
+    <div className="flex flex-col sa-page-bg" style={{ height: 'calc(100dvh - var(--store-banner-h))' }}>
       {/* Header */}
       <StorePageHeader
         title="Mis productos"

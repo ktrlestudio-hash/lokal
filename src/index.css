@@ -46,6 +46,16 @@
      nav sin depender de mantener dos números sincronizados a mano. */
   --store-bottom-nav-h: 84px;
 
+  /* Altura real del banner de suscripción vencida/por vencer en
+     StoreApp.jsx, publicada por usePublicarAlturaReal.js. A diferencia del
+     bottom-nav (siempre presente en mobile), este banner es condicional y
+     de altura variable — arranca en 0px porque la mayoría de las cuentas
+     no lo ven nunca. Sin restar esto del h-[100dvh] de cada screen del
+     admin, el banner (que vive fuera de ese contenedor, en el flujo
+     normal del documento) resta espacio real al viewport sin que la
+     screen lo sepa, generando scroll fantasma exactamente de su alto. */
+  --store-banner-h: 0px;
+
   /* Primario de marca — turquesa LOKAL (coherente con LOKAL global, no el
      rojo de comida rápida). RGB separado por espacios (requerido por Tailwind). */
   --brand:           0 184 217;   /* #00B8D9  turquesa — base              */

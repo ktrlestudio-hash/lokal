@@ -11,6 +11,7 @@ import TransferenciaModal from './store/modals/TransferenciaModal';
 import { useProductosOfertas } from './store/hooks/useProductosOfertas';
 import { useInbox } from './store/hooks/useInbox';
 import { useTiendaPatch } from './store/hooks/useTiendaPatch';
+import { usePublicarAlturaReal } from './store/hooks/usePublicarAlturaReal.js';
 import { useCapaUI } from './store/navegacion/useCapaUI.js';
 import { useImportador } from './store/components/importador/useImportador.js';
 import { ImportadorPrecios } from './store/components/importador/ImportadorPrecios.jsx';
@@ -246,6 +247,18 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [checkoutError, setCheckoutError] = useState(null);
   const isActiva = suscripcionActiva(tiendaData);
   const dias     = diasRestantes(tiendaData);
+  // Banner de suscripción vencida/por vencer: vive en el flujo normal del
+  // documento (no sticky/fixed), así que resta espacio real al viewport
+  // ANTES del contenedor h-[100dvh] de cada screen — sin compensarlo, cada
+  // screen pide el 100% de la altura del viewport aunque ya arranca más
+  // abajo, generando scroll fantasma exactamente del alto del banner
+  // (mismo bug que ya se había resuelto para --store-bottom-nav-h, ver
+  // usePublicarAlturaReal.js). Se mide con ResizeObserver en vez de
+  // hardcodear un número porque el banner es condicional y de altura
+  // variable (2 líneas en mobile angosto, 1 en desktop).
+  const bannerRef = useRef(null);
+  const bannerVisible = (!isActiva && !isAdmin) || (isActiva && dias !== null && dias <= 7 && !isAdmin);
+  usePublicarAlturaReal(bannerRef, bannerVisible, '--store-banner-h');
 
   // Notificaciones / unread
   const [moreSheetOpen, setMoreSheetOpen] = useState(false);
@@ -2899,38 +2912,42 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             sola línea de texto, que forzaba más altura). Oculto para
             admins (isAdmin): el estado real de vencimiento sigue visible
             en la pantalla "Suscripción" del menú, solo se saltea este
-            banner de arriba que interrumpe la navegación normal. */}
-        {!isActiva && !isAdmin && (
-          <div className="bg-rose-500 text-white px-4 py-2 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <Lock className="w-3.5 h-3.5 shrink-0" />
-              <span className="text-sm font-bold shrink-0">Suscripción vencida</span>
-              <span className="text-xs text-white/80 truncate hidden sm:inline">· Tu página no está publicada</span>
+            banner de arriba que interrumpe la navegación normal.
+            ref compartido entre los 2 (mutuamente excluyentes) para que
+            usePublicarAlturaReal mida siempre el que esté montado. */}
+        <div ref={bannerRef}>
+          {!isActiva && !isAdmin && (
+            <div className="bg-rose-500 text-white px-4 py-2 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <Lock className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-sm font-bold shrink-0">Suscripción vencida</span>
+                <span className="text-xs text-white/80 truncate hidden sm:inline">· Tu página no está publicada</span>
+              </div>
+              <button
+                onClick={() => setShowPaywall(true)}
+                className="shrink-0 bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+              >
+                Renovar ahora
+              </button>
             </div>
-            <button
-              onClick={() => setShowPaywall(true)}
-              className="shrink-0 bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
-            >
-              Renovar ahora
-            </button>
-          </div>
-        )}
-        {isActiva && dias !== null && dias <= 7 && !isAdmin && (
-          <div className="bg-amber-500 text-white px-4 py-2 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <CalendarDays className="w-3.5 h-3.5 shrink-0" />
-              <span className="text-sm font-bold shrink-0">
-                {dias === 0 ? 'Vence hoy' : `Vence en ${dias} día${dias === 1 ? '' : 's'}`}
-              </span>
+          )}
+          {isActiva && dias !== null && dias <= 7 && !isAdmin && (
+            <div className="bg-amber-500 text-white px-4 py-2 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <CalendarDays className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-sm font-bold shrink-0">
+                  {dias === 0 ? 'Vence hoy' : `Vence en ${dias} día${dias === 1 ? '' : 's'}`}
+                </span>
+              </div>
+              <button
+                onClick={() => setShowPaywall(true)}
+                className="shrink-0 bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+              >
+                Renovar
+              </button>
             </div>
-            <button
-              onClick={() => setShowPaywall(true)}
-              className="shrink-0 bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
-            >
-              Renovar
-            </button>
-          </div>
-        )}
+          )}
+        </div>
 
 
         {/* Sin willChange: 'opacity' acá — crea su propio stacking context,
