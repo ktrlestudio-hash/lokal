@@ -276,28 +276,30 @@ export default function Root() {
       if (!mounted) return;
       firebaseUserRef.current = user || null;
       setFirebaseUser(user || null);
-
-      // Con sesión confirmada, el próximo destino es StoreApp o
-      // RegistroTienda. Se piden ya, en paralelo con el fetch de la tienda,
-      // para que el chunk esté listo cuando toque renderizar: así dividir el
-      // bundle no agrega una espera visible, sólo la mueve a un momento en
-      // que la pantalla ya estaba esperando datos.
-      //
-      // El resultado se marca en estado (no se descarta): el gate del splash
-      // lo espera. Sin esto, al liberarse el gate con el chunk todavía en
-      // vuelo, el <Suspense fallback={<AppLoader/>}> de más abajo montaba un
-      // loader NUEVO en otra posición del árbol — otro remontaje, otra
-      // animación cortada. Marcar el fallo igual que el éxito es a propósito:
-      // si el chunk no baja, que el Suspense muestre su fallback y el error
-      // salga por su camino normal, sin dejar el splash colgado para siempre.
-      if (user) {
-        Promise.all([import('./StoreApp'), import('./RegistroTienda')])
-          .catch(() => {})
-          .finally(() => { if (mounted) setChunksAdminListos(true); });
-      }
     });
     return () => { mounted = false; unsub(); };
   }, []);
+
+  // Precarga de los chunks lazy del backoffice apenas hay sesión: cuando el
+  // usuario llegue a StoreApp/RegistroTienda el código ya está en memoria,
+  // así partir el bundle no agrega una espera visible — solo la mueve a un
+  // momento en que la pantalla igual estaba esperando datos.
+  //
+  // El resultado se marca en estado (no se descarta) porque el gate del
+  // splash lo espera: soltar el gate con el chunk todavía en vuelo hacía
+  // que el <Suspense fallback={<AppLoader/>}> de más abajo montara un
+  // loader NUEVO en otra rama del árbol — otro remontaje, otro logo
+  // reiniciándose. Marcar el fallo igual que el éxito es deliberado: si un
+  // chunk no baja, que el Suspense muestre su fallback y el error siga su
+  // camino normal, en vez de dejar el gate colgado para siempre.
+  useEffect(() => {
+    if (!firebaseUser) return undefined;
+    let mounted = true;
+    Promise.all([import('./StoreApp'), import('./RegistroTienda')])
+      .catch(() => {})
+      .finally(() => { if (mounted) setChunksAdminListos(true); });
+    return () => { mounted = false; };
+  }, [firebaseUser]);
 
   // Cargar la tienda DEL USUARIO logueado (multi-tienda real: por googleUid,
   // no por el slug fijo — antes cualquiera que se logueara veía "principal"
@@ -367,14 +369,22 @@ export default function Root() {
     forceUrlRecheck();
   }, [rebotarLandingLogueada]);
 
-  // Gate único de la primera carga: mientras esté activo, TODA la app
-  // muestra un solo <AppLoader/> desde esta misma línea — un único nodo que
-  // nunca se desmonta, así la animación de marca corre entera una vez y no
-  // se reinicia. Se sale del gate recién cuando no queda nada por resolver
-  // que fuera a mostrar OTRO loader después (auth, tienda del usuario,
-  // chunk lazy del backoffice); cada una de esas esperas vive más abajo en
-  // una rama distinta del árbol, y soltar el splash antes de tiempo hacía
-  // que React montara un loader nuevo ahí — el "segundo splash cortado".
+  // Gate único de carga: mientras esté activo, TODA la app muestra un solo
+  // <AppLoader/> desde esta misma línea — un único nodo que nunca se
+  // desmonta, así el logo se anima una vez y no se reinicia. Se sale del
+  // gate recién cuando no queda nada por resolver que fuera a mostrar OTRO
+  // loader después (auth, tienda del usuario, chunk lazy del backoffice):
+  // cada una de esas esperas vive más abajo en una rama distinta del árbol
+  // (líneas ~521/534/553), y soltar el gate antes de tiempo hace que React
+  // monte un loader nuevo ahí — cada montaje reinicia el trazo del logo, y
+  // encadenados se ven como "varios splashes que se cortan".
+  //
+  // Aplica SIEMPRE, no solo en la primera carga: entrando de nuevo con la
+  // app ya vista (IS_FIRST_LOAD false) el recorrido de esperas es el mismo
+  // y encadenaba igual de mal, solo que con el loader chico en vez del
+  // splash de marca. Lo único exclusivo de la primera carga es el piso de
+  // tiempo, y eso ya está resuelto en splashMinCumplido (arranca en true
+  // cuando no es primera carga, así que no agrega ninguna espera acá).
   //
   // Las esperas de sesión aplican SOLO a rutas que dependen de auth (admin,
   // admin/panel, o la raíz que puede rebotar a admin): una oferta
@@ -383,7 +393,7 @@ export default function Root() {
   const authSinResolver = rutaDependeDeAuth && (firebaseUser === undefined || !redirectChecked);
   const vaAlBackoffice = (isAdminRoute || rebotarLandingLogueada) && !!firebaseUser;
   const backofficeSinPreparar = vaAlBackoffice && (loadingTienda || !chunksAdminListos);
-  const mostrandoSplash = IS_FIRST_LOAD && (!splashMinCumplido || authSinResolver || backofficeSinPreparar);
+  const mostrandoSplash = !splashMinCumplido || authSinResolver || backofficeSinPreparar;
 
   // El <meta theme-color> del <head> arranca en el oscuro del splash
   // (#040a14, ver index.html) para no saltar celeste→oscuro→celeste en la
