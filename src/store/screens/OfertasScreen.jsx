@@ -267,13 +267,15 @@ export function OfertasScreen({
           <>
             {loadingProductos && <Loader2 className="w-4 h-4 animate-spin text-ink-dim shrink-0" />}
             {misProductos.length > 0 && (
+              // 40x40 — misma altura/ancho que el avatar de cuenta y el
+              // resto de acciones del header (antes w-8 h-8, más chico).
               <button onClick={() => setVaciarConfirm(true)} aria-label="Vaciar todas las ofertas" title="Vaciar todas"
-                className="flex items-center justify-center w-8 h-8 rounded-xl text-ink-dim hover:text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0">
+                className="w-10 h-10 flex items-center justify-center rounded-xl text-ink-dim hover:text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0">
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
             {/* Solo desktop: en móvil el FAB del bottom-nav ya crea */}
-            <button onClick={openNew} className="hidden lg:flex items-center gap-1.5 bg-brand hover:bg-brand-light text-white text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0 shadow-sm shadow-brand/20">
+            <button onClick={openNew} className="hidden lg:flex h-10 items-center gap-1.5 bg-brand hover:bg-brand-light text-white text-sm font-bold px-3 rounded-xl transition-colors shrink-0 shadow-sm shadow-brand/20">
               <Plus className="w-4 h-4" /><span className="hidden sm:inline">Nueva</span>
             </button>
           </>

@@ -15,12 +15,15 @@ const TABS = [
 
 export function ProductosOfertasToggle({ value, onChange }) {
   return (
-    <div className="flex items-center gap-1 bg-surface-card-2 dark:bg-white/8 rounded-xl p-0.5">
+    // h-10 (40px) — misma altura que el avatar de cuenta (.ui-avatar-btn) y
+    // el resto de acciones del header, antes quedaba ~8px más bajo por
+    // depender solo del padding vertical del texto.
+    <div className="h-10 flex items-center gap-1 bg-surface-card-2 dark:bg-white/8 rounded-xl p-0.5">
       {TABS.map(([key, label, Icon]) => (
         <button
           key={key}
           onClick={() => onChange(key)}
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${
+          className={`h-full flex items-center gap-1.5 px-2.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${
             value === key ? 'bg-brand text-white shadow-sm' : 'text-ink-dim hover:text-ink'
           }`}
         >

@@ -519,16 +519,20 @@ export function ProductosScreen({
         actionSlot={(
           <>
             {loadingProductos && <Loader2 className="w-4 h-4 animate-spin text-ink-dim shrink-0" />}
-            <button onClick={onAbrirImportador} className="flex items-center gap-1.5 bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-ink dark:text-ink-dim hover:text-brand text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0" title="Importar lista de precios desde Excel, CSV o JSON">
-              <UploadCloud className="w-4 h-4" /><span>Importar</span>
+            {/* Solo ícono, 40x40 — misma altura/ancho que el avatar de
+                cuenta y el resto de acciones del header (antes tenía texto
+                y quedaba más bajo que el avatar por el padding vertical
+                del texto en vez de una altura fija). */}
+            <button onClick={onAbrirImportador} className="w-10 h-10 flex items-center justify-center bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-ink dark:text-ink-dim hover:text-brand rounded-xl transition-colors shrink-0" title="Importar lista de precios desde Excel, CSV o JSON">
+              <UploadCloud className="w-4 h-4" />
             </button>
             {activos.length > 0 && (
-              <button onClick={() => setQuickPriceOpen(true)} className="flex items-center gap-1.5 bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-ink dark:text-ink-dim hover:text-brand text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0" title="Editar precios uno por uno">
+              <button onClick={() => setQuickPriceOpen(true)} className="h-10 flex items-center gap-1.5 bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-ink dark:text-ink-dim hover:text-brand text-sm font-bold px-3 rounded-xl transition-colors shrink-0" title="Editar precios uno por uno">
                 <Zap className="w-4 h-4" /><span className="hidden sm:inline">Precio rápido</span>
               </button>
             )}
             {/* Solo desktop: en móvil el FAB del bottom-nav ya crea */}
-            <button onClick={openNew} className="hidden lg:flex items-center gap-1.5 bg-brand hover:bg-brand-light text-white text-sm font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0 shadow-sm shadow-brand/20">
+            <button onClick={openNew} className="hidden lg:flex h-10 items-center gap-1.5 bg-brand hover:bg-brand-light text-white text-sm font-bold px-3 rounded-xl transition-colors shrink-0 shadow-sm shadow-brand/20">
               <Plus className="w-4 h-4" /><span className="hidden sm:inline">Nuevo</span>
             </button>
           </>
@@ -560,7 +564,7 @@ export function ProductosScreen({
             <button onClick={openNew} className="px-6 py-3 bg-brand hover:bg-brand-light text-white rounded-2xl font-bold transition-colors shadow-lg shadow-brand/25">
               Crear primer producto
             </button>
-            <button onClick={onAbrirImportador} className="flex items-center gap-1.5 text-sm font-bold text-ink-dim hover:text-brand transition-colors py-1.5">
+            <button onClick={onAbrirImportador} className="flex items-center gap-1.5 bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-sm font-bold text-ink-dim hover:text-brand transition-colors px-3 py-1.5 rounded-xl">
               <UploadCloud className="w-3.5 h-3.5" /> o importar desde Excel/CSV
             </button>
           </div>
