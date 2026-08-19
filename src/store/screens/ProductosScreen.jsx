@@ -548,7 +548,7 @@ export function ProductosScreen({
                 cuenta y el resto de acciones del header (antes tenía texto
                 y quedaba más bajo que el avatar por el padding vertical
                 del texto en vez de una altura fija). */}
-            <button onClick={onAbrirImportador} className="w-10 h-10 flex items-center justify-center bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-ink dark:text-ink-dim hover:text-brand rounded-xl transition-colors shrink-0" title="Importar lista de precios desde Excel, CSV o JSON">
+            <button onClick={onAbrirImportador} className="w-10 h-10 flex items-center justify-center bg-brand hover:bg-brand-light text-white rounded-xl transition-colors shrink-0 shadow-sm shadow-brand/20" title="Importar lista de precios desde Excel, CSV o JSON">
               <UploadCloud className="w-4 h-4" />
             </button>
             {misProductos.length > 0 && (
@@ -589,14 +589,14 @@ export function ProductosScreen({
           </div>
           <div>
             <h3 className="font-black text-xl mb-1">Sin productos aún</h3>
-            <p className="text-sm text-ink-dim">Publicá tu primer producto para que los clientes te encuentren</p>
+            <p className="text-sm text-ink-dim max-w-[220px]">Publicá tu primer producto para que tus clientes lo encuentren</p>
           </div>
           <div className="flex flex-col items-center gap-2.5">
             <button onClick={openNew} className="px-6 py-3 bg-brand hover:bg-brand-light text-white rounded-2xl font-bold transition-colors shadow-lg shadow-brand/25">
               Crear primer producto
             </button>
-            <button onClick={onAbrirImportador} className="flex items-center gap-1.5 bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-sm font-bold text-ink-dim hover:text-brand transition-colors px-3 py-1.5 rounded-xl">
-              <UploadCloud className="w-3.5 h-3.5" /> o importar desde Excel/CSV
+            <button onClick={onAbrirImportador} className="flex items-center gap-1.5 bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-sm font-bold text-ink-dim hover:text-brand transition-colors px-6 py-3 rounded-2xl">
+              <UploadCloud className="w-4 h-4" /> o importar desde Excel/CSV
             </button>
           </div>
         </div>
