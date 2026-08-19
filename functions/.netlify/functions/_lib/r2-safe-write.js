@@ -22,7 +22,15 @@ export async function safeRead(bucket, key, defaultValue = []) {
   const obj = await bucket.get(key);
   if (!obj) return { data: defaultValue, etag: null };
   const data = JSON.parse(await obj.text());
-  return { data, etag: obj.httpEtag };
+  // obj.etag (NO obj.httpEtag): httpEtag viene con comillas incluidas
+  // (formato listo para el header HTTP `ETag: "hash"`), pero
+  // onlyIf.etagMatches de put() espera el hash SIN comillas — pasarle
+  // httpEtag tira "Conditional ETag should not be wrapped in quotes" y
+  // cualquier safeWrite subsiguiente con ese etag falla siempre. Bug
+  // compartido por todas las escrituras del proyecto (ofertas, tiendas,
+  // carritos, importador) desde que este archivo existe — recién se
+  // manifestó cuando el importador ejercitó el camino de escritura real.
+  return { data, etag: obj.etag };
 }
 
 export async function safeWrite(bucket, key, data, expectedEtag) {
