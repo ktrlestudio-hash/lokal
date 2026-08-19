@@ -41,13 +41,13 @@ export async function onRequestGet({ request, env }) {
         totalGlobal: ofertas.length,
         totalDeLaTienda: ofertasDeLaTienda.length,
         etag: etagOfertas,
-        primeros3: ofertasDeLaTienda.slice(0, 3).map((o) => ({ id: o.id, nombre: o.nombre, createdAt: o.createdAt })),
+        primeros3: ofertasDeLaTienda.slice(0, 3).map((o) => ({ id: o.id, nombre: o.nombre, precio: o.precio, tipoPrecio: typeof o.precio, createdAt: o.createdAt })),
       },
       productos: {
         totalGlobal: productos.length,
         totalDeLaTienda: productosDeLaTienda.length,
         etag: etagProductos,
-        primeros3: productosDeLaTienda.slice(0, 3).map((p) => ({ id: p.id, nombre: p.nombre, createdAt: p.createdAt })),
+        primeros10: productosDeLaTienda.slice(0, 10).map((p) => ({ id: p.id, nombre: p.nombre, precio: p.precio, tipoPrecio: typeof p.precio, createdAt: p.createdAt })),
       },
     }, { ...HTTP_OPTIONS, env });
   } catch (error) {

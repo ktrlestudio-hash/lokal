@@ -45,10 +45,13 @@ export function useProductosOfertas(tiendaId) {
   // Catálogo (con precio/stock/categoryId) y Ofertas (flyers simples, sin
   // precio) viven en dos endpoints/archivos R2 separados desde esta sesión
   // (productos.js → data/productos.json, ofertas.js → data/ofertas.json —
-  // antes todo se mezclaba en ofertas.json). Este hook sigue exponiendo un
-  // único array `items` combinado: ProductosScreen/OfertasScreen ya lo
-  // filtran client-side por `typeof precio === 'number'`, así que el shape
-  // de salida no cambia — solo la fuente pasa de 1 fetch a 2 en paralelo.
+  // antes todo se mezclaba en ofertas.json). Este hook expone un único
+  // array `items` combinado, con cada ítem marcado con _origen ('catalogo'
+  // | 'ofertas') según de qué endpoint vino — ProductosScreen/OfertasScreen
+  // filtran por _origen, NO por `typeof precio === 'number'` (ese filtro
+  // por tipo clasificaba mal cualquier producto de catálogo real con
+  // precio null/vacío, ej. filas del importador sin precio en el Excel:
+  // terminaban apareciendo en Ofertas aunque vivieran en productos.json).
   const fetchAll = useCallback(async () => {
     if (!tiendaId) return;
     setLoading(true);
@@ -61,7 +64,10 @@ export function useProductosOfertas(tiendaId) {
         resProductos.ok ? resProductos.json() : [],
         resOfertas.ok ? resOfertas.json() : [],
       ]);
-      const data = [...productos, ...ofertas];
+      const data = [
+        ...productos.map(p => ({ ...p, _origen: 'catalogo' })),
+        ...ofertas.map(o => ({ ...o, _origen: 'ofertas' })),
+      ];
       setItems(data);
     } catch { /* silencioso */ } finally {
       setLoading(false);

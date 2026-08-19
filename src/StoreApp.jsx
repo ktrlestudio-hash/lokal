@@ -499,7 +499,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           : await apiFetch(`${API_BASE}/ofertas`, { method: 'POST', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tiendaId: tiendaData.id, ...payload }), signal: controller.signal });
         if (controller.signal.aborted) return;
         if (!res.ok) throw new Error(item._editingId ? 'No se pudo actualizar la oferta' : 'No se pudo publicar la oferta');
-        const guardada = await res.json();
+        const guardada = { ...await res.json(), _origen: 'ofertas' };
         if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
         setMisProductos(prev => prev.map(o => (o._localId === localId ? guardada : o)));
         ofertaPendientesRef.current.delete(localId);
@@ -530,7 +530,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     };
     ofertaPendientesRef.current.set(localId, item);
     const pendiente = {
-      ...item, _status: 'uploading', _error: null,
+      ...item, _status: 'uploading', _error: null, _origen: 'ofertas',
       id: datos.editingId || localId, // key estable: si es edición, conserva el id real
       thumbUrl: datos.previewUrl || datos.existingThumbUrl,
       imageUrl: datos.previewUrl || datos.existingImageUrl,
@@ -2533,12 +2533,12 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         if (productoEditing) {
           const res = await apiFetch(`${API_BASE}/productos`, { method: 'PATCH', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: productoEditing.id, ...payload }) });
           if (!res.ok) throw new Error('Error al actualizar');
-          savedProduct = await res.json();
+          savedProduct = { ...await res.json(), _origen: 'catalogo' };
           setMisProductos(prev => prev.map(o => o.id === savedProduct.id ? savedProduct : o));
         } else {
           const res = await apiFetch(`${API_BASE}/productos`, { method: 'POST', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
           if (!res.ok) throw new Error('Error al crear');
-          savedProduct = await res.json();
+          savedProduct = { ...await res.json(), _origen: 'catalogo' };
           setMisProductos(prev => [savedProduct, ...prev]);
         }
         setProductoSuccess(savedProduct);

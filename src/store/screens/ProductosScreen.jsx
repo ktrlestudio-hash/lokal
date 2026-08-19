@@ -52,12 +52,14 @@ export function ProductosScreen({
   const [vaciando, setVaciando] = useState(false);
   useCapaUI({ abierto: vaciarConfirm, onCerrar: () => setVaciarConfirm(false) });
   // Shadowing simétrico al de OfertasScreen (ver comentario ahí): con
-  // ambos módulos activos, esta pantalla solo muestra ítems CON precio
-  // (productos de catálogo reales) — sin este filtro, mostraba también las
-  // ofertas simples sin precio, duplicando exactamente lo que ya aparece en
-  // OfertasScreen.
+  // ambos módulos activos, esta pantalla solo muestra ítems de Catálogo.
+  // Filtra por _origen (marcado en useProductosOfertas.js según de qué
+  // endpoint vino cada ítem), NO por `typeof precio === 'number'` — ese
+  // filtro por tipo clasificaba mal cualquier producto de catálogo real
+  // con precio null/vacío (ej. filas del importador sin precio en el
+  // Excel): terminaban en Ofertas aunque vivieran en productos.json.
   const misProductos = ambosModulosActivos
-    ? misProductosSinFiltrar.filter(o => typeof o.precio === 'number')
+    ? misProductosSinFiltrar.filter(o => o._origen === 'catalogo')
     : misProductosSinFiltrar;
 
   const showForm = productoShowForm;

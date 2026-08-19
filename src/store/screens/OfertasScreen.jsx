@@ -56,16 +56,15 @@ export function OfertasScreen({
 
   // Shadowing intencional de misProductos (el estado real, sin filtrar,
   // sigue existiendo afuera de este componente — el badge del nav y la
-  // búsqueda de ítems en Mensajes lo necesitan completo). Cuando la tienda
-  // tiene AMBOS módulos activos ('ofertas' y 'catalogo'), sin este filtro
-  // esta pantalla y ProductosScreen mostraban exactamente los mismos ítems
-  // duplicados (comparten backend, ver ofertas.js) — el discriminador es el
-  // mismo que ya usa carrito.js para separar "producto de catálogo real" de
-  // "oferta simple": si tiene precio numérico, es del catálogo. Con un solo
-  // módulo activo, este filtro no cambia nada (ambosModulosActivos da false
-  // y misProductos pasa igual).
+  // búsqueda de ítems en Mensajes lo necesitan completo). Filtra por
+  // _origen (marcado en useProductosOfertas.js según de qué endpoint —
+  // /productos o /ofertas — vino cada ítem), NO por `typeof precio`: un
+  // producto de catálogo real con precio null/vacío (fila del importador
+  // sin precio en el Excel) igual tiene _origen:'catalogo', así que ya no
+  // aparece acá por error. Con un solo módulo activo, este filtro no
+  // cambia nada (ambosModulosActivos da false y misProductos pasa igual).
   const misProductos = ambosModulosActivos
-    ? misProductosSinFiltrar.filter(o => typeof o.precio !== 'number')
+    ? misProductosSinFiltrar.filter(o => o._origen !== 'catalogo')
     : misProductosSinFiltrar;
 
   const openNew = () => {
