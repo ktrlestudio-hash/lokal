@@ -21,8 +21,22 @@ const CACHE_TTL_MS = 10 * 60 * 1000;
 
 export function useProductosOfertas(tiendaId) {
   const cacheKey = `productos-${tiendaId || 'store'}`;
-  const [items, setItems] = useState(() => cacheGet(cacheKey) || []);
+  const [items, setItemsState] = useState(() => cacheGet(cacheKey) || []);
   const [loading, setLoading] = useState(false);
+
+  // Todo setItems pasa por acá: sin esto, una mutación (crear/editar/
+  // borrar/vaciar) solo actualizaba React state, nunca el snapshot de
+  // localStorage — al refrescar la página dentro del TTL (10 min), el
+  // hook volvía a arrancar desde el cache viejo y "resucitaba" ítems ya
+  // borrados/editados en el servidor. cacheSet acepta el array directo,
+  // no un updater function, así que soporta ambas formas de setState.
+  const setItems = useCallback((updater) => {
+    setItemsState(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      cacheSet(cacheKey, next, CACHE_TTL_MS);
+      return next;
+    });
+  }, [cacheKey]);
 
   // all=1: el dueño ve también vencidas/ocultas en su panel (para poder
   // reactivarlas); el listado público (GET ?slug=...) sigue filtrando solo
@@ -48,31 +62,30 @@ export function useProductosOfertas(tiendaId) {
         resOfertas.ok ? resOfertas.json() : [],
       ]);
       const data = [...productos, ...ofertas];
-      cacheSet(cacheKey, data, CACHE_TTL_MS);
       setItems(data);
     } catch { /* silencioso */ } finally {
       setLoading(false);
     }
-  }, [tiendaId, cacheKey]);
+  }, [tiendaId, setItems]);
 
   const update = useCallback((id, patch) => {
     setItems(prev => prev.map(o => (o.id === id ? { ...o, ...patch } : o)));
-  }, []);
+  }, [setItems]);
 
   const replace = useCallback((id, nuevo) => {
     setItems(prev => prev.map(o => (o.id === id ? nuevo : o)));
-  }, []);
+  }, [setItems]);
 
   const upsert = useCallback((item) => {
     setItems(prev => {
       const existe = prev.some(o => o.id === item.id);
       return existe ? prev.map(o => (o.id === item.id ? item : o)) : [item, ...prev];
     });
-  }, []);
+  }, [setItems]);
 
   const remove = useCallback((id) => {
     setItems(prev => prev.filter(o => o.id !== id));
-  }, []);
+  }, [setItems]);
 
   return {
     items, loading, setItems, fetchAll,
