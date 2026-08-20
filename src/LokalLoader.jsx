@@ -87,7 +87,11 @@ export function SplashScreenFull() {
       </div>
       <div className="absolute bottom-10 flex items-center gap-1.5 text-ink-dim" style={{ animation: 'lk-mark-in 0.5s ease 1.2s both', opacity: 0 }}>
         <span style={{ fontSize: 'clamp(10px, 0.9vw, 13px)', fontFamily: "'Inter', system-ui, sans-serif", letterSpacing: '0.04em', textTransform: 'uppercase' }}>creado por</span>
-        <KtrlMark className="text-current" style={{ height: 'clamp(12px, 1.1vw, 16px)', width: 'auto', opacity: 0.35 }} />
+        {/* opacity 0.35 (pensado para blanco sobre fondo oscuro) apagaba
+            demasiado el logo en tema claro, donde ya arranca de un gris
+            medio (text-ink-dim) en vez de blanco puro — quedaba casi
+            invisible. 0.6 sostiene la marca legible en los dos temas. */}
+        <KtrlMark className="text-current" style={{ height: 'clamp(12px, 1.1vw, 16px)', width: 'auto', opacity: 0.6 }} />
       </div>
     </div>
   );
