@@ -462,14 +462,6 @@ export default function ProductoForm({
           <ContactoSection form={form} set={set} tiendaWhatsapp={tiendaWhatsapp} inputCls={inputCls} labelCls={labelCls} />
       */}
 
-      {/* ── Error ── */}
-      {error && (
-        <div className="flex items-center gap-2 text-red-500 text-sm bg-red-50 dark:bg-red-500/10 rounded-xl px-4 py-3">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          {error}
-        </div>
-      )}
-
       {/* ── Guardar ── */}
     </div>
     </div>
@@ -494,6 +486,20 @@ export default function ProductoForm({
       style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}
     >
       <div className="max-w-lg mx-auto">
+        {/* Error de guardado — vive ACÁ, no en el flujo de secciones de
+            arriba: era la última "sección" antes del botón, en la zona
+            que useGapFluido ya descuenta por el botón fijo, así que en la
+            práctica quedaba fuera de vista sin scroll (reportado como
+            "aparece abajo del botón final"). Estar pegado al botón que lo
+            originó, siempre visible sin depender del scroll, es
+            justamente donde el usuario está mirando cuando el error
+            ocurre. */}
+        {error && (
+          <div className="flex items-center gap-2 text-red-500 text-sm bg-red-50 dark:bg-red-500/10 rounded-xl px-4 py-3 mb-2 shadow-lg">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {error}
+          </div>
+        )}
         <button
           onClick={onSave}
           disabled={saving || !form.titulo?.trim()}

@@ -2566,21 +2566,19 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     // Antes, una subida fallida devolvía null en silencio: handleSave la
     // sacaba con .filter(Boolean) y el producto se guardaba igual, sin
     // foto, sin que el dueño se enterara de que algo salió mal — reportado
-    // como "publiqué con foto y el sheet muestra Sin foto". Ahora tira el
-    // error real (con el motivo del backend si vino) para que handleSave
-    // lo capture y lo muestre en vez de seguir como si no hubiera pasado
-    // nada.
-    const uploadFoto = async (file) => {
-      const base64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.onerror = rej; r.readAsDataURL(file); });
-      const up = await apiFetch(`${API_BASE}/upload`, { method: 'POST', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fileName: file.name, fileData: base64, contentType: file.type }) });
-      if (!up.ok) {
-        const err = await up.json().catch(() => null);
-        throw new Error(err?.error || `No se pudo subir "${file.name}"`);
-      }
-      const { url } = await up.json();
-      if (!url) throw new Error(`No se pudo subir "${file.name}"`);
-      return url;
-    };
+    // como "publiqué con foto y el sheet muestra Sin foto". Esa
+    // investigación reveló la causa real de fondo: fotos de celular
+    // (8-20MB) chocando contra el límite de 5MB del backend, sin ninguna
+    // compresión de por medio — a diferencia de Ofertas y las fotos de
+    // tienda, que ya usan uploadImagenTienda/uploadOfertaImages
+    // (storeFormUtils.jsx: redimensiona a 1600px con canvas antes de
+    // subir), el flujo de fotos de Producto nunca se conectó a ese
+    // sistema y subía el archivo tal cual. uploadImagenTienda ya
+    // encapsula el fallback al original si canvas no puede procesarlo, y
+    // uploadFile (que usa por dentro) ya lanza con el error real del
+    // backend si la subida falla — no hace falta reimplementar nada de
+    // eso acá.
+    const uploadFoto = (file) => uploadImagenTienda(file);
 
     const handleSave = async () => {
       if (!productoForm.titulo.trim()) return;

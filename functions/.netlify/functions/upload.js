@@ -10,12 +10,20 @@ import { requireAuth } from './_lib/auth.js';
 import { handleError, handleOptions, HttpError, jsonResponse, parseJsonBody } from './_lib/http.js';
 import { sanitizeText } from './_lib/validation.js';
 
+// Imágenes: 5MB → 20MB. El cliente ya redimensiona antes de subir
+// (storeFormUtils.jsx: uploadImagenTienda/uploadOfertaImages, ambas a
+// ~1600px con canvas), así que en el caso normal una foto termina bien
+// por debajo de esto — este límite es la red de seguridad para cuando
+// canvas no puede procesar el archivo y cae al original sin comprimir
+// (formatos raros, navegadores viejos), no el límite que se espera pegar
+// en el uso normal. 5MB era demasiado ajustado incluso para eso: una sola
+// foto de cámara de celular moderna ya lo supera sin comprimir.
 const ALLOWED_TYPES = {
-  'image/jpeg': { folder: 'images', ext: 'jpg', maxBytes: 5 * 1024 * 1024, kind: 'image' },
-  'image/png': { folder: 'images', ext: 'png', maxBytes: 5 * 1024 * 1024, kind: 'image' },
-  'image/webp': { folder: 'images', ext: 'webp', maxBytes: 5 * 1024 * 1024, kind: 'image' },
-  'image/gif': { folder: 'images', ext: 'gif', maxBytes: 5 * 1024 * 1024, kind: 'image' },
-  'image/avif': { folder: 'images', ext: 'avif', maxBytes: 5 * 1024 * 1024, kind: 'image' },
+  'image/jpeg': { folder: 'images', ext: 'jpg', maxBytes: 20 * 1024 * 1024, kind: 'image' },
+  'image/png': { folder: 'images', ext: 'png', maxBytes: 20 * 1024 * 1024, kind: 'image' },
+  'image/webp': { folder: 'images', ext: 'webp', maxBytes: 20 * 1024 * 1024, kind: 'image' },
+  'image/gif': { folder: 'images', ext: 'gif', maxBytes: 20 * 1024 * 1024, kind: 'image' },
+  'image/avif': { folder: 'images', ext: 'avif', maxBytes: 20 * 1024 * 1024, kind: 'image' },
   'video/mp4': { folder: 'videos', ext: 'mp4', maxBytes: 20 * 1024 * 1024, kind: 'video' },
   'video/webm': { folder: 'videos', ext: 'webm', maxBytes: 20 * 1024 * 1024, kind: 'video' },
   'video/quicktime': { folder: 'videos', ext: 'mov', maxBytes: 20 * 1024 * 1024, kind: 'video' },
