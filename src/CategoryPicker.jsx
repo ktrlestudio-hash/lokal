@@ -106,12 +106,6 @@ export default function CategoryPicker({
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  useEffect(() => {
-    if (open && containerRef.current) {
-      setTimeout(() => containerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80);
-    }
-  }, [open]);
-
   // ── Sugerencia local al abrir ───────────────────────────────────────────────
   const runLocalSuggestion = useCallback(() => {
     if (!suggestionContext || suggDismissed) return;
@@ -158,7 +152,12 @@ export default function CategoryPicker({
   };
 
   // ── Abrir picker ────────────────────────────────────────────────────────────
+  // Toggle real: tocar el trigger con el dropdown ya abierto lo cierra,
+  // igual que cualquier selector/dropdown estándar — antes handleOpen
+  // siempre hacía setOpen(true) sin mirar el estado actual, así que
+  // volver a tocarlo no tenía ningún efecto visible.
   const handleOpen = () => {
+    if (open) { setOpen(false); setQuery(''); setCreating(false); return; }
     if (value) {
       // Expande el padre directo de la categoría elegida, así el árbol
       // abre mostrándola en contexto en vez de siempre desde la raíz.
@@ -281,33 +280,46 @@ export default function CategoryPicker({
         )}
       </div>
 
-      {/* Dropdown */}
+      {/* Dropdown — z-[5020]: por encima del botón fijo "Publicar"/
+          "Guardar" del formulario (fixed, z-[5010] en ProductoForm.jsx) —
+          el dropdown es contenido flotante temporal, tiene que poder
+          taparlo mientras está desplegado. Antes usaba z-50 y quedaba
+          CORTADO detrás del botón, invisible en la zona donde se
+          solapaban. */}
       {open && (
-        <div className="absolute z-50 left-0 right-0 mt-1.5 rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-surface-card shadow-xl overflow-hidden animate-dropdown-in">
+        <div className="absolute z-[5020] left-0 right-0 mt-1.5 rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-surface-card shadow-xl overflow-hidden animate-dropdown-in">
 
           {/* Search — sin autoFocus: abrir el selector no debe levantar el
               teclado del celular. Buscar es opcional (la mayoría navega la
               lista), así que el teclado aparece recién si el usuario toca
               el campo a propósito.
-              focus-within en el contenedor (no focus en el <input>): el
-              recuadro que el usuario ve es este chip con la lupa, así que
-              el resaltado de foco tiene que marcarlo a él. El input interno
-              es transparente y sin borde propio — marcarlo a él dibujaba un
-              segundo recuadro adentro del primero. */}
+              El propio <input> lleva el borde y el foco (border+focus:
+              border-brand), igual que "Nombre del producto" y el resto de
+              los campos de la app — antes el borde vivía en un <div>
+              envolvente con focus-within y el input adentro iba sin borde
+              propio, así que visualmente se leía como "un div con una lupa
+              que a veces se ilumina" en vez de un campo de texto
+              reconocible. La lupa y la X quedan superpuestas con padding
+              interno del input (pl-9/pr-8), no como hijos en un contenedor
+              flex aparte. */}
           <div className="p-2 border-b border-slate-100 dark:border-white/8">
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 focus-within:border-brand transition-colors">
-              <Search className="w-3.5 h-3.5 text-ink-dim shrink-0" />
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-dim pointer-events-none" />
               <input
                 ref={searchRef}
                 type="text"
                 value={query}
                 onChange={e => { setQuery(e.target.value); setCreating(false); }}
                 placeholder="Buscar por nombre, marca, tipo..."
-                className="flex-1 min-w-0 text-sm bg-transparent outline-none text-ink dark:text-ink-dim placeholder:text-ink-dim dark:placeholder:text-ink-dim"
+                className="w-full pl-9 pr-8 py-2 rounded-xl text-sm bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 outline-none focus:border-brand transition-colors text-ink dark:text-ink-dim placeholder:text-ink-dim dark:placeholder:text-ink-dim"
               />
               {query && (
-                <button type="button" onClick={() => setQuery('')}>
-                  <X className="w-3.5 h-3.5 text-ink-dim hover:text-ink-dim dark:hover:text-ink-dim" />
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/10 hover:text-ink transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
