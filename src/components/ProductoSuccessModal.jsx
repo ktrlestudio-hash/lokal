@@ -94,12 +94,21 @@ export default function ProductoSuccessModal({ product, onEdit, onView, onMisPro
           </div>
 
           <div className="px-4 py-4 space-y-3">
-            {/* Nombre + precio: el orden de lectura de una publicación
-                real (qué es, cuánto sale). */}
+            {/* Nombre + precio, con Stock a la derecha del precio en la
+                MISMA fila (no como chip suelto más abajo) — así no le
+                compite espacio a la descripción, y queda junto al dato con
+                el que se lee naturalmente (cuánto sale / cuánto queda). */}
             <div>
               <p className="font-bold text-ink text-base leading-snug">{titulo}</p>
-              {precio && (
-                <p className="text-green-600 dark:text-green-400 font-black text-2xl mt-1 leading-none">{precio}</p>
+              {(precio || stock != null) && (
+                <div className="flex items-baseline gap-2 mt-1">
+                  {precio && (
+                    <p className="text-green-600 dark:text-green-400 font-black text-2xl leading-none">{precio}</p>
+                  )}
+                  {stock != null && (
+                    <span className="text-xs font-semibold text-ink-dim">Stock: {stock}</span>
+                  )}
+                </div>
               )}
             </div>
 
@@ -111,21 +120,12 @@ export default function ProductoSuccessModal({ product, onEdit, onView, onMisPro
               <p className="text-sm text-ink-dim leading-relaxed line-clamp-2">{desc}</p>
             )}
 
-            {/* Categoría + stock — datos secundarios, no el estado visual
-                del producto (eso ya está flotando sobre la foto). */}
-            {(stock != null || catName) && (
-              <div className="flex flex-wrap gap-1.5">
-                {catName && (
-                  <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-surface-card-2 dark:bg-white/8 text-ink-dim border border-slate-200 dark:border-white/10">
-                    {catName}
-                  </span>
-                )}
-                {stock != null && (
-                  <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-surface-card-2 dark:bg-white/8 text-ink-dim border border-slate-200 dark:border-white/10">
-                    Stock: {stock}
-                  </span>
-                )}
-              </div>
+            {/* Categoría — dato de clasificación, no cantidad, se queda
+                como chip aparte (Stock ya se movió junto al precio). */}
+            {catName && (
+              <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full bg-surface-card-2 dark:bg-white/8 text-ink-dim border border-slate-200 dark:border-white/10">
+                {catName}
+              </span>
             )}
           </div>
         </div>
@@ -134,8 +134,13 @@ export default function ProductoSuccessModal({ product, onEdit, onView, onMisPro
             hacía que las otras dos quedaran anchas al pedo debajo, y el
             conjunto ocupaba tres renglones para tres acciones simples.
             Ver publicación conserva la jerarquía por color (sólido de
-            marca) y por ser la primera, no por ocupar más espacio. */}
-        <div className="px-4 pb-5 pt-1 flex gap-2 border-t border-slate-100 dark:border-white/8">
+            marca) y por ser la primera, no por ocupar más espacio.
+            py-4 parejo (antes pt-1/pb-5, mucho más aire abajo que arriba).
+            Editar/Mis productos con fondo gris sutil en reposo (antes solo
+            aparecía al hover/presionar) — sin eso se leían como texto
+            suelto con un borde, no como botones reales de la misma
+            jerarquía visual que el resto de la app. */}
+        <div className="px-4 py-4 flex gap-2 border-t border-slate-100 dark:border-white/8">
           <button
             onClick={onView || onClose}
             className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2.5 rounded-2xl bg-brand hover:bg-brand-light text-white font-bold text-xs transition-colors"
@@ -145,14 +150,14 @@ export default function ProductoSuccessModal({ product, onEdit, onView, onMisPro
           </button>
           <button
             onClick={onEdit}
-            className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2.5 rounded-2xl border-2 border-slate-200 dark:border-white/10 text-ink-dim font-semibold text-xs hover:bg-surface-card-2 dark:hover:bg-white/5 transition-colors"
+            className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2.5 rounded-2xl bg-surface-card-2 dark:bg-white/8 text-ink-dim font-semibold text-xs hover:bg-slate-200 dark:hover:bg-white/15 transition-colors"
           >
             <Edit3 className="w-4 h-4" />
             Editar
           </button>
           <button
             onClick={onMisProductos || onClose}
-            className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2.5 rounded-2xl border-2 border-slate-200 dark:border-white/10 text-ink-dim font-semibold text-xs hover:bg-surface-card-2 dark:hover:bg-white/5 transition-colors"
+            className="flex-1 flex flex-col items-center justify-center gap-1 px-2 py-2.5 rounded-2xl bg-surface-card-2 dark:bg-white/8 text-ink-dim font-semibold text-xs hover:bg-slate-200 dark:hover:bg-white/15 transition-colors"
           >
             <LayoutList className="w-4 h-4" />
             Mis productos

@@ -2563,17 +2563,35 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const ProductoFormOverlay = () => {
     if (!productoShowForm) return null;
 
+    // Antes, una subida fallida devolvía null en silencio: handleSave la
+    // sacaba con .filter(Boolean) y el producto se guardaba igual, sin
+    // foto, sin que el dueño se enterara de que algo salió mal — reportado
+    // como "publiqué con foto y el sheet muestra Sin foto". Ahora tira el
+    // error real (con el motivo del backend si vino) para que handleSave
+    // lo capture y lo muestre en vez de seguir como si no hubiera pasado
+    // nada.
     const uploadFoto = async (file) => {
       const base64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result.split(',')[1]); r.onerror = rej; r.readAsDataURL(file); });
       const up = await apiFetch(`${API_BASE}/upload`, { method: 'POST', authRequired: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fileName: file.name, fileData: base64, contentType: file.type }) });
-      return up.ok ? (await up.json()).url : null;
+      if (!up.ok) {
+        const err = await up.json().catch(() => null);
+        throw new Error(err?.error || `No se pudo subir "${file.name}"`);
+      }
+      const { url } = await up.json();
+      if (!url) throw new Error(`No se pudo subir "${file.name}"`);
+      return url;
     };
 
     const handleSave = async () => {
       if (!productoForm.titulo.trim()) return;
       setProductoSaving(true); setProductoSaveErr(null);
       try {
-        const fotosNuevas = (await Promise.all(productoFotoFiles.map(uploadFoto))).filter(Boolean);
+        // Sin .filter(Boolean): uploadFoto ahora lanza si algo sale mal
+        // (ver ese comentario), así que si UNA foto falla, Promise.all
+        // rechaza acá, cae al catch de abajo y se muestra el error real —
+        // en vez de guardar el producto igual pero silenciosamente sin
+        // esa foto.
+        const fotosNuevas = await Promise.all(productoFotoFiles.map(uploadFoto));
         const fotosExistentes = productoEditing ? productoFotoPreviews.filter(p => !p.startsWith('blob:')) : [];
         const fotos = [...fotosExistentes, ...fotosNuevas];
         const payload = {
