@@ -13,8 +13,8 @@
  */
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Search, Filter, ArrowUpDown, ShoppingBag } from 'lucide-react';
-import { FONT, RADIUS } from '../tokens.js';
+import { X, Search, Filter, ArrowUpDown, ShoppingBag, LayoutGrid, LayoutList } from 'lucide-react';
+import { FONT, RADIUS, SHADOW } from '../tokens.js';
 import { calcularBadges } from '../../utils/productBadges.js';
 import { trackBusqueda } from '../track.js';
 import {
@@ -34,28 +34,77 @@ const SORT_OPTIONS = [
   { value: 'destacados',  label: 'Destacados' },
 ];
 
-// ── Card-preview: reemplaza el mosaico estático de 4 fotos (una sola card
-// horizontal, sin interacción real más que "tocar para abrir el modal") por
-// un carrusel de verdad — cards reales navegables con scroll horizontal,
-// cada una clickeable a su propio detalle y con su propio botón de agregar
-// al carrito. Mismo patrón que el Home de LOKAL Global (useScrollEdges +
-// flechas + fade lateral, ya portado acá como <Carrusel>) y que "Más de la
-// tienda"/"Similares" en ProductDetailModal — no una pieza nueva, es el
-// mismo componente que el catálogo YA usa para las categorías verticales.
-// Título + "Ver todo →" reemplaza el chip "Ver catálogo · N productos"
-// flotando sobre la foto: la acción de abrir el modal completo ahora es
-// explícita en el link, no implícita en tocar cualquier parte de la card.
+// ── Card-preview: misma barra que el admin (ProductosScreen.jsx) —
+// buscador + ordenar + filtro + toggle de vista — seguida de hasta 6
+// productos en grilla o lista (según el toggle) y un "Ver todo →" al pie.
+// No es un preview mudo: los controles filtran/ordenan de verdad sobre los
+// primeros resultados; para el catálogo completo con categorías agrupadas
+// está "Ver todo", que abre CatalogoModal a pantalla completa. FiltrosSheet/
+// OrdenarSheet se reusan tal cual (son piezas sin estado propio, todo por
+// props) — no hay costo real en montarlos acá Y en el modal, cada uno con
+// su propio estado local.
+const PREVIEW_LIMIT = 6;
+
 export function CatalogoSection({ productos, onAbrirModal, carritoPropsDe, onOpenDetalle, onOpenAdminMenu }) {
-  if (!productos.length) return null;
+  const [query, setQuery] = useState('');
+  const [layout, setLayout] = useState('grilla');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
+  const [precioMin, setPrecioMin] = useState('');
+  const [precioMax, setPrecioMax] = useState('');
+  const [filtroBadges, setFiltroBadges] = useState([]);
+  const [filtrosAtributos, setFiltrosAtributos] = useState({});
+  const [sortBy, setSortBy] = useState('relevancia');
+
   const surf = 'var(--tp-surface)', surf2 = 'var(--tp-surface2)', border = 'var(--tp-border)';
   const txt = 'var(--tp-text)', txtM = 'var(--tp-text-muted)';
   const primary = 'var(--tp-primary)', onPrimary = 'var(--tp-on-primary)';
   const cardProps = { surf, surf2, border, txt, txtM, primary, onPrimary, onOpenAdminMenu };
 
-  // Preview de hasta 10 productos — el modal completo (con buscador/
-  // filtro/orden/categorías) es a donde va "Ver todo", así que acá no hace
-  // falta traer el catálogo entero.
-  const preview = productos.slice(0, 10);
+  const activeAttrCount = Object.values(filtrosAtributos).filter(v => v && v.length > 0).length;
+  const activeFilterCount = [precioMin !== '' || precioMax !== '', filtroBadges.length > 0].filter(Boolean).length + activeAttrCount;
+
+  const atributosDisponibles = useMemo(() => {
+    const map = {};
+    const SKIP_KEYS = new Set(['modelo', 'estado']);
+    productos.forEach(p => {
+      if (!p.attributes) return;
+      Object.entries(p.attributes).forEach(([k, v]) => {
+        if (SKIP_KEYS.has(k) || !v) return;
+        if (!map[k]) map[k] = { key: k, label: k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, ' '), values: new Set() };
+        map[k].values.add(String(v));
+      });
+    });
+    return Object.values(map).filter(a => a.values.size >= 2).map(a => ({ ...a, values: [...a.values].sort() }));
+  }, [productos]);
+
+  const filtrados = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const pMin = precioMin !== '' ? Number(precioMin) : null;
+    const pMax = precioMax !== '' ? Number(precioMax) : null;
+    const base = productos.filter(p => {
+      if (q && !nombreDe(p).toLowerCase().includes(q) && !(p.descripcion || '').toLowerCase().includes(q)) return false;
+      if (filtroBadges.length && !calcularBadges(p).some(id => filtroBadges.includes(id))) return false;
+      if (pMin !== null && (p.precio == null || Number(p.precio) < pMin)) return false;
+      if (pMax !== null && (p.precio == null || Number(p.precio) > pMax)) return false;
+      for (const [key, vals] of Object.entries(filtrosAtributos)) {
+        if (!vals || vals.length === 0) continue;
+        if (!p.attributes || !vals.includes(String(p.attributes[key]))) return false;
+      }
+      return true;
+    });
+    if (sortBy === 'relevancia') return base;
+    return [...base].sort((a, b) => {
+      if (sortBy === 'precio-asc')  return (a.precio ?? Infinity) - (b.precio ?? Infinity);
+      if (sortBy === 'precio-desc') return (b.precio ?? 0) - (a.precio ?? 0);
+      if (sortBy === 'nombre-az')   return nombreDe(a).localeCompare(nombreDe(b), 'es');
+      if (sortBy === 'destacados')  return (b.rating ?? 0) - (a.rating ?? 0);
+      return 0;
+    });
+  }, [productos, query, filtroBadges, precioMin, precioMax, filtrosAtributos, sortBy]);
+
+  if (!productos.length) return null;
+  const preview = filtrados.slice(0, PREVIEW_LIMIT);
 
   return (
     <section style={{ padding: '18px 16px 0' }}>
@@ -65,17 +114,84 @@ export function CatalogoSection({ productos, onAbrirModal, carritoPropsDe, onOpe
           Ver todo · {productos.length} →
         </button>
       </div>
-      <Carrusel gap={10} className="cm-catalogo-carrusel">
-        {preview.map(p => (
-          <ProductCardVertical
-            key={p.id}
-            p={p}
-            onOpen={() => onOpenDetalle?.(p)}
-            {...cardProps}
-            {...(carritoPropsDe?.(p) || {})}
+
+      {/* Barra: buscador + ordenar + filtro + toggle de vista — mismo layout
+          que la toolbar del admin (ProductosScreen.jsx). */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <div style={{ position: 'relative', flex: 1 }}>
+          <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: txtM, pointerEvents: 'none' }} />
+          <input
+            className="cm-input"
+            value={query} onChange={e => setQuery(e.target.value)}
+            placeholder="Buscar productos…"
+            style={{
+              width: '100%', padding: `10px ${query ? '32px' : '12px'} 10px 34px`, borderRadius: RADIUS.md,
+              borderWidth: '1.5px', borderStyle: 'solid', outline: 'none', fontSize: 13.5, fontWeight: 500, ...F,
+            }}
           />
-        ))}
-      </Carrusel>
+          {query && (
+            <button onClick={() => setQuery('')} aria-label="Limpiar búsqueda" className="no-press"
+              style={{ position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)', width: 20, height: 20, borderRadius: '50%', border: 'none', background: surf2, color: txtM, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        <button
+          onClick={() => setSortOpen(true)} aria-label="Ordenar" data-tooltip="Ordenar"
+          style={{ width: 40, borderRadius: RADIUS.md, border: `1.5px solid ${sortBy !== 'relevancia' ? primary : border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, background: surf2, color: sortBy !== 'relevancia' ? primary : txt }}>
+          <ArrowUpDown size={16} />
+        </button>
+        <button
+          onClick={() => setFiltersOpen(true)} aria-label="Filtros" data-tooltip="Filtros"
+          style={{ width: 40, borderRadius: RADIUS.md, border: `1.5px solid ${activeFilterCount > 0 ? primary : border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, position: 'relative', background: activeFilterCount > 0 ? primary : surf2, color: activeFilterCount > 0 ? onPrimary : txt }}>
+          <Filter size={16} />
+          {activeFilterCount > 0 && <span style={{ position: 'absolute', top: -1, right: -1, width: 7, height: 7, borderRadius: '50%', background: primary, boxShadow: `0 0 0 2px ${surf}` }} />}
+        </button>
+        <div style={{ display: 'flex', gap: 2, background: surf2, borderRadius: RADIUS.md, padding: 3, flexShrink: 0 }}>
+          <button onClick={() => setLayout('grilla')} aria-label="Vista grilla" data-tooltip="Grilla"
+            style={{ width: 30, height: 30, borderRadius: RADIUS.sm, border: 'none', cursor: 'pointer', display: 'grid', placeItems: 'center', background: layout === 'grilla' ? surf : 'transparent', color: layout === 'grilla' ? txt : txtM, boxShadow: layout === 'grilla' ? SHADOW.sm : 'none' }}>
+            <LayoutGrid size={15} />
+          </button>
+          <button onClick={() => setLayout('lista')} aria-label="Vista lista" data-tooltip="Lista"
+            style={{ width: 30, height: 30, borderRadius: RADIUS.sm, border: 'none', cursor: 'pointer', display: 'grid', placeItems: 'center', background: layout === 'lista' ? surf : 'transparent', color: layout === 'lista' ? txt : txtM, boxShadow: layout === 'lista' ? SHADOW.sm : 'none' }}>
+            <LayoutList size={15} />
+          </button>
+        </div>
+      </div>
+
+      {preview.length === 0 ? (
+        <p style={{ margin: 0, padding: '20px 0', textAlign: 'center', fontSize: 13.5, color: txtM, ...F }}>Sin resultados{query ? ` para "${query}"` : ''}</p>
+      ) : layout === 'grilla' ? (
+        <div className="cm-grid">
+          {preview.map(p => (
+            <ProductCardGrid key={p.id} p={p} onOpen={() => onOpenDetalle?.(p)} {...cardProps} {...(carritoPropsDe?.(p) || {})} />
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {preview.map(p => (
+            <ProductCardList key={p.id} p={p} onOpen={() => onOpenDetalle?.(p)} {...cardProps} {...(carritoPropsDe?.(p) || {})} />
+          ))}
+        </div>
+      )}
+
+      {productos.length > PREVIEW_LIMIT && (
+        <button onClick={onAbrirModal} className="no-press" style={{ display: 'block', width: '100%', margin: '14px 0 4px', padding: '10px 0', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: primary, textAlign: 'center', ...F }}>
+          Ver todo el catálogo →
+        </button>
+      )}
+
+      <FiltrosSheet
+        open={filtersOpen} onClose={() => setFiltersOpen(false)}
+        precioMin={precioMin} setPrecioMin={setPrecioMin}
+        precioMax={precioMax} setPrecioMax={setPrecioMax}
+        filtroBadges={filtroBadges} setFiltroBadges={setFiltroBadges}
+        atributosDisponibles={atributosDisponibles}
+        filtrosAtributos={filtrosAtributos} setFiltrosAtributos={setFiltrosAtributos}
+        activeFilterCount={activeFilterCount}
+        onLimpiar={() => { setPrecioMin(''); setPrecioMax(''); setFiltroBadges([]); setFiltrosAtributos({}); setFiltersOpen(false); }}
+      />
+      <OrdenarSheet open={sortOpen} onClose={() => setSortOpen(false)} sortBy={sortBy} setSortBy={setSortBy} options={SORT_OPTIONS} />
     </section>
   );
 }
@@ -240,6 +356,19 @@ export function CatalogoModal({
             style={{ width: 46, borderRadius: RADIUS.md, border: `1.5px solid ${sortBy !== 'relevancia' ? primary : border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, background: surf2, color: sortBy !== 'relevancia' ? primary : txt }}>
             <ArrowUpDown size={18} />
           </button>
+          {/* Toggle de vista — segmented control, mismo lugar/forma que el
+              admin (ProductosScreen.jsx: grid/lista al lado de filtros).
+              Antes vivía escondido dentro de FiltrosSheet. */}
+          <div style={{ display: 'flex', gap: 2, background: surf2, borderRadius: RADIUS.md, padding: 3, flexShrink: 0 }}>
+            <button onClick={() => setLayout('grilla')} aria-label="Vista grilla" data-tooltip="Grilla"
+              style={{ width: 32, height: 32, borderRadius: RADIUS.sm, border: 'none', cursor: 'pointer', display: 'grid', placeItems: 'center', background: layout === 'grilla' ? surf : 'transparent', color: layout === 'grilla' ? txt : txtM, boxShadow: layout === 'grilla' ? SHADOW.sm : 'none' }}>
+              <LayoutGrid size={16} />
+            </button>
+            <button onClick={() => setLayout('lista')} aria-label="Vista lista" data-tooltip="Lista"
+              style={{ width: 32, height: 32, borderRadius: RADIUS.sm, border: 'none', cursor: 'pointer', display: 'grid', placeItems: 'center', background: layout === 'lista' ? surf : 'transparent', color: layout === 'lista' ? txt : txtM, boxShadow: layout === 'lista' ? SHADOW.sm : 'none' }}>
+              <LayoutList size={16} />
+            </button>
+          </div>
         </div>
 
         {categorias.length > 0 && (
@@ -342,7 +471,6 @@ export function CatalogoModal({
         filtroBadges={filtroBadges} setFiltroBadges={setFiltroBadges}
         atributosDisponibles={atributosDisponibles}
         filtrosAtributos={filtrosAtributos} setFiltrosAtributos={setFiltrosAtributos}
-        layout={layout} setLayout={setLayout}
         activeFilterCount={activeFilterCount}
         onLimpiar={() => { setPrecioMin(''); setPrecioMax(''); setFiltroBadges([]); setFiltrosAtributos({}); setFiltersOpen(false); }}
       />

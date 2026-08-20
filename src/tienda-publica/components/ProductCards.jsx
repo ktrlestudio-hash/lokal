@@ -180,10 +180,33 @@ export function TituloDescripcion({ nombre, descripcion, txt, txtM, surf2, titul
    global) el control NO se renderiza: no tiene sentido mostrar un botón "+"
    que no agrega nada a ningún carrito, ni tolerar qty=0/undefined como si
    hubiera un flujo de compra activo. El caller debe ocultar/omitir
-   QtyControl en ese caso (commerce-modern siempre pasa onAdd). ── */
-export function QtyControl({ qty, onAdd, onRemove, p, primary, onPrimary, surf2, border, txt, size = 'md' }) {
+   QtyControl en ese caso (commerce-modern siempre pasa onAdd).
+
+   `compact`: en vez de expandirse a un stepper (+/cantidad/-) que le come
+   ancho al precio de al lado, el botón se queda SIEMPRE del mismo tamaño y
+   muestra un badge numérico flotando en la esquina cuando qty>0 — mismo
+   criterio que MV Distribuciones para las cards de grilla, donde precio y
+   control comparten una fila angosta y un stepper completo se ve apretado.
+   El tap sigue sumando de a uno; para restar/gestionar cantidad exacta el
+   producto ya tiene su propio selector completo en ProductDetailModal. ── */
+export function QtyControl({ qty, onAdd, onRemove, p, primary, onPrimary, surf2, border, txt, size = 'md', compact = false }) {
   if (!onAdd) return null;
   const d = size === 'sm' ? 34 : 38;
+
+  if (compact) {
+    return (
+      <button onClick={e => { e.stopPropagation(); onAdd(p); }} aria-label={qty > 0 ? `Agregar (${qty} en el carrito)` : 'Agregar'} className="no-press cm-add"
+        style={{ position: 'relative', width: d, height: d, borderRadius: RADIUS.md, border: 'none', background: primary, color: onPrimary, display: 'grid', placeItems: 'center', cursor: 'pointer', boxShadow: SHADOW.sm, flexShrink: 0 }}>
+        <Plus size={18} />
+        {qty > 0 && (
+          <span style={{ position: 'absolute', top: -6, right: -6, minWidth: 18, height: 18, padding: '0 4px', borderRadius: RADIUS.full, background: 'var(--tp-secondary, #ef4444)', color: '#fff', fontSize: 10.5, fontWeight: 900, display: 'grid', placeItems: 'center', border: `2px solid ${surf2}` }}>
+            {qty > 99 ? '99+' : qty}
+          </span>
+        )}
+      </button>
+    );
+  }
+
   if (qty === 0) {
     return (
       <button onClick={e => { e.stopPropagation(); onAdd(p); }} aria-label="Agregar" className="no-press cm-add"
@@ -500,10 +523,18 @@ export function Carrusel({ children, gap = 12, className = 'cm-chips', padding =
   );
 }
 
-/* ── Card GRILLA: foto arriba, info abajo (catálogo visual). Con carrito
-   activo, el selector de cantidad (QtyControl) se auto-oculta si no viene
-   onAdd — ver su propio comentario más arriba. Extraída tal cual de
-   commerce-modern.jsx. ── */
+// Alto fijo del bloque de texto bajo la foto — mismo criterio que
+// CM_VERT_BODY: todas las cards de la grilla miden igual sin importar si el
+// título es de 1 o 2 líneas, en vez de que la grilla quede dentada.
+const CM_GRID_BODY = 88;
+
+/* ── Card GRILLA: foto arriba (siempre 1:1), info abajo con alto fijo
+   (catálogo visual — 2 por fila, mismo criterio que MV Distribuciones). Con
+   carrito activo, el selector de cantidad (QtyControl) se auto-oculta si no
+   viene onAdd — ver su propio comentario más arriba. Usa la variante
+   `compact` de QtyControl (botón fijo + badge de cantidad) en vez del
+   stepper expandible: acá precio y control comparten una fila angosta, y un
+   stepper completo (+/cantidad/-) se aprieta contra el precio. ── */
 export function ProductCardGrid({ p, onOpen, surf, surf2, border, txt, txtM, primary, onPrimary, onOpenAdminMenu, qty, onAdd, onRemove }) {
   const img = fotoDe(p);
   const pct = descuentoPct(p);
@@ -527,7 +558,7 @@ export function ProductCardGrid({ p, onOpen, surf, surf2, border, txt, txtM, pri
         )}
         <OfertaMenuButton onOpen={onOpenAdminMenu ? () => onOpenAdminMenu(p) : null} />
       </div>
-      <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 5, flex: 1 }}>
+      <div style={{ height: CM_GRID_BODY, padding: 12, display: 'flex', flexDirection: 'column', gap: 5 }}>
         <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: txt, lineHeight: 1.2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{nombreDe(p)}</h3>
         {p.rating && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, color: txtM }}>
@@ -536,7 +567,7 @@ export function ProductCardGrid({ p, onOpen, surf, surf2, border, txt, txtM, pri
         )}
         <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
           <Precio p={p} txt={txt} />
-          <QtyControl qty={qty} onAdd={onAdd} onRemove={onRemove} p={p} primary={primary} onPrimary={onPrimary} surf2={surf2} border={border} txt={txt} size="sm" />
+          <QtyControl qty={qty} onAdd={onAdd} onRemove={onRemove} p={p} primary={primary} onPrimary={onPrimary} surf2={surf2} border={border} txt={txt} size="sm" compact />
         </div>
       </div>
     </div>

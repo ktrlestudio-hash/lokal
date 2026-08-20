@@ -472,9 +472,11 @@ export function TemplateCommerceModern({
 
   // Props de carrito por producto — solo si el catálogo (módulo "productos")
   // está activo. El dueño viendo su propia tienda no necesita agregar al
-  // carrito, así que tampoco se lo ofrecemos (evita que confunda su propia
-  // vista de vendedor con la del cliente).
-  const catalogoConCarrito = s.productos?.activa && !esDueño;
+  // carrito. Antes se lo ocultaba al dueño viendo su propia tienda ("evita
+  // que confunda su vista de vendedor con la del cliente"), pero el dueño
+  // necesita poder probar el flujo real de carrito en su propia página —
+  // decisión revertida a pedido explícito.
+  const catalogoConCarrito = s.productos?.activa;
   const carritoPropsDe = (p) => catalogoConCarrito
     ? { qty: carritoQty[p.id] || 0, onAdd: agregarAlCarrito, onRemove: quitarDelCarrito }
     : {};
@@ -682,6 +684,22 @@ export function TemplateCommerceModern({
         );
       })()}
 
+      {/* ── Ofertas — card-preview + modal fullscreen (Fase 6 del plan,
+          mismo patrón que Catálogo/Mapa). Todo el contenido de búsqueda/
+          filtro/orden/grilla vive en OfertasModal, montado fuera de este
+          scroll (portal a document.body). Va PRIMERO (justo después del
+          hero) — son los destacados/flyers de la tienda, la vidriera; el
+          catálogo completo es la góndola, va después. ── */}
+      {s.ofertas?.activa && (
+        <OfertasSection
+          ofertasBase={ofertasBase} ofertasPendientes={ofertasPendientes} onAbrirModal={() => setOfertasModalOpen(true)}
+          tienda={tienda} esDueño={esDueño}
+          onVerOferta={onVerOferta}
+          onOpenAdminTarget={setOfertaAdminTarget}
+          onOpenShareOferta={(o) => { setOfertaCompartir(o); setShareOfertaOpen(true); }}
+        />
+      )}
+
       {/* ── Catálogo — card-preview + modal fullscreen (Fase 6 del plan,
           mismo patrón que Mapa: MapaSection/MapaModal). Todo el contenido
           de búsqueda/filtro/orden/grilla vive en CatalogoModal, montado
@@ -690,20 +708,6 @@ export function TemplateCommerceModern({
         <CatalogoSection
           productos={productos} onAbrirModal={() => setCatalogoModalOpen(true)}
           carritoPropsDe={carritoPropsDe} onOpenDetalle={setDetalle} onOpenAdminMenu={esDueño ? setOfertaAdminTarget : undefined}
-        />
-      )}
-
-      {/* ── Ofertas — card-preview + modal fullscreen (Fase 6 del plan,
-          mismo patrón que Catálogo/Mapa). Todo el contenido de búsqueda/
-          filtro/orden/grilla vive en OfertasModal, montado fuera de este
-          scroll (portal a document.body). ── */}
-      {s.ofertas?.activa && (
-        <OfertasSection
-          ofertasBase={ofertasBase} ofertasPendientes={ofertasPendientes} onAbrirModal={() => setOfertasModalOpen(true)}
-          tienda={tienda} esDueño={esDueño}
-          onVerOferta={onVerOferta}
-          onOpenAdminTarget={setOfertaAdminTarget}
-          onOpenShareOferta={(o) => { setOfertaCompartir(o); setShareOfertaOpen(true); }}
         />
       )}
       {ofertaCompartir && (

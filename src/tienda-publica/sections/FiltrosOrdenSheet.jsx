@@ -2,11 +2,12 @@
  * FiltrosSheet / OrdenarSheet — subconjunto acotado del sistema completo
  * de filtros de TodasOfertasScreen.jsx, portado al catálogo de UNA tienda
  * (commerce-modern.jsx). Categoría no se duplica acá: ya la cubren los
- * chips existentes arriba del catálogo. El toggle lista/grilla se mudó
- * DENTRO de FiltrosSheet (ya no vive suelto en la barra).
+ * chips existentes arriba del catálogo. El toggle lista/grilla vive en la
+ * barra fija de CatalogoModal (segmented control), mismo lugar que el
+ * admin (ProductosScreen.jsx) — no dentro de este sheet.
  */
 import React, { useState, useEffect } from 'react';
-import { X, LayoutGrid, List, Check } from 'lucide-react';
+import { X, Check } from 'lucide-react';
 import { RADIUS, SHADOW, FONT } from '../tokens.js';
 import { useSheetOpen } from '../hooks/useSheetOpen.js';
 import { SHEET_TRANSITION_CSS } from './sheetTransitionCss.js';
@@ -77,7 +78,6 @@ export function FiltrosSheet({
   precioMin, setPrecioMin, precioMax, setPrecioMax,
   filtroBadges = [], setFiltroBadges,
   atributosDisponibles = [], filtrosAtributos = {}, setFiltrosAtributos,
-  layout, setLayout,
   onLimpiar, activeFilterCount,
 }) {
   // Input "borrador": no aplica en cada tecla, solo al tocar OK o Enter —
@@ -187,29 +187,6 @@ export function FiltrosSheet({
           <button onClick={applyPrecio} style={{ flexShrink: 0, padding: '10px 14px', borderRadius: RADIUS.md, border: 'none', background: 'var(--tp-primary)', color: 'var(--tp-on-primary)', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', ...F }}>OK</button>
         </div>
       </div>
-
-      {/* setLayout es opcional: Ofertas reusa este sheet pero su grilla es
-          fija (sin toggle lista/grilla) — sin setLayout, esta sección
-          entera no tiene sentido mostrarla. */}
-      {setLayout && (
-        <div style={{ marginBottom: activeFilterCount > 0 ? 20 : 0 }}>
-          <p style={sectionLabel}>Vista</p>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setLayout('lista')} style={{
-              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0',
-              borderRadius: RADIUS.md, border: `1.5px solid ${layout === 'lista' ? 'var(--tp-primary)' : 'var(--tp-border)'}`,
-              background: layout === 'lista' ? 'var(--tp-primary-soft)' : 'var(--tp-surface2)',
-              color: layout === 'lista' ? 'var(--tp-primary)' : 'var(--tp-text)', cursor: 'pointer', fontSize: 13, fontWeight: 700, ...F,
-            }}><List size={16} />Lista</button>
-            <button onClick={() => setLayout('grilla')} style={{
-              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0',
-              borderRadius: RADIUS.md, border: `1.5px solid ${layout === 'grilla' ? 'var(--tp-primary)' : 'var(--tp-border)'}`,
-              background: layout === 'grilla' ? 'var(--tp-primary-soft)' : 'var(--tp-surface2)',
-              color: layout === 'grilla' ? 'var(--tp-primary)' : 'var(--tp-text)', cursor: 'pointer', fontSize: 13, fontWeight: 700, ...F,
-            }}><LayoutGrid size={16} />Grilla</button>
-          </div>
-        </div>
-      )}
 
       {activeFilterCount > 0 && (
         <button onClick={onLimpiar} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 13.5, fontWeight: 700, color: '#ef4444', ...F }}>
