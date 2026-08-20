@@ -2653,21 +2653,33 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     };
 
     return (
-      <div className="fixed inset-0 z-[5000] bg-[#f5f5f5] dark:bg-[#080808] overflow-y-auto no-scrollbar pb-24">
+      // flex-col + h-[100dvh]: el formulario entero (foto+nombre+fecha+
+      // botón) tiene que entrar SIN scroll, no ganarle espacio al botón
+      // metiéndolo en un footer aparte. flex-1 min-h-0 + justify-center
+      // reparte el alto disponible; la foto es la pieza más grande, así
+      // que es la que se achica cuando no entra todo — max-height (no solo
+      // aspect-ratio) la limita a lo que quede libre, manteniendo la
+      // proporción 1:1.414 mientras haya espacio. overflow-y-auto queda
+      // como red de seguridad, no como comportamiento esperado (pantallas
+      // MUY chicas o zoom de accesibilidad alto).
+      <div className="fixed inset-0 z-[5000] bg-[#f5f5f5] dark:bg-[#080808] flex flex-col">
         <StorePageHeader
           title={ofertaEditing ? 'Editar oferta' : 'Nueva oferta'}
           onBack={() => setOfertaShowForm(false)}
         />
-        <div className="max-w-md mx-auto p-4 lg:p-8 space-y-5">
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col">
+        <div className="max-w-md mx-auto w-full p-4 lg:p-8 flex-1 flex flex-col justify-center gap-4 min-h-0">
           {/* Foto */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-ink-dim mb-2">Foto</label>
+          <div className="min-h-0 flex flex-col">
+            <label className="block text-xs font-bold uppercase tracking-wider text-ink-dim mb-2 shrink-0">Foto</label>
             {/* aspect-[1/1.414] — MISMA proporción que la card real (lista
-              de ofertas del admin y la vista pública, ambas ya ajustadas):
-              antes era 1:1 acá, así la vista previa al cargar/editar no
-              coincidía con cómo se ve encuadrada la foto en ningún otro
-              lado de la app. */}
-            <label className={`block aspect-[1/1.414] rounded-2xl border-2 border-dashed bg-surface-card-2 dark:bg-white/5 overflow-hidden cursor-pointer relative hover:border-brand transition-colors ${ofertaIntentoGuardar && faltante === 'foto' ? 'border-rose-400 dark:border-rose-500/60' : 'border-slate-200 dark:border-white/10'}`}>
+              de ofertas del admin y la vista pública, ambas ya ajustadas).
+              max-height limita cuánto puede crecer en pantallas altas/
+              anchas, así el resto del formulario (nombre, fecha, botón)
+              siempre queda visible sin scroll — antes solo tenía
+              aspect-ratio, así que en pantallas chicas podía ocupar casi
+              toda la altura y empujar el botón fuera de la vista. */}
+            <label className={`block mx-auto aspect-[1/1.414] max-h-[38vh] w-auto rounded-2xl border-2 border-dashed bg-surface-card-2 dark:bg-white/5 overflow-hidden cursor-pointer relative hover:border-brand transition-colors ${ofertaIntentoGuardar && faltante === 'foto' ? 'border-rose-400 dark:border-rose-500/60' : 'border-slate-200 dark:border-white/10'}`}>
               <input type="file" accept="image/*" className="hidden" onChange={handleFoto} />
               {hayFotoValida ? (
                 <>
@@ -2752,11 +2764,12 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
           <button
             onClick={handleSave}
-            className="w-full py-3.5 bg-brand hover:bg-brand-dark text-white font-bold text-sm rounded-2xl flex items-center justify-center gap-2 transition-colors"
+            className="w-full py-3.5 bg-brand hover:bg-brand-dark text-white font-bold text-sm rounded-2xl flex items-center justify-center gap-2 transition-colors shrink-0"
           >
             <Save className="w-4 h-4" />
             {ofertaEditing ? 'Guardar cambios' : 'Publicar oferta'}
           </button>
+        </div>
         </div>
       </div>
     );
