@@ -11,9 +11,10 @@
  * flotante del hero, no se pierde. Sin esto, el centro vuelve a ser
  * Compartir (tiendas sin catálogo, o el propio dueño viendo su tienda).
  */
-import React from 'react';
+import React, { useRef } from 'react';
 import { MapPin, Clock, Share2, ShoppingCart } from 'lucide-react';
 import { RADIUS, FONT } from '../tokens.js';
+import { usePublicarAlturaReal } from '../../store/hooks/usePublicarAlturaReal.js';
 
 const F = { fontFamily: FONT.family };
 
@@ -49,8 +50,15 @@ function NavItem({ Icon, label, onClick }) {
 // la empuje a la vista.
 export function TiendaNavBar({ onAbrirMapa, onAbrirHorarios, onCompartir, onAbrirCarrito, carritoCount }) {
   const conCarrito = onAbrirCarrito != null;
+  // Altura real publicada en --tp-nav-h — la usan los sheets/modales que se
+  // abren POR ENCIMA de este nav (ej. ProductDetailModal) para no taparlo
+  // con su position:fixed. Un fixed con inset:0 ignora el flujo normal del
+  // documento (donde este nav sí "empuja" el resto del layout como
+  // shrink-0), así que necesita este valor medido para saber cuánto restar.
+  const navRef = useRef(null);
+  usePublicarAlturaReal(navRef, true, '--tp-nav-h');
   return (
-    <div style={{
+    <div ref={navRef} style={{
       flexShrink: 0, zIndex: 250,
       // Mismos valores que BottomNav global (App.jsx): fondo translúcido +
       // blur (no sólido), mismo tono de borde. Antes esta barra era opaca

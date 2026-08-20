@@ -14,11 +14,11 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Search, Filter, ArrowUpDown, ShoppingBag } from 'lucide-react';
-import { FONT, RADIUS, SHADOW } from '../tokens.js';
+import { FONT, RADIUS } from '../tokens.js';
 import { calcularBadges } from '../../utils/productBadges.js';
 import { trackBusqueda } from '../track.js';
 import {
-  nombreDe, fotoDe, ProductCardList, ProductCardVertical,
+  nombreDe, ProductCardList, ProductCardVertical,
   iconoDeCategoria, esCategoriaVertical, Chip, Carrusel, ProductCardGrid,
 } from '../components/ProductCards.jsx';
 import { FiltrosSheet, OrdenarSheet } from './FiltrosOrdenSheet.jsx';
@@ -34,46 +34,48 @@ const SORT_OPTIONS = [
   { value: 'destacados',  label: 'Destacados' },
 ];
 
-// ── Card-preview: vive en el lugar normal del scroll (mismo layout visual
-// que MapaSection: <h2> + card clickeable con borderRadius/boxShadow), no
-// se renderiza si no hay productos activos/disponibles.
-export function CatalogoSection({ productos, onAbrirModal }) {
+// ── Card-preview: reemplaza el mosaico estático de 4 fotos (una sola card
+// horizontal, sin interacción real más que "tocar para abrir el modal") por
+// un carrusel de verdad — cards reales navegables con scroll horizontal,
+// cada una clickeable a su propio detalle y con su propio botón de agregar
+// al carrito. Mismo patrón que el Home de LOKAL Global (useScrollEdges +
+// flechas + fade lateral, ya portado acá como <Carrusel>) y que "Más de la
+// tienda"/"Similares" en ProductDetailModal — no una pieza nueva, es el
+// mismo componente que el catálogo YA usa para las categorías verticales.
+// Título + "Ver todo →" reemplaza el chip "Ver catálogo · N productos"
+// flotando sobre la foto: la acción de abrir el modal completo ahora es
+// explícita en el link, no implícita en tocar cualquier parte de la card.
+export function CatalogoSection({ productos, onAbrirModal, carritoPropsDe, onOpenDetalle, onOpenAdminMenu }) {
   if (!productos.length) return null;
-  const previewFotos = productos.slice(0, 4).map(fotoDe).filter(Boolean);
-  const surf2 = 'var(--tp-surface2)', border = 'var(--tp-border)', txt = 'var(--tp-text)';
+  const surf = 'var(--tp-surface)', surf2 = 'var(--tp-surface2)', border = 'var(--tp-border)';
+  const txt = 'var(--tp-text)', txtM = 'var(--tp-text-muted)';
+  const primary = 'var(--tp-primary)', onPrimary = 'var(--tp-on-primary)';
+  const cardProps = { surf, surf2, border, txt, txtM, primary, onPrimary, onOpenAdminMenu };
+
+  // Preview de hasta 10 productos — el modal completo (con buscador/
+  // filtro/orden/categorías) es a donde va "Ver todo", así que acá no hace
+  // falta traer el catálogo entero.
+  const preview = productos.slice(0, 10);
 
   return (
     <section style={{ padding: '18px 16px 0' }}>
-      <h2 style={{ margin: '0 0 .75rem', fontSize: FONT.size?.xl || 18, fontWeight: 900, color: txt, ...F }}>Catálogo</h2>
-      <div
-        onClick={onAbrirModal}
-        role="button" tabIndex={0}
-        className="no-press"
-        style={{ borderRadius: RADIUS.xl, overflow: 'hidden', boxShadow: SHADOW.md, border: `1px solid ${border}`, cursor: 'pointer', position: 'relative', background: surf2 }}
-      >
-        {previewFotos.length > 0 ? (
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(previewFotos.length, 4)}, 1fr)`, height: 140 }}>
-            {previewFotos.map((src, i) => (
-              <img key={i} src={src} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-            ))}
-          </div>
-        ) : (
-          <div style={{ height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <ShoppingBag size={28} style={{ color: 'var(--tp-text-muted)', opacity: 0.5 }} />
-          </div>
-        )}
-        <div style={{ position: 'absolute', bottom: 10, left: 10, pointerEvents: 'none' }}>
-          <div style={{
-            background: 'rgba(0,0,0,0.55)', color: '#fff',
-            borderRadius: 20, padding: '5px 12px',
-            fontFamily: FONT.family, fontSize: 12, fontWeight: 700,
-            display: 'flex', alignItems: 'center', gap: 6,
-            backdropFilter: 'blur(6px)',
-          }}>
-            Ver catálogo · {productos.length} {productos.length === 1 ? 'producto' : 'productos'}
-          </div>
-        </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '.75rem' }}>
+        <h2 style={{ margin: 0, fontSize: FONT.size?.xl || 18, fontWeight: 900, color: txt, ...F }}>Catálogo</h2>
+        <button onClick={onAbrirModal} className="no-press" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: primary, ...F }}>
+          Ver todo · {productos.length} →
+        </button>
       </div>
+      <Carrusel gap={10} className="cm-catalogo-carrusel">
+        {preview.map(p => (
+          <ProductCardVertical
+            key={p.id}
+            p={p}
+            onOpen={() => onOpenDetalle?.(p)}
+            {...cardProps}
+            {...(carritoPropsDe?.(p) || {})}
+          />
+        ))}
+      </Carrusel>
     </section>
   );
 }
@@ -86,7 +88,11 @@ export function CatalogoModal({
 }) {
   const [query, setQuery] = useState('');
   const [catActiva, setCatActiva] = useState('__todas');
-  const [layout, setLayout] = useState('lista');
+  // 'grilla' por defecto (2 columnas): el usuario pidió que el catálogo se
+  // vea como el de MV Distribuciones de entrada — antes arrancaba en
+  // 'lista' (una card ancha por fila), que él veía como poco útil para
+  // navegar un catálogo grande de un vistazo.
+  const [layout, setLayout] = useState('grilla');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [precioMin, setPrecioMin] = useState('');

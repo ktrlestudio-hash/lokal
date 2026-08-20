@@ -687,7 +687,10 @@ export function TemplateCommerceModern({
           de búsqueda/filtro/orden/grilla vive en CatalogoModal, montado
           fuera de este scroll (portal a document.body). ── */}
       {s.productos?.activa && (
-        <CatalogoSection productos={productos} onAbrirModal={() => setCatalogoModalOpen(true)} />
+        <CatalogoSection
+          productos={productos} onAbrirModal={() => setCatalogoModalOpen(true)}
+          carritoPropsDe={carritoPropsDe} onOpenDetalle={setDetalle} onOpenAdminMenu={esDueño ? setOfertaAdminTarget : undefined}
+        />
       )}
 
       {/* ── Ofertas — card-preview + modal fullscreen (Fase 6 del plan,
@@ -695,7 +698,13 @@ export function TemplateCommerceModern({
           filtro/orden/grilla vive en OfertasModal, montado fuera de este
           scroll (portal a document.body). ── */}
       {s.ofertas?.activa && (
-        <OfertasSection ofertasBase={ofertasBase} ofertasPendientes={ofertasPendientes} onAbrirModal={() => setOfertasModalOpen(true)} />
+        <OfertasSection
+          ofertasBase={ofertasBase} ofertasPendientes={ofertasPendientes} onAbrirModal={() => setOfertasModalOpen(true)}
+          tienda={tienda} esDueño={esDueño}
+          onVerOferta={onVerOferta}
+          onOpenAdminTarget={setOfertaAdminTarget}
+          onOpenShareOferta={(o) => { setOfertaCompartir(o); setShareOfertaOpen(true); }}
+        />
       )}
       {ofertaCompartir && (
         <ShareSheet

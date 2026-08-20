@@ -15,7 +15,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Search, Filter, ArrowUpDown, Tag, Share2, MoreVertical, RotateCw, Loader2 } from 'lucide-react';
-import { FONT, RADIUS, SHADOW } from '../tokens.js';
+import { FONT, RADIUS } from '../tokens.js';
 import { calcularBadges } from '../../utils/productBadges.js';
 import { iconoDeCategoria, Chip, Carrusel } from '../components/ProductCards.jsx';
 import { FiltrosSheet, OrdenarSheet } from './FiltrosOrdenSheet.jsx';
@@ -31,64 +31,100 @@ const OF_SORT_OPTIONS = [
   { value: 'nombre-az',   label: 'Nombre A-Z' },
 ];
 
-// ── Card-preview: vive en el lugar normal del scroll (mismo layout visual
-// que MapaSection/CatalogoSection), no se renderiza si no hay ofertas.
-export function OfertasSection({ ofertasBase, ofertasPendientes, onAbrirModal }) {
+// ── OfertaCard — la card "confirmada" (sin estado pendiente/error, eso es
+// exclusivo del flujo de gestión del dueño dentro del modal), extraída tal
+// cual del JSX que ya vivía inline en OfertasModal para poder reusarla acá
+// y en el carrusel de la card-preview sin duplicar el markup. Formato
+// flyer vertical (aspectRatio 1/1.414) — es el diseño real de una oferta
+// en LOKAL LINKS, no un producto de catálogo con precio/stock.
+function OfertaCard({ o, tienda, esDueño, onVerOferta, onOpenShareOferta, onOpenAdminTarget, surf2, border }) {
+  const ofVencida = o.expireAt && new Date(o.expireAt).getTime() < Date.now();
+  const ofOculta = o.visible === false;
+  const ofInactiva = ofVencida || ofOculta;
+  return (
+    <a href={`/${tienda.slug}/o/${o.slug || o.id}`}
+      onClick={(e) => {
+        trackClick(tienda.id, 'card', { productoId: o.id });
+        if (onVerOferta && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
+          e.preventDefault();
+          onVerOferta(tienda, o);
+        }
+      }}
+      style={{ position: 'relative', display: 'block', aspectRatio: '1/1.414', borderRadius: RADIUS.lg, overflow: 'hidden', background: surf2, border: `1px solid ${border}`, textDecoration: 'none', opacity: ofInactiva ? 0.55 : 1 }}>
+      <img src={o.thumbUrl || o.imageUrl} alt={o.nombre} loading="lazy"
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      {ofInactiva && (
+        <span style={{ position: 'absolute', top: 8, left: 8, zIndex: 3, padding: '3px 8px', borderRadius: RADIUS.sm, background: ofVencida ? '#EF4444' : 'rgba(0,0,0,.6)', color: '#fff', fontSize: 10, fontWeight: 800 }}>
+          {ofVencida ? 'Vencida' : 'Oculta'}
+        </span>
+      )}
+      <button
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenShareOferta(o); }}
+        aria-label="Compartir oferta" className="no-press cm-hero-share-btn"
+        style={{ position: 'absolute', top: 8, right: esDueño ? 46 : 8, zIndex: 3, width: 32, height: 32, borderRadius: 10, border: 'none', background: 'rgba(0,0,0,.45)', color: '#fff', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background-color .15s ease' }}>
+        <Share2 size={15} />
+      </button>
+      {esDueño && (
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenAdminTarget(o); }}
+          aria-label="Gestionar oferta" className="no-press cm-hero-share-btn"
+          style={{ position: 'absolute', top: 8, right: 8, zIndex: 3, width: 32, height: 32, borderRadius: 10, border: 'none', background: 'rgba(0,0,0,.45)', color: '#fff', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <MoreVertical size={15} />
+        </button>
+      )}
+    </a>
+  );
+}
+
+// ── Card-preview: reemplaza el mosaico estático de 4 fotos por un carrusel
+// de OfertaCard reales — mismo criterio que CatalogoSection.jsx (ver ese
+// comentario para el porqué completo). Las pendientes/con error se quedan
+// fuera del carrusel a propósito: ese estado de "gestión en curso" tiene
+// sentido dentro del modal completo (donde el dueño puede reintentar/
+// descartar), no en la vista compacta — acá alcanza con el badge
+// "Subiendo…" para avisar que algo sigue en camino.
+export function OfertasSection({ ofertasBase, ofertasPendientes, onAbrirModal, tienda, esDueño, onVerOferta, onOpenShareOferta, onOpenAdminTarget }) {
   const total = ofertasBase.length + ofertasPendientes.length;
   if (total === 0) return null;
-  const previewFotos = ofertasBase.slice(0, 4).map(o => o.thumbUrl || o.imageUrl).filter(Boolean);
   const hayPendientes = ofertasPendientes.length > 0;
   const surf2 = 'var(--tp-surface2)', border = 'var(--tp-border)', txt = 'var(--tp-text)';
+  const primary = 'var(--tp-primary)';
+  const preview = ofertasBase.slice(0, 10);
 
   return (
     <section style={{ padding: '18px 16px 0' }}>
-      <h2 style={{ margin: '0 0 .75rem', fontSize: FONT.size?.xl || 18, fontWeight: 900, color: txt, ...F }}>Ofertas</h2>
-      <div
-        onClick={onAbrirModal}
-        role="button" tabIndex={0}
-        className="no-press"
-        style={{ borderRadius: RADIUS.xl, overflow: 'hidden', boxShadow: SHADOW.md, border: `1px solid ${border}`, cursor: 'pointer', position: 'relative', background: surf2 }}
-      >
-        {previewFotos.length > 0 ? (
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(previewFotos.length, 4)}, 1fr)`, height: 140 }}>
-            {previewFotos.map((src, i) => (
-              <img key={i} src={src} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-            ))}
-          </div>
-        ) : (
-          <div style={{ height: 140, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Tag size={28} style={{ color: 'var(--tp-text-muted)', opacity: 0.5 }} />
-          </div>
-        )}
-        <div style={{ position: 'absolute', bottom: 10, left: 10, pointerEvents: 'none' }}>
-          <div style={{
-            background: 'rgba(0,0,0,0.55)', color: '#fff',
-            borderRadius: 20, padding: '5px 12px',
-            fontFamily: FONT.family, fontSize: 12, fontWeight: 700,
-            display: 'flex', alignItems: 'center', gap: 6,
-            backdropFilter: 'blur(6px)',
-          }}>
-            Ver ofertas · {total} {total === 1 ? 'oferta' : 'ofertas'}
-          </div>
-        </div>
-        {/* Badge "Subiendo…" — visible sin abrir el modal, feedback de que
-            algo se está publicando en segundo plano (dato ya disponible,
-            sin fetch extra). */}
-        {hayPendientes && (
-          <div style={{ position: 'absolute', top: 10, right: 10 }}>
-            <div style={{
-              background: 'var(--tp-primary)', color: 'var(--tp-on-primary)',
-              borderRadius: 20, padding: '5px 10px',
-              fontFamily: FONT.family, fontSize: 11, fontWeight: 800,
-              display: 'flex', alignItems: 'center', gap: 5,
-              boxShadow: SHADOW.sm,
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h2 style={{ margin: 0, fontSize: FONT.size?.xl || 18, fontWeight: 900, color: txt, ...F }}>Ofertas</h2>
+          {/* Badge "Subiendo…" — visible sin abrir el modal, feedback de que
+              algo se está publicando en segundo plano (dato ya disponible,
+              sin fetch extra). Antes flotaba sobre la foto del mosaico;
+              ahora que no hay una sola foto grande donde superponerlo, va
+              junto al título. */}
+          {hayPendientes && (
+            <span style={{
+              background: primary, color: 'var(--tp-on-primary)',
+              borderRadius: 20, padding: '3px 9px',
+              fontSize: 10.5, fontWeight: 800,
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              ...F,
             }}>
-              <Loader2 size={12} className="cm-spin" />
+              <Loader2 size={11} className="cm-spin" />
               Subiendo…
-            </div>
-          </div>
-        )}
+            </span>
+          )}
+        </div>
+        <button onClick={onAbrirModal} className="no-press" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: primary, ...F }}>
+          Ver todo · {total} →
+        </button>
       </div>
+      <Carrusel gap={10} className="cm-ofertas-carrusel">
+        {preview.map(o => (
+          <div key={o.id} style={{ flexShrink: 0, width: 130 }}>
+            <OfertaCard o={o} tienda={tienda} esDueño={esDueño} onVerOferta={onVerOferta} onOpenShareOferta={onOpenShareOferta} onOpenAdminTarget={onOpenAdminTarget} surf2={surf2} border={border} />
+          </div>
+        ))}
+      </Carrusel>
     </section>
   );
 }
@@ -320,45 +356,8 @@ export function OfertasModal({
                     </div>
                   );
                 }
-                const ofVencida = o.expireAt && new Date(o.expireAt).getTime() < Date.now();
-                const ofOculta = o.visible === false;
-                const ofInactiva = ofVencida || ofOculta;
                 return (
-                <a key={o.id} href={`/${tienda.slug}/o/${o.slug || o.id}`}
-                  onClick={(e) => {
-                    trackClick(tienda.id, 'card', { productoId: o.id });
-                    if (onVerOferta && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
-                      e.preventDefault();
-                      onVerOferta(tienda, o);
-                    }
-                  }}
-                  style={{ position: 'relative', display: 'block', aspectRatio: '1/1.414', borderRadius: RADIUS.lg, overflow: 'hidden', background: surf2, border: `1px solid ${border}`, textDecoration: 'none', opacity: ofInactiva ? 0.55 : 1 }}>
-                  <img src={o.thumbUrl || o.imageUrl} alt={o.nombre} loading="lazy"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                  {ofInactiva && (
-                    <span style={{ position: 'absolute', top: 8, left: 8, zIndex: 3, padding: '3px 8px', borderRadius: RADIUS.sm, background: ofVencida ? '#EF4444' : 'rgba(0,0,0,.6)', color: '#fff', fontSize: 10, fontWeight: 800 }}>
-                      {ofVencida ? 'Vencida' : 'Oculta'}
-                    </span>
-                  )}
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onOpenShareOferta(o);
-                    }}
-                    aria-label="Compartir oferta" className="no-press cm-hero-share-btn"
-                    style={{ position: 'absolute', top: 8, right: esDueño ? 46 : 8, zIndex: 3, width: 32, height: 32, borderRadius: 10, border: 'none', background: 'rgba(0,0,0,.45)', color: '#fff', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background-color .15s ease' }}>
-                    <Share2 size={15} />
-                  </button>
-                  {esDueño && (
-                    <button
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenAdminTarget(o); }}
-                      aria-label="Gestionar oferta" className="no-press cm-hero-share-btn"
-                      style={{ position: 'absolute', top: 8, right: 8, zIndex: 3, width: 32, height: 32, borderRadius: 10, border: 'none', background: 'rgba(0,0,0,.45)', color: '#fff', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <MoreVertical size={15} />
-                    </button>
-                  )}
-                </a>
+                  <OfertaCard key={o.id} o={o} tienda={tienda} esDueño={esDueño} onVerOferta={onVerOferta} onOpenShareOferta={onOpenShareOferta} onOpenAdminTarget={onOpenAdminTarget} surf2={surf2} border={border} />
                 );
               })}
             </div>
