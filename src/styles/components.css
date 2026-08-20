@@ -789,3 +789,32 @@ a.lok-tap * {
 @media (prefers-reduced-motion: reduce) {
   .lok-progreso-lectura { display: none; }
 }
+
+/* ── Admin: comportamiento de app nativa, no de página web ───────────────
+   Dentro del panel de tienda (.sa-root) no se selecciona texto ni aparece
+   el resalte azul al mantener presionado / hacer doble tap — en una app
+   nativa ese gesto no selecciona nada, y acá cada card/fila es un control
+   táctil, no contenido para copiar.
+
+   -webkit-touch-callout: none saca además el menú contextual de iOS
+   (Copiar / Buscar / Compartir) al dejar el dedo apretado sobre un
+   elemento o una imagen.
+
+   Los campos de texto se exceptúan de forma explícita: ahí el usuario SÍ
+   necesita poder seleccionar, posicionar el cursor y copiar/pegar
+   normalmente. */
+.sa-root {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sa-root input,
+.sa-root textarea,
+.sa-root select,
+.sa-root [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}

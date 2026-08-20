@@ -12,6 +12,7 @@ import { useProductosOfertas } from './store/hooks/useProductosOfertas';
 import { useInbox } from './store/hooks/useInbox';
 import { useTiendaPatch } from './store/hooks/useTiendaPatch';
 import { usePublicarAlturaReal } from './store/hooks/usePublicarAlturaReal.js';
+import { useFormDraft } from './store/hooks/useFormDraft.js';
 import { useCapaUI } from './store/navegacion/useCapaUI.js';
 import { useImportador } from './store/components/importador/useImportador.js';
 import { ImportadorPrecios } from './store/components/importador/ImportadorPrecios.jsx';
@@ -415,6 +416,34 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [productoSuccess, setProductoSuccess] = useState(null); // producto guardado para mostrar modal
   const productoFotoInputRef = useRef(null);
 
+  // Draft de TEXTO del formulario de producto (título/descripción/precio/
+  // etc., SIN fotos — un File no sobrevive a un refresh, ver
+  // useFormDraft.js). Al detectar un draft guardado y ningún producto en
+  // edición real, reabre el formulario solo con esos datos — así refrescar
+  // a mitad de carga no pierde lo ya escrito. Versión simple del pedido
+  // real (borrador visible como card oculta en el servidor, con la foto ya
+  // subida) — anotado en memoria para retomar aparte.
+  const productoDraft = useFormDraft(tiendaData?.id, 'producto');
+  const productoDraftRestauradoRef = useRef(false);
+  useEffect(() => {
+    if (!tiendaData?.id || productoDraftRestauradoRef.current) return;
+    productoDraftRestauradoRef.current = true;
+    const draft = productoDraft.leer();
+    if (draft && !productoEditing && !productoShowForm) {
+      setProductoForm((f) => ({ ...f, ...draft }));
+      setProductoShowForm(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tiendaData?.id]);
+  useEffect(() => {
+    // Solo mientras el formulario está realmente abierto para CREAR (no
+    // editar): un draft mientras se edita un producto existente pisaría
+    // datos reales ya guardados si el usuario los tocara sin querer.
+    if (!productoShowForm || productoEditing) return;
+    productoDraft.guardar(productoForm, (f) => !f.titulo?.trim() && !f.descripcion?.trim() && !f.precio);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productoForm, productoShowForm, productoEditing]);
+
   // Ofertas — módulo simple (isModuleActive(tienda, 'ofertas')): foto +
   // nombre + vigencia, nada más. Contrato real del backend
   // (netlify/functions/ofertas.js → sanitizeOfertaInput): nombre, imageUrl,
@@ -425,6 +454,26 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const [ofertaForm, setOfertaForm] = useState({ nombre: '', expireAt: '', visible: true });
   const [ofertaFotoFile, setOfertaFotoFile] = useState(null);
   const [ofertaFotoPreview, setOfertaFotoPreview] = useState(null);
+
+  // Draft de TEXTO del formulario de oferta — mismo criterio que el de
+  // producto (ver ese bloque más arriba para el porqué completo).
+  const ofertaDraft = useFormDraft(tiendaData?.id, 'oferta');
+  const ofertaDraftRestauradoRef = useRef(false);
+  useEffect(() => {
+    if (!tiendaData?.id || ofertaDraftRestauradoRef.current) return;
+    ofertaDraftRestauradoRef.current = true;
+    const draft = ofertaDraft.leer();
+    if (draft && !ofertaEditing && !ofertaShowForm) {
+      setOfertaForm((f) => ({ ...f, ...draft }));
+      setOfertaShowForm(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tiendaData?.id]);
+  useEffect(() => {
+    if (!ofertaShowForm || ofertaEditing) return;
+    ofertaDraft.guardar(ofertaForm, (f) => !f.nombre?.trim());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ofertaForm, ofertaShowForm, ofertaEditing]);
   // Al EDITAR: marca que el dueño quitó explícitamente la foto ya guardada
   // (ofertaEditing.imageUrl) con la X — sin esto no había forma de "vaciar"
   // el picker en modo edición, solo de reemplazarla subiendo otra encima.
@@ -2551,6 +2600,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           if (!res.ok) throw new Error('Error al crear');
           savedProduct = { ...await res.json(), _origen: 'catalogo' };
           setMisProductos(prev => [savedProduct, ...prev]);
+          productoDraft.limpiar(); // publicado de verdad — ya no hace falta el draft de texto
         }
         setProductoSuccess(savedProduct);
       } catch (err) { setProductoSaveErr(err.message); }
@@ -2666,6 +2716,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         expireAt: ofertaForm.expireAt ? new Date(ofertaForm.expireAt).toISOString() : null,
         visible: ofertaForm.visible,
       });
+      if (!ofertaEditing) ofertaDraft.limpiar(); // publicado (aunque la subida siga en cola) — ya no hace falta el draft de texto
       setOfertaShowForm(false);
     };
 
@@ -2825,6 +2876,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const ProductosScreen = () => (
     <ProductosScreenBase
       onAbrirImportador={abrirImportador} tiendaId={tiendaData?.id}
+      importacionEnCurso={importadorFlotanteVisible}
       ambosModulosActivos={ambosModulosActivos} subScreenProductos={subScreenProductos} setSubScreenProductos={setSubScreenProductos}
       misProductosSinFiltrar={misProductosSinFiltrar}
       setMisProductos={setMisProductos} loadingProductos={loadingProductos}

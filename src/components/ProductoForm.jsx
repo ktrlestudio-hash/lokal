@@ -373,30 +373,10 @@ export default function ProductoForm({
         </div>
       </div>
 
-      {/* ── Precio + stock ── */}
-      <div className={`${cardCls} space-y-4`}>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={`${labelCls} block mb-2`}>
-              Precio
-              <Tip text="El precio al que vendés. Si tenés descuento, poné el precio ya rebajado acá." />
-            </label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-dim text-xs pointer-events-none">$</span>
-              <input type="number" value={form.precio} onChange={e => set('precio', e.target.value)} placeholder="0" className={`${inputCls} pl-7`} />
-            </div>
-          </div>
-          <div>
-            <label className={`${labelCls} block mb-2`}>
-              Stock
-              <Tip text="Cuántas unidades tenés. Dejá vacío si no querés mostrarlo." />
-            </label>
-            <input type="number" value={form.stock} onChange={e => set('stock', e.target.value)} placeholder="Unidades" className={inputCls} />
-          </div>
-        </div>
-      </div>
-
       {/* ── Categoría + atributos ── */}
+      {/* Subida por encima de Precio+Stock: el dropdown necesita el
+          espacio libre hacia abajo para desplegarse sin quedar apretado
+          contra el resto del formulario. */}
       <div className={cardCls}>
         <label className={`${labelCls} block mb-2`}>
           Categoría <Tip text="Elegí la categoría que mejor describe tu producto." />
@@ -419,6 +399,29 @@ export default function ProductoForm({
             />
           </div>
         )}
+      </div>
+
+      {/* ── Precio + stock ── */}
+      <div className={`${cardCls} space-y-4`}>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={`${labelCls} block mb-2`}>
+              Precio
+              <Tip text="El precio al que vendés. Si tenés descuento, poné el precio ya rebajado acá." />
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-dim text-xs pointer-events-none">$</span>
+              <input type="number" value={form.precio} onChange={e => set('precio', e.target.value)} placeholder="0" className={`${inputCls} pl-7`} />
+            </div>
+          </div>
+          <div>
+            <label className={`${labelCls} block mb-2`}>
+              Stock
+              <Tip text="Cuántas unidades tenés. Dejá vacío si no querés mostrarlo." />
+            </label>
+            <input type="number" value={form.stock} onChange={e => set('stock', e.target.value)} placeholder="Unidades" className={inputCls} />
+          </div>
+        </div>
       </div>
 
       {/* ── Badges dinámicos (Nuevo/Oferta/Últimos días) ── */}

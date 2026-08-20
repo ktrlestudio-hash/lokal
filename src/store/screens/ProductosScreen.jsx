@@ -15,7 +15,12 @@ import { ProductosOfertasToggle } from '../components/ProductosOfertasToggle.jsx
 import { useCapaUI } from '../navegacion/useCapaUI.js';
 
 export function ProductosScreen({
-  onAbrirImportador, tiendaId,
+  // importacionEnCurso: hay una importación minimizada trabajando en
+  // segundo plano (el chip flotante está en pantalla). Mientras dure, los
+  // accesos a "importar" se ocultan — arrancar una segunda importación
+  // encima de la que corre no tiene sentido, y el chip ya comunica que
+  // hay uno en curso.
+  onAbrirImportador, tiendaId, importacionEnCurso = false,
   ambosModulosActivos, subScreenProductos, setSubScreenProductos,
   misProductosSinFiltrar, setMisProductos, loadingProductos,
   productoShowForm, setProductoShowForm, productoEditing, setProductoEditing,
@@ -553,9 +558,11 @@ export function ProductosScreen({
                 "o importar desde Excel/CSV" bien visible ahí abajo, este
                 de acá quedaba redundante compitiendo espacio en el header.
                 En desktop se deja siempre visible (no compite con nada). */}
-            <button onClick={onAbrirImportador} className={`${misProductos.length === 0 ? 'hidden lg:flex' : 'flex'} w-10 h-10 items-center justify-center rounded-xl text-ink-dim hover:text-brand hover:bg-brand/10 transition-colors shrink-0`} title="Importar lista de precios desde Excel, CSV o JSON">
-              <UploadCloud className="w-4 h-4" />
-            </button>
+            {!importacionEnCurso && (
+              <button onClick={onAbrirImportador} className={`${misProductos.length === 0 ? 'hidden lg:flex' : 'flex'} w-10 h-10 items-center justify-center rounded-xl text-ink-dim hover:text-brand hover:bg-brand/10 transition-colors shrink-0`} title="Importar lista de precios desde Excel, CSV o JSON">
+                <UploadCloud className="w-4 h-4" />
+              </button>
+            )}
             {misProductos.length > 0 && (
               <button onClick={() => setVaciarConfirm(true)} aria-label="Vaciar todo el catálogo" title="Vaciar todo"
                 className="w-10 h-10 flex items-center justify-center rounded-xl text-ink-dim hover:text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0">
@@ -600,9 +607,19 @@ export function ProductosScreen({
             <button onClick={openNew} className="h-10 px-6 flex items-center justify-center text-sm bg-brand hover:bg-brand-light text-white rounded-2xl font-bold transition-colors shadow-lg shadow-brand/25">
               Crear primer producto
             </button>
-            <button onClick={onAbrirImportador} className="h-10 px-6 flex items-center justify-center gap-1.5 bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-sm font-bold text-ink-dim hover:text-brand transition-colors rounded-2xl">
-              <UploadCloud className="w-4 h-4" /> o importar desde Excel/CSV
-            </button>
+            {/* Con una importación ya corriendo en segundo plano, este
+                acceso se reemplaza por el mismo "botón fantasma" que usa
+                el empty de Ofertas: reserva el alto para que el grupo no
+                se descentre al quedar un solo botón real. */}
+            {importacionEnCurso ? (
+              <span aria-hidden="true" className="invisible pointer-events-none h-10 px-6 flex items-center gap-1.5 text-sm font-bold rounded-2xl">
+                Placeholder
+              </span>
+            ) : (
+              <button onClick={onAbrirImportador} className="h-10 px-6 flex items-center justify-center gap-1.5 bg-surface-card-2 dark:bg-white/8 hover:bg-brand/10 text-sm font-bold text-ink-dim hover:text-brand transition-colors rounded-2xl">
+                <UploadCloud className="w-4 h-4" /> o importar desde Excel/CSV
+              </button>
+            )}
           </div>
         </div>
       ) : (

@@ -39,8 +39,72 @@ const ESTADO_INICIAL = {
   resultado: null,
 };
 
+// Persistencia: solo se guarda el paso 'revisar' con diff+corridaId ya
+// calculados — no 'subir'/'calibrar', porque ahí lo único real que hay es
+// el archivo elegido, y un File del sistema operativo NO es serializable
+// (no sobrevive a un refresh sin importar dónde se guarde). Llegando a
+// 'revisar' ya no hace falta el archivo: aplicar() solo necesita
+// corridaId+diff+seleccion, todo dato del servidor/UI serializable.
+// corridaId referencia una fila real en D1 (ver importador.js del
+// backend), no algo efímero en memoria — sigue siendo válido después de
+// un refresh sin importar cuánto haya pasado.
+const STORAGE_KEY = (tiendaId) => `lokal-importador-draft:${tiendaId}`;
+
+function serializarSeleccion(seleccion) {
+  return {
+    altas: [...seleccion.altas],
+    actualizaciones: [...seleccion.actualizaciones],
+    bajas: [...seleccion.bajas],
+    ambiguos: [...seleccion.ambiguos.entries()],
+  };
+}
+function deserializarSeleccion(s) {
+  return {
+    altas: new Set(s.altas || []),
+    actualizaciones: new Set(s.actualizaciones || []),
+    bajas: new Set(s.bajas || []),
+    ambiguos: new Map(s.ambiguos || []),
+  };
+}
+
+function leerBorrador(tiendaId) {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY(tiendaId));
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    if (saved.paso !== 'revisar' || !saved.diff || !saved.corridaId) return null;
+    return { ...saved, seleccion: deserializarSeleccion(saved.seleccion) };
+  } catch { return null; }
+}
+
+function guardarBorrador(tiendaId, estado) {
+  try {
+    if (estado.paso === 'revisar' && estado.diff && estado.corridaId) {
+      const { archivo: _archivo, ...serializable } = estado;
+      localStorage.setItem(STORAGE_KEY(tiendaId), JSON.stringify({
+        ...serializable,
+        seleccion: serializarSeleccion(estado.seleccion),
+      }));
+    } else {
+      // Cualquier otro paso (incluido 'resultado' tras aplicar, o
+      // 'subir' tras reiniciar) invalida el borrador — ya no representa
+      // trabajo recuperable.
+      localStorage.removeItem(STORAGE_KEY(tiendaId));
+    }
+  } catch { /* storage lleno/bloqueado — no es crítico, se pierde el draft */ }
+}
+
 export function useImportador(tiendaId, { onAplicado } = {}) {
-  const [estado, setEstado] = useState(ESTADO_INICIAL);
+  const [estado, setEstado] = useState(() => {
+    if (!tiendaId) return ESTADO_INICIAL;
+    const borrador = leerBorrador(tiendaId);
+    // Sin el archivo original (nunca se guarda, ver comentario arriba):
+    // volver a "revisar" con el diff ya calculado es autosuficiente,
+    // aplicar() no lo necesita. Solo faltaría si el usuario quisiera
+    // "volver" a calibrar — volver() ya contempla ese caso con
+    // calibracionReusada.
+    return borrador ? { ...ESTADO_INICIAL, ...borrador, archivo: null } : ESTADO_INICIAL;
+  });
   // Ref espejo del estado para leer el valor MÁS RECIENTE dentro de
   // callbacks async que pueden resolver después de que el componente
   // visual ya se desmontó (minimizado) — evita capturar un `paso`/
@@ -52,9 +116,10 @@ export function useImportador(tiendaId, { onAplicado } = {}) {
     setEstado((prev) => {
       const next = typeof cambios === 'function' ? cambios(prev) : { ...prev, ...cambios };
       estadoRef.current = next;
+      if (tiendaId) guardarBorrador(tiendaId, next);
       return next;
     });
-  }, []);
+  }, [tiendaId]);
 
   const llamarImportador = async (action, body) => {
     const res = await apiFetch(`${API_BASE}/importador?action=${action}`, {
