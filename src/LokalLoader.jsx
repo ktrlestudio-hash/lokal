@@ -59,9 +59,18 @@ export function LogoLoader({ size }) {
   );
 }
 
+// Fondo/glow del splash — clases dark: en vez de un color fijo: la clase
+// 'dark' en <html> ya la aplica theme-init.js ANTES de que React monte
+// (según el tema guardado en localStorage), así que no hay parpadeo entre
+// "splash siempre oscuro" y "primer render ya en el tema correcto". El
+// glow (radial-gradient celeste) se mantiene igual en ambos temas — es el
+// acento de marca, no algo que deba invertirse; lo que cambia es el fondo
+// y el color de texto detrás de él.
+const SPLASH_BG = 'bg-white dark:bg-[#040a14]';
+
 export function SplashScreenFull() {
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center overflow-hidden" style={{ background: '#040a14' }}>
+    <div className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center overflow-hidden ${SPLASH_BG}`}>
       <style>{`
         @keyframes lk-brand-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes lk-mark-in { from { opacity: 0; } to { opacity: 1; } }
@@ -73,12 +82,12 @@ export function SplashScreenFull() {
       {/* fontSize con clamp: mismo criterio que el logo — en escritorio el
           splash ocupa toda la pantalla y el texto de 34px fijo quedaba
           chico comparado con el espacio disponible. */}
-      <div style={{ animation: 'lk-brand-in 0.45s ease 1.0s both', marginTop: 18 }}>
-        <span style={{ color: 'white', fontSize: 'clamp(34px, 3.2vw, 46px)', fontWeight: 800, letterSpacing: '0.01em', fontFamily: "'Inter', system-ui, sans-serif" }}>lokal</span>
+      <div className="text-ink" style={{ animation: 'lk-brand-in 0.45s ease 1.0s both', marginTop: 18 }}>
+        <span style={{ fontSize: 'clamp(34px, 3.2vw, 46px)', fontWeight: 800, letterSpacing: '0.01em', fontFamily: "'Inter', system-ui, sans-serif" }}>lokal</span>
       </div>
-      <div className="absolute bottom-10 flex items-center gap-1.5" style={{ animation: 'lk-mark-in 0.5s ease 1.2s both', opacity: 0 }}>
-        <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 'clamp(10px, 0.9vw, 13px)', fontFamily: "'Inter', system-ui, sans-serif", letterSpacing: '0.04em', textTransform: 'uppercase' }}>creado por</span>
-        <KtrlMark className="text-white" style={{ height: 'clamp(12px, 1.1vw, 16px)', width: 'auto', opacity: 0.35 }} />
+      <div className="absolute bottom-10 flex items-center gap-1.5 text-ink-dim" style={{ animation: 'lk-mark-in 0.5s ease 1.2s both', opacity: 0 }}>
+        <span style={{ fontSize: 'clamp(10px, 0.9vw, 13px)', fontFamily: "'Inter', system-ui, sans-serif", letterSpacing: '0.04em', textTransform: 'uppercase' }}>creado por</span>
+        <KtrlMark className="text-current" style={{ height: 'clamp(12px, 1.1vw, 16px)', width: 'auto', opacity: 0.35 }} />
       </div>
     </div>
   );
@@ -89,7 +98,7 @@ export function SplashScreenFull() {
 // de otra" sea visualmente continua, sin salto de diseño perceptible.
 export function InlineLoader() {
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden" style={{ background: '#040a14' }}>
+    <div className={`fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden ${SPLASH_BG}`}>
       <style>{`@keyframes lk-glow-pulse { 0%,100% { opacity: 0.55; transform: scale(1); } 50% { opacity: 0.85; transform: scale(1.08); } }`}</style>
       <div className="absolute inset-x-0 top-0 pointer-events-none" style={{ height: '65%', background: 'radial-gradient(ellipse 75% 55% at 50% 0%, rgba(0,184,217,0.22), transparent)', animation: 'lk-glow-pulse 3s ease-in-out 1.2s infinite' }} />
       <LogoLoader />
