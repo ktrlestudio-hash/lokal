@@ -61,21 +61,33 @@ function BadgesSection({ form, set, labelCls }) {
   const agregar = form.badgesForzados?.agregar || [];
   const ocultar = form.badgesForzados?.ocultar || [];
 
+  // seCalculariaSolo tiene que mirar el cálculo SIN overrides — no
+  // `activos` (que ya viene con agregar/ocultar aplicados). Antes, tocar
+  // dos veces seguidas un badge que se calcula solo (ej. "Nuevo") hacía:
+  // 1er click → activos.has('nuevo') true → entra a ocultar → ocultar:
+  // ['nuevo']. En el render siguiente, `activos` YA viene sin 'nuevo'
+  // (calcularBadges le aplica el ocultar). 2do click → activos.has('nuevo')
+  // ahora daba false → tomaba la rama de FORZAR en vez de "sacarlo de
+  // ocultar" → agregar:['nuevo'] Y ocultar:['nuevo'] coexistiendo. Con los
+  // dos arrays conteniendo el mismo id, ni isActive ni isOculto daban
+  // true — el chip se veía "normal", como si nunca se hubiera tocado.
+  const seCalculaSoloSinOverrides = new Set(calcularBadges({ ...previa, badgesForzados: null }));
+
   const toggleForzado = (id) => {
-    const seCalculariaSolo = activos.has(id) && !agregar.includes(id);
-    if (seCalculariaSolo) {
-      // Está activo por cálculo real → tocar el chip lo OCULTA.
+    if (seCalculaSoloSinOverrides.has(id)) {
+      // Se calcularía activo de por sí → tocar el chip lo OCULTA (o
+      // deshace el ocultado si ya estaba oculto).
       const yaOculto = ocultar.includes(id);
       set('badgesForzados', {
-        agregar,
+        agregar: agregar.filter(x => x !== id), // por si quedó un estado inconsistente previo
         ocultar: yaOculto ? ocultar.filter(x => x !== id) : [...ocultar, id],
       });
     } else {
-      // No se cumple solo → tocar el chip lo FUERZA.
+      // No se cumple solo → tocar el chip lo FUERZA (o deshace el forzado).
       const yaForzado = agregar.includes(id);
       set('badgesForzados', {
         agregar: yaForzado ? agregar.filter(x => x !== id) : [...agregar, id],
-        ocultar,
+        ocultar: ocultar.filter(x => x !== id), // por si quedó un estado inconsistente previo
       });
     }
   };
@@ -335,7 +347,7 @@ export default function ProductoForm({
           <textarea
             value={form.descripcion}
             onChange={e => set('descripcion', e.target.value)}
-            rows={3}
+            rows={2}
             placeholder="Estado, medidas, características importantes..."
             className={`${inputCls} resize-none`}
           />
