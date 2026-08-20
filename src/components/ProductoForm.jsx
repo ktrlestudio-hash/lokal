@@ -8,6 +8,7 @@ import AttributesEditor from '../AttributesEditor';
 import { calcularBadges, BADGE_CONFIG } from '../utils/productBadges';
 import { usePublicarAlturaReal } from '../store/hooks/usePublicarAlturaReal.js';
 import { useGapFluido } from '../store/hooks/useGapFluido.js';
+import { validarFotoElegida } from '../utils/validarFotoElegida.js';
 
 // p-3.5 (no p-4): 2px menos por lado × 5 cards, parte del mismo ajuste
 // medido para que el formulario entre sin scroll en un viewport típico.
@@ -267,6 +268,7 @@ export default function ProductoForm({
   onSave,
   saving = false,
   error = null,
+  setError = null,
   isEditing = false,
   categories,
   onCreateCategory,
@@ -289,8 +291,22 @@ export default function ProductoForm({
   const gap = useGapFluido(seccionesRef, { min: 8, max: 16, reservadoAbajoRef: botonRef });
 
   const handleFotos = (e) => {
-    const files = Array.from(e.target.files || []).slice(0, 4 - fotoFiles.length);
-    files.forEach(f => {
+    const elegidos = Array.from(e.target.files || []).slice(0, 4 - fotoFiles.length);
+    // Validar ANTES de generar la preview: sin esto, un formato que el
+    // navegador no puede decodificar (el caso real: HEIC de iPhone) se
+    // veía como "la foto rota" apenas se elegía, sin ningún mensaje que
+    // explicara qué pasó — el usuario recién se enteraba de que algo
+    // estaba mal al mirar la miniatura sin formato.
+    const rechazados = [];
+    const validos = [];
+    for (const f of elegidos) {
+      const motivo = validarFotoElegida(f);
+      if (motivo) rechazados.push(motivo); else validos.push(f);
+    }
+    if (rechazados.length) setError?.(rechazados[0]);
+    else if (validos.length) setError?.(null); // limpia un error viejo si esta vez todo entró bien
+
+    validos.forEach(f => {
       setFotoFiles(prev => [...prev, f]);
       setFotoPreviews(prev => [...prev, URL.createObjectURL(f)]);
     });

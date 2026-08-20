@@ -81,11 +81,16 @@ export async function onRequestPost({ request, env }) {
 
     const bytes = decodeBase64(fileData);
     if (bytes.length > typeConfig.maxBytes) {
+      const maxMb = Math.round(typeConfig.maxBytes / (1024 * 1024));
+      const pesoMb = (bytes.length / (1024 * 1024)).toFixed(1);
+      // Mensaje derivado del límite real, no un número escrito a mano:
+      // antes decía "max 5MB" fijo y quedó desactualizado al subir el
+      // límite a 20MB, mostrando una cifra que ya no era cierta.
       throw new HttpError(
         400,
         typeConfig.kind === 'video'
-          ? 'Video demasiado grande (max 20MB)'
-          : 'Imagen demasiado grande (max 5MB)'
+          ? `El video pesa ${pesoMb}MB y el máximo es ${maxMb}MB`
+          : `La imagen pesa ${pesoMb}MB y el máximo es ${maxMb}MB`
       );
     }
 

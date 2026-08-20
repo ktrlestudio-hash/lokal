@@ -60,6 +60,7 @@ import { LogoBadge } from './Brand';
 import CategoryPicker from './CategoryPicker';
 import { VENTAJA_CONFIG } from './utils/ventajaConfig';
 import { calcularBadges, BADGE_CONFIG } from './utils/productBadges';
+import { validarFotoElegida } from './utils/validarFotoElegida.js';
 import ProductoFormComp from './components/ProductoForm';
 import ProductoSuccessModal from './components/ProductoSuccessModal';
 import DatePicker from './components/DatePicker';
@@ -474,6 +475,13 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     ofertaDraft.guardar(ofertaForm, (f) => !f.nombre?.trim());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ofertaForm, ofertaShowForm, ofertaEditing]);
+  // Limpia el error de foto de una apertura anterior — sin esto, cerrar
+  // el formulario con un HEIC rechazado y volver a abrirlo (para otra
+  // oferta) mostraba el mensaje viejo sin que el usuario hubiera hecho
+  // nada malo esta vez.
+  useEffect(() => {
+    if (ofertaShowForm) setOfertaFotoError(null);
+  }, [ofertaShowForm]);
   // Al EDITAR: marca que el dueño quitó explícitamente la foto ya guardada
   // (ofertaEditing.imageUrl) con la X — sin esto no había forma de "vaciar"
   // el picker en modo edición, solo de reemplazarla subiendo otra encima.
@@ -484,6 +492,13 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   // se comprimen al subir de verdad). Sin este spinner, esos segundos se
   // sentían como "elegí la foto pero no pasó nada", incertidumbre real.
   const [ofertaFotoLoading, setOfertaFotoLoading] = useState(false);
+  // Mensaje de validación al ELEGIR la foto (formato no soportado, ej.
+  // HEIC de iPhone) — distinto de ofertaIntentoGuardar/faltante, que solo
+  // cubren "no elegiste nada". Declarado a nivel de StoreApp porque
+  // OfertaFormOverlay es una función invocada (no un <Componente/> real),
+  // así que no puede tener su propio useState sin violar las reglas de
+  // hooks — mismo criterio que el resto del estado de este formulario.
+  const [ofertaFotoError, setOfertaFotoError] = useState(null);
   // true recién DESPUÉS del primer intento de guardar con algo faltante —
   // así el formulario no "grita" en rojo apenas se abre, solo cuando el
   // dueño de verdad intentó guardar sin completar todo.
@@ -976,8 +991,22 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   // abajo) para que el dueño pueda encuadrar/hacer zoom antes de subir —
   // antes se usaba la foto tal cual salía de la cámara, sin recorte posible.
   const queueMediaFiles = (fileList) => {
-    const files = Array.from(fileList || []).filter(f => f.type?.startsWith('image/'));
+    const elegidos = Array.from(fileList || []);
+    // Validar ANTES de entrar a la cola del cropper — mismo criterio que
+    // ProductoForm.jsx/OfertaFormOverlay: sin esto, un HEIC de iPhone
+    // (algunos navegadores SÍ lo reportan como type:'image/heic', así que
+    // el filtro de abajo no lo descartaba) rompía silenciosamente en el
+    // paso de recorte, sin ningún mensaje.
+    const rechazados = [];
+    const files = [];
+    for (const f of elegidos) {
+      if (!f.type?.startsWith('image/')) continue;
+      const motivo = validarFotoElegida(f);
+      if (motivo) rechazados.push(motivo); else files.push(f);
+    }
+    if (rechazados.length) setMediaError(rechazados[0]);
     if (!files.length) return;
+    if (!rechazados.length) setMediaError(null);
     const isSingle = mediaModal === 'foto';
     const remaining = isSingle ? 1 : Math.max(0, 6 - mediaDraft.length - cropQueue.length);
     setCropQueue(prev => [...prev, ...files.slice(0, remaining)]);
@@ -2662,6 +2691,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             onSave={handleSave}
             saving={productoSaving}
             error={productoSaveErr}
+            setError={setProductoSaveErr}
             isEditing={!!productoEditing}
             categories={allCategories}
             onCreateCategory={createCategory}
@@ -2698,6 +2728,12 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     const handleFoto = (e) => {
       const file = e.target.files?.[0];
       if (!file) return;
+      // Validar ANTES de generar la preview — mismo criterio que
+      // ProductoForm.jsx: sin esto, un HEIC de iPhone se veía como "la
+      // foto rota" apenas se elegía, sin ningún mensaje.
+      const motivo = validarFotoElegida(file);
+      if (motivo) { setOfertaFotoError(motivo); e.target.value = ''; return; }
+      setOfertaFotoError(null);
       setOfertaFotoLoading(true);
       setOfertaFotoFile(file);
       setOfertaFotoRemoved(false);
@@ -2861,6 +2897,16 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             <p className="text-sm text-rose-500 font-semibold text-center">
               {faltante === 'foto' ? 'Subí una foto para publicar la oferta' : 'Escribí un nombre para la oferta'}
             </p>
+          )}
+
+          {/* Error de formato/tamaño al ELEGIR la foto (ej. HEIC de
+              iPhone) — distinto del mensaje de arriba, que solo cubre
+              "no elegiste nada todavía". */}
+          {ofertaFotoError && (
+            <div className="flex items-start gap-2 text-rose-500 text-xs bg-rose-50 dark:bg-rose-500/10 rounded-xl px-3 py-2.5">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span>{ofertaFotoError}</span>
+            </div>
           )}
 
           <button
