@@ -6,6 +6,8 @@ import {
 import CategoryPicker from '../CategoryPicker';
 import AttributesEditor from '../AttributesEditor';
 import { calcularBadges, BADGE_CONFIG } from '../utils/productBadges';
+import { usePublicarAlturaReal } from '../store/hooks/usePublicarAlturaReal.js';
+import { useGapFluido } from '../store/hooks/useGapFluido.js';
 
 // p-3.5 (no p-4): 2px menos por lado × 5 cards, parte del mismo ajuste
 // medido para que el formulario entre sin scroll en un viewport típico.
@@ -271,6 +273,20 @@ export default function ProductoForm({
   tiendaWhatsapp = null,
 }) {
   const fotoInputRef = useRef(null);
+  // Altura real del botón fijo, publicada como --producto-form-boton-h —
+  // el padding-bottom del contenido la usa para no quedar tapado. Mismo
+  // patrón que StoreBottomNav.jsx usa para --store-bottom-nav-h.
+  const botonRef = useRef(null);
+  usePublicarAlturaReal(botonRef, true, '--producto-form-boton-h');
+
+  // Padding fluido entre secciones: min 0.5rem (nunca menos, o las cards
+  // se pegan), max igual al padding lateral (1rem/16px) — el usuario pidió
+  // que el máximo iguale el margen lateral para que se vea como una grilla
+  // consistente en ambos ejes. Entre esos dos límites, se ajusta según
+  // cuánto sobre/falte de verdad (medido, ver useGapFluido.js) para que el
+  // formulario encastre sin scroll siempre que el contenido lo permita.
+  const seccionesRef = useRef(null);
+  const gap = useGapFluido(seccionesRef, { min: 8, max: 16, reservadoAbajoRef: botonRef });
 
   const handleFotos = (e) => {
     const files = Array.from(e.target.files || []).slice(0, 4 - fotoFiles.length);
@@ -291,12 +307,10 @@ export default function ProductoForm({
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
   return (
-    // space-y-2.5 (no 4) entre las 5 cards y pt-4/pb-4 (no pt-5/pb-6):
-    // medido con Playwright contra el formulario real, sobraban ~100px en
-    // un viewport típico (iPhone 14, 844px de alto) — el aire real estaba
-    // acá, en el espacio ENTRE secciones, no dentro de cada campo. Esto
-    // no achica ningún input/label, solo el hueco entre cards.
-    <div className="max-w-lg mx-auto px-4 pt-3 pb-2 space-y-2.5">
+    <>
+    <div className="max-w-lg mx-auto px-4 lg:px-8 pt-3"
+      style={{ paddingBottom: 'var(--producto-form-boton-h, 84px)' }}>
+    <div ref={seccionesRef} style={{ display: 'flex', flexDirection: 'column', gap: `${gap}px` }}>
 
       {/* La sección "¿Qué vas a vender?" (Nuevo/Usado) se sacó: estas
           tiendas venden productos nuevos, así que era un paso extra que
@@ -457,19 +471,29 @@ export default function ProductoForm({
       )}
 
       {/* ── Guardar ── */}
-      {/* sticky al fondo del viewport: este formulario es largo (fotos,
-          título, precio, categoría, atributos, etiquetas), así que dejar
-          el botón solo al final obligaba a scrollear hasta abajo cada vez
-          para publicar. Se mantiene la misma condición de habilitado (hay
-          título) — el botón se ve siempre, pero sigue deshabilitado hasta
-          completar lo obligatorio.
-          -mx-4 px-4 contrarresta el padding lateral del contenedor para
-          que la barra llegue de borde a borde; el degradado evita que el
-          contenido "choque" contra el botón al scrollear por debajo. */}
-      <div
-        className="sticky bottom-0 -mx-4 px-4 pt-4 bg-gradient-to-t from-[#f5f5f5] via-[#f5f5f5] to-transparent dark:from-[#080808] dark:via-[#080808]"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}
-      >
+    </div>
+    </div>
+
+    {/* fixed real (no sticky): vive FUERA del contenedor que scrollea, así
+        no comparte stacking/scroll context con el contenido — nunca se
+        mueve un píxel pase lo que pase, ni compite por espacio si el
+        contenido crece. Antes era sticky DENTRO del mismo div que
+        scrollea; en teoría "se pega", pero al ser parte del flujo normal
+        del documento hasta llegar al final, un reflow o un layout con
+        contenedores anidados podía hacer que se sintiera menos firme que
+        un fixed real.
+        z-[5010]: por encima del modal del formulario (z-[5000] en
+        StoreApp.jsx), para quedar siempre arriba de todo su contenido.
+        ref mide su altura real (ResizeObserver, ver usePublicarAlturaReal)
+        y la publica en --producto-form-boton-h — el <div> de arriba resta
+        exactamente ese alto en su padding-bottom, así el scroll nunca deja
+        el último campo tapado detrás del botón. */}
+    <div
+      ref={botonRef}
+      className="fixed bottom-0 inset-x-0 z-[5010] px-4 lg:px-8 pt-4 bg-gradient-to-t from-[#f5f5f5] via-[#f5f5f5] to-transparent dark:from-[#080808] dark:via-[#080808]"
+      style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}
+    >
+      <div className="max-w-lg mx-auto">
         <button
           onClick={onSave}
           disabled={saving || !form.titulo?.trim()}
@@ -480,5 +504,6 @@ export default function ProductoForm({
         </button>
       </div>
     </div>
+    </>
   );
 }
