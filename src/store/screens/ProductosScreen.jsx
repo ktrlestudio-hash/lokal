@@ -96,7 +96,13 @@ export function ProductosScreen({
 
   const openEdit = (o) => {
     setEditingProducto(o);
-    setForm({ titulo: o.titulo, descripcion: o.descripcion || '', precio: o.precio || '', precioOriginal: o.precioOriginal || '', badgesForzados: o.badgesForzados || null, financiacion: o.financiacion || '', presentacion: o.presentacion || '', stock: o.stock ?? '1', condicion: o.condicion || 'nuevo', categoryId: o.categoryId || null, contactoWhatsapp: o.contactoWhatsapp || '' });
+    // o.nombre primero: el backend normaliza `titulo` → `nombre` al
+    // guardar (ver _lib/ofertas-sanitize.js), así que los productos ya
+    // guardados no tienen `titulo`. Leer solo `titulo` dejaba el campo
+    // vacío al abrir el editor, y como el botón de guardar está atado a
+    // `!form.titulo?.trim()`, quedaba deshabilitado: cambiar el precio (o
+    // cualquier otro campo) no alcanzaba para habilitarlo.
+    setForm({ titulo: o.nombre || o.titulo || '', descripcion: o.descripcion || '', precio: o.precio || '', precioOriginal: o.precioOriginal || '', badgesForzados: o.badgesForzados || null, financiacion: o.financiacion || '', presentacion: o.presentacion || '', stock: o.stock ?? '1', condicion: o.condicion || 'nuevo', categoryId: o.categoryId || null, contactoWhatsapp: o.contactoWhatsapp || '' });
     setFotoFiles([]); setFotoPreviews(o.fotos || []);
     setSaveErr(null); setProductoAttributes(o.attributes || {});
     setShowForm(true);

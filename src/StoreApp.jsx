@@ -2611,7 +2611,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       const p = productoSuccess;
       setProductoSuccess(null);
       setProductoEditing(p);
-      setProductoForm({ titulo: p.titulo, descripcion: p.descripcion || '', precio: p.precio || '', precioOriginal: p.precioOriginal || '', badgesForzados: p.badgesForzados || null, financiacion: p.financiacion || '', stock: p.stock ?? '1', condicion: p.condicion || 'nuevo', categoryId: p.categoryId || null, contactoWhatsapp: p.contactoWhatsapp || '' });
+      // p.nombre primero: el backend normaliza `titulo` → `nombre` al
+      // guardar (ver _lib/ofertas-sanitize.js), así que el objeto que
+      // vuelve del POST/PATCH no tiene `titulo`. Leer solo `titulo` dejaba
+      // el campo vacío al entrar a editar desde el modal, y como el botón
+      // de guardar está atado a `!form.titulo?.trim()`, quedaba
+      // deshabilitado: cambiar el precio (o cualquier otro campo) no lo
+      // habilitaba, solo reescribir el nombre.
+      setProductoForm({ titulo: p.nombre || p.titulo || '', descripcion: p.descripcion || '', precio: p.precio || '', precioOriginal: p.precioOriginal || '', badgesForzados: p.badgesForzados || null, financiacion: p.financiacion || '', stock: p.stock ?? '1', condicion: p.condicion || 'nuevo', categoryId: p.categoryId || null, contactoWhatsapp: p.contactoWhatsapp || '' });
       setProductoFotoFiles([]); setProductoFotoPreviews(p.fotos || []);
       setProductoSaveErr(null); setProductoAttributes(p.attributes || {});
     };
@@ -2651,7 +2658,12 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             onEdit={handleEditSaved}
             onMisProductos={() => { setProductoSuccess(null); setProductoShowForm(false); setScreen('productos'); }}
             onClose={() => { setProductoSuccess(null); setProductoShowForm(false); }}
-            onView={null}
+            // No hay deep-link a un producto individual (no existe ese
+            // mecanismo en la vista pública, ver TiendaPublica) — lleva a
+            // la vitrina completa, donde el producto ya está visible.
+            // Antes era null: el botón "Ver publicación" solo cerraba el
+            // modal (onView || onClose), sin llevar a ningún lado real.
+            onView={tiendaInfo.slug ? () => window.open(`/${tiendaInfo.slug}`, '_blank', 'noopener') : null}
           />
         )}
       </>
