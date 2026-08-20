@@ -419,23 +419,21 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
   // Draft de TEXTO del formulario de producto (título/descripción/precio/
   // etc., SIN fotos — un File no sobrevive a un refresh, ver
-  // useFormDraft.js). Al detectar un draft guardado y ningún producto en
-  // edición real, reabre el formulario solo con esos datos — así refrescar
-  // a mitad de carga no pierde lo ya escrito. Versión simple del pedido
-  // real (borrador visible como card oculta en el servidor, con la foto ya
-  // subida) — anotado en memoria para retomar aparte.
+  // useFormDraft.js). Versión simple del pedido real (borrador visible
+  // como card oculta en el servidor, con la foto ya subida) — anotado en
+  // memoria para retomar aparte.
+  //
+  // El draft se aplica al ABRIR el formulario, NO reabriéndolo solo al
+  // entrar al admin: esa versión anterior secuestraba el arranque de la
+  // app (entrabas a ver cualquier otra cosa y te tiraba al formulario)
+  // — mismo problema reportado en el de Ofertas.
   const productoDraft = useFormDraft(tiendaData?.id, 'producto');
-  const productoDraftRestauradoRef = useRef(false);
   useEffect(() => {
-    if (!tiendaData?.id || productoDraftRestauradoRef.current) return;
-    productoDraftRestauradoRef.current = true;
+    if (!productoShowForm || productoEditing) return;
     const draft = productoDraft.leer();
-    if (draft && !productoEditing && !productoShowForm) {
-      setProductoForm((f) => ({ ...f, ...draft }));
-      setProductoShowForm(true);
-    }
+    if (draft) setProductoForm((f) => ({ ...f, ...draft }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiendaData?.id]);
+  }, [productoShowForm]);
   useEffect(() => {
     // Solo mientras el formulario está realmente abierto para CREAR (no
     // editar): un draft mientras se edita un producto existente pisaría
@@ -458,18 +456,23 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
   // Draft de TEXTO del formulario de oferta — mismo criterio que el de
   // producto (ver ese bloque más arriba para el porqué completo).
+  //
+  // El draft se aplica cuando el usuario ABRE el formulario (ver el
+  // useEffect de abajo), NO reabriendo el formulario solo al entrar al
+  // admin: esa versión anterior hacía que, tras cerrar el formulario con
+  // texto a medio escribir, entrar a la app te tirara directo al
+  // formulario de Ofertas aunque vinieras a hacer cualquier otra cosa —
+  // reportado como "a veces al refrescar me carga la página con el
+  // formulario de ofertas abierto".
   const ofertaDraft = useFormDraft(tiendaData?.id, 'oferta');
-  const ofertaDraftRestauradoRef = useRef(false);
   useEffect(() => {
-    if (!tiendaData?.id || ofertaDraftRestauradoRef.current) return;
-    ofertaDraftRestauradoRef.current = true;
+    if (!ofertaShowForm || ofertaEditing) return;
+    // Al abrir para CREAR (no editar), si hay texto guardado de una vez
+    // anterior, se precarga en el formulario ya abierto.
     const draft = ofertaDraft.leer();
-    if (draft && !ofertaEditing && !ofertaShowForm) {
-      setOfertaForm((f) => ({ ...f, ...draft }));
-      setOfertaShowForm(true);
-    }
+    if (draft) setOfertaForm((f) => ({ ...f, ...draft }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tiendaData?.id]);
+  }, [ofertaShowForm]);
   useEffect(() => {
     if (!ofertaShowForm || ofertaEditing) return;
     ofertaDraft.guardar(ofertaForm, (f) => !f.nombre?.trim());
