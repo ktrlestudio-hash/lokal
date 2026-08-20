@@ -1,6 +1,8 @@
-// v6: se sube la versión para invalidar el caché de los clientes ya
-// instalados — el activate de abajo borra todo lo que no sea CACHE_NAME.
-const CACHE_NAME = 'lokal-v6';
+// v7: fix del catch de fetch (respondWith(undefined) generaba "Failed to
+// convert value to 'Response'" cuando una URL fallida nunca había estado
+// en caché) — se sube la versión para invalidar el caché de los clientes
+// ya instalados, el activate de abajo borra todo lo que no sea CACHE_NAME.
+const CACHE_NAME = 'lokal-v7';
 
 // ── Install: precache assets mínimos ─────────────────────────────────────────
 self.addEventListener('install', (e) => {
@@ -58,7 +60,15 @@ self.addEventListener('fetch', (e) => {
         }
         return res;
       })
-      .catch(() => caches.match(e.request))
+      // caches.match() devuelve undefined si esa URL nunca se cacheó (ej.
+      // primera vez que se pide, o el fetch falló por CSP/estar offline
+      // ANTES de completar nunca una vez) — respondWith(undefined) tira
+      // "Failed to convert value to 'Response'" en la consola, un error
+      // ruidoso que no aporta nada (el error real ya se ve aparte, como el
+      // bloqueo de CSP o el fallo de red). new Response con status 504
+      // evita ese ruido y deja que la imagen/recurso rota se maneje del
+      // lado de la UI (ej. LazyImg ya tiene su propio onError).
+      .catch(() => caches.match(e.request).then((cached) => cached || new Response(null, { status: 504, statusText: 'Offline y sin caché' })))
   );
 });
 

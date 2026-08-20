@@ -159,7 +159,17 @@ const CSP_PROD = [
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' https: data: blob:",
   "media-src 'self' https: data: blob:",
-  "connect-src 'self' https://*.googleapis.com https://www.googleapis.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com https://*.firebaseapp.com https://*.web.app https://accounts.google.com https://apis.google.com https://api.mercadopago.com https://nominatim.openstreetmap.org https://router.project-osrm.org https://*.basemaps.cartocdn.com https://api.maptiler.com https://fonts.googleapis.com https://fonts.gstatic.com https://lh3.googleusercontent.com https://images.unsplash.com",
+  // pub-e003c6645fb242638e406dffe98c7bc5.r2.dev: bucket público de R2
+  // (LOKAL_BUCKET / R2_PUBLIC_URL, ver upload.js) donde se suben todas
+  // las fotos de producto/oferta/tienda. img-src ya tenía "https:"
+  // genérico, así que un <img src> directo cargaba bien — pero Leaflet
+  // (el mapa) precarga los íconos de marcador vía fetch()/Image()
+  // interceptado por el Service Worker, y ESE tipo de request cae bajo
+  // connect-src, no img-src. Sin el dominio acá, el navegador bloqueaba
+  // el fetch antes de que llegara a la red — el bug quedó tapado mientras
+  // las fotos vivían embebidas como base64 en el JSON (nunca hacían un
+  // fetch de red real) y recién se hizo visible al limpiar esos datos.
+  "connect-src 'self' https://*.googleapis.com https://www.googleapis.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com https://*.firebaseapp.com https://*.web.app https://accounts.google.com https://apis.google.com https://api.mercadopago.com https://nominatim.openstreetmap.org https://router.project-osrm.org https://*.basemaps.cartocdn.com https://api.maptiler.com https://fonts.googleapis.com https://fonts.gstatic.com https://lh3.googleusercontent.com https://images.unsplash.com https://pub-e003c6645fb242638e406dffe98c7bc5.r2.dev",
   "frame-src 'self' https://*.firebaseapp.com https://*.web.app https://*.google.com https://accounts.google.com https://*.mercadopago.com https://*.mercadopago.com.ar https://*.mercadopago.com.mx https://*.mercadolibre.com",
   "form-action 'self' https://*.mercadopago.com https://*.mercadopago.com.ar https://*.mercadopago.com.mx",
   "manifest-src 'self'",
