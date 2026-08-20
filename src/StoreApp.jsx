@@ -2653,33 +2653,37 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     };
 
     return (
-      // flex-col + h-[100dvh]: el formulario entero (foto+nombre+fecha+
-      // botón) tiene que entrar SIN scroll, no ganarle espacio al botón
-      // metiéndolo en un footer aparte. flex-1 min-h-0 + justify-center
-      // reparte el alto disponible; la foto es la pieza más grande, así
-      // que es la que se achica cuando no entra todo — max-height (no solo
-      // aspect-ratio) la limita a lo que quede libre, manteniendo la
-      // proporción 1:1.414 mientras haya espacio. overflow-y-auto queda
-      // como red de seguridad, no como comportamiento esperado (pantallas
-      // MUY chicas o zoom de accesibilidad alto).
+      // El formulario entero (foto+nombre+fecha+botón) encastra en la
+      // pantalla, sin scroll: fixed inset-0 + flex-col acota el alto, los
+      // campos de texto y el botón son shrink-0 (tamaño fijo) y el recuadro
+      // de la foto es el único flex-1, así que absorbe exactamente el alto
+      // que sobra. La foto conserva su proporción 1:1.414 escalando la
+      // altura — ver el comentario del bloque de Foto más abajo.
       <div className="fixed inset-0 z-[5000] bg-[#f5f5f5] dark:bg-[#080808] flex flex-col">
         <StorePageHeader
           title={ofertaEditing ? 'Editar oferta' : 'Nueva oferta'}
           onBack={() => setOfertaShowForm(false)}
         />
-        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col">
-        <div className="max-w-md mx-auto w-full p-4 lg:p-8 flex-1 flex flex-col justify-center gap-4 min-h-0">
-          {/* Foto */}
-          <div className="min-h-0 flex flex-col">
+        {/* Sin overflow-y-auto: el formulario NO scrollea, encastra. Con
+            scroll habilitado el contenido puede crecer libremente y flex-1
+            deja de repartir un alto acotado, que es justo lo que hace que
+            la foto llene el espacio sobrante. */}
+        <div className="flex-1 min-h-0 max-w-md mx-auto w-full p-4 lg:p-8 flex flex-col gap-4">
+          {/* Foto — flex-1: ES la pieza elástica del formulario. Absorbe el
+              alto que sobra después de nombre/fecha/botón (shrink-0, tamaño
+              fijo), así el conjunto encastra sin scroll en cualquier
+              pantalla.
+              El recuadro conserva SIEMPRE la proporción 1:1.414 de la card
+              real (admin y vista pública): lo que escala es su altura según
+              el espacio libre, y el ancho se deriva de esa altura
+              (h-full + w-auto + aspect-ratio). Por eso el contenedor lo
+              centra horizontalmente en vez de estirarlo a todo el ancho —
+              si se estirara, la foto cargada se vería con otro encuadre que
+              en la card final. */}
+          <div className="flex-1 min-h-0 flex flex-col">
             <label className="block text-xs font-bold uppercase tracking-wider text-ink-dim mb-2 shrink-0">Foto</label>
-            {/* aspect-[1/1.414] — MISMA proporción que la card real (lista
-              de ofertas del admin y la vista pública, ambas ya ajustadas).
-              max-height limita cuánto puede crecer en pantallas altas/
-              anchas, así el resto del formulario (nombre, fecha, botón)
-              siempre queda visible sin scroll — antes solo tenía
-              aspect-ratio, así que en pantallas chicas podía ocupar casi
-              toda la altura y empujar el botón fuera de la vista. */}
-            <label className={`block mx-auto aspect-[1/1.414] max-h-[38vh] w-auto rounded-2xl border-2 border-dashed bg-surface-card-2 dark:bg-white/5 overflow-hidden cursor-pointer relative hover:border-brand transition-colors ${ofertaIntentoGuardar && faltante === 'foto' ? 'border-rose-400 dark:border-rose-500/60' : 'border-slate-200 dark:border-white/10'}`}>
+            <div className="flex-1 min-h-0 flex justify-center">
+            <label className={`h-full w-auto aspect-[1/1.414] block rounded-2xl border-2 border-dashed bg-surface-card-2 dark:bg-white/5 overflow-hidden cursor-pointer relative hover:border-brand transition-colors ${ofertaIntentoGuardar && faltante === 'foto' ? 'border-rose-400 dark:border-rose-500/60' : 'border-slate-200 dark:border-white/10'}`}>
               <input type="file" accept="image/*" className="hidden" onChange={handleFoto} />
               {hayFotoValida ? (
                 <>
@@ -2717,10 +2721,11 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
                 </div>
               )}
             </label>
+            </div>
           </div>
 
           {/* Nombre */}
-          <div>
+          <div className="shrink-0">
             <label className="block text-xs font-bold uppercase tracking-wider text-ink-dim mb-2">Nombre</label>
             <input
               value={ofertaForm.nombre}
@@ -2732,7 +2737,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
           </div>
 
           {/* Vencimiento — fecha única, mínimo hoy (no se caduca en el pasado) */}
-          <div>
+          <div className="shrink-0">
             <label className="block text-xs font-bold uppercase tracking-wider text-ink-dim mb-2">Vence (opcional)</label>
             <DatePicker
               value={ofertaForm.expireAt}
@@ -2769,7 +2774,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
             <Save className="w-4 h-4" />
             {ofertaEditing ? 'Guardar cambios' : 'Publicar oferta'}
           </button>
-        </div>
         </div>
       </div>
     );
