@@ -7,9 +7,15 @@ import CategoryPicker from '../CategoryPicker';
 import AttributesEditor from '../AttributesEditor';
 import { calcularBadges, BADGE_CONFIG } from '../utils/productBadges';
 
-const cardCls = 'bg-surface-card rounded-2xl border border-slate-200 dark:border-white/10 p-4';
+// p-3.5 (no p-4): 2px menos por lado × 5 cards, parte del mismo ajuste
+// medido para que el formulario entre sin scroll en un viewport típico.
+const cardCls = 'bg-surface-card rounded-2xl border border-slate-200 dark:border-white/10 p-3.5';
 const labelCls = 'text-xs font-bold text-ink-dim uppercase tracking-wider';
-const inputCls = 'w-full bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand transition-colors dark:text-white placeholder:text-ink-dim';
+// py-2.5 (no py-3): compartido por los 4 inputs + el textarea del
+// formulario, así que el recorte de 4px por campo es el ajuste con mejor
+// relación ganancia/impacto visual para que el formulario entre sin
+// scroll — medido con Playwright contra el render real.
+const inputCls = 'w-full bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-brand transition-colors dark:text-white placeholder:text-ink-dim';
 
 // Click/tap para abrir (no solo hover) — en mobile no hay hover, así que
 // hover-only dejaba estas 6 explicaciones de campo inalcanzables para el
@@ -285,7 +291,12 @@ export default function ProductoForm({
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
   return (
-    <div className="max-w-lg mx-auto px-4 pt-5 pb-6 space-y-4">
+    // space-y-2.5 (no 4) entre las 5 cards y pt-4/pb-4 (no pt-5/pb-6):
+    // medido con Playwright contra el formulario real, sobraban ~100px en
+    // un viewport típico (iPhone 14, 844px de alto) — el aire real estaba
+    // acá, en el espacio ENTRE secciones, no dentro de cada campo. Esto
+    // no achica ningún input/label, solo el hueco entre cards.
+    <div className="max-w-lg mx-auto px-4 pt-3 pb-2 space-y-2.5">
 
       {/* La sección "¿Qué vas a vender?" (Nuevo/Usado) se sacó: estas
           tiendas venden productos nuevos, así que era un paso extra que
@@ -297,14 +308,19 @@ export default function ProductoForm({
 
       {/* ── Fotos ── */}
       <div className={cardCls}>
-        <p className={`${labelCls} mb-3`}>
+        <p className={`${labelCls} mb-2`}>
           Fotos <span className="font-normal normal-case text-ink-dim">({fotoPreviews.length}/4)</span>
           <Tip text="Agregá fotos claras del producto. La primera imagen será la principal." />
         </p>
+        {/* max-h-24 tope: en max-w-lg (512px) cada celda del grid ronda
+            ~110px de ancho, y aspect-square las hacía igual de altas —
+            era la sección más pesada del formulario después de la de
+            Título. El tope mantiene el cuadrado hasta ese límite y lo
+            recorta si el ancho disponible daría más. */}
         <div className="grid grid-cols-4 gap-2">
           {Array.from({ length: 4 }).map((_, i) => {
             if (i < fotoPreviews.length) return (
-              <div key={i} className="relative aspect-square rounded-xl overflow-hidden bg-surface-card-2 dark:bg-white/10">
+              <div key={i} className="relative aspect-square max-h-24 rounded-xl overflow-hidden bg-surface-card-2 dark:bg-white/10">
                 <img src={fotoPreviews[i]} alt="" className="w-full h-full object-cover" />
                 <button onClick={() => removeFoto(i)} className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center">
                   <X className="w-3 h-3" />
@@ -314,21 +330,24 @@ export default function ProductoForm({
             );
             if (i === fotoPreviews.length && fotoPreviews.length < 4) return (
               <button key={i} onClick={() => fotoInputRef.current?.click()}
-                className="aspect-square rounded-xl border-2 border-dashed border-slate-300 dark:border-white/20 flex flex-col items-center justify-center gap-1 hover:border-brand transition-colors text-ink-dim hover:text-brand">
+                className="aspect-square max-h-24 rounded-xl border-2 border-dashed border-slate-300 dark:border-white/20 flex flex-col items-center justify-center gap-1 hover:border-brand transition-colors text-ink-dim hover:text-brand">
                 <Camera className="w-5 h-5" />
                 <span className="text-[10px]">Agregar</span>
               </button>
             );
-            return <div key={i} className="aspect-square rounded-xl bg-surface-card-2/40 dark:bg-white/5 border border-dashed border-slate-200 dark:border-white/5" />;
+            return <div key={i} className="aspect-square max-h-24 rounded-xl bg-surface-card-2/40 dark:bg-white/5 border border-dashed border-slate-200 dark:border-white/5" />;
           })}
         </div>
         <input ref={fotoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFotos} />
       </div>
 
       {/* ── Título + descripción ── */}
-      <div className={`${cardCls} space-y-4`}>
+      {/* space-y-3 (no 4) y mb-1.5 (no 2) en los labels: la sección más
+          alta del formulario después de Fotos — el recorte puntual acá
+          suma más que tocar el padding de todas las cards. */}
+      <div className={`${cardCls} space-y-3`}>
         <div>
-          <label className={`${labelCls} block mb-2`}>
+          <label className={`${labelCls} block mb-1.5`}>
             Nombre del producto <span className="text-rose-500">*</span>
             <Tip text="Escribí el nombre completo y específico. Ej: 'Auriculares Sony WH-1000XM5 Negro'." />
           </label>
@@ -340,7 +359,7 @@ export default function ProductoForm({
           />
         </div>
         <div>
-          <label className={`${labelCls} block mb-2`}>
+          <label className={`${labelCls} block mb-1.5`}>
             Descripción <span className="font-normal normal-case text-ink-dim">(opcional)</span>
             <Tip text="Contá más detalles: características, estado, qué incluye, medidas, etc." />
           </label>
