@@ -7,41 +7,6 @@ import CategoryPicker from '../CategoryPicker';
 import AttributesEditor from '../AttributesEditor';
 import { calcularBadges, BADGE_CONFIG } from '../utils/productBadges';
 
-// ─── Condición cards ──────────────────────────────────────────────────────────
-const CONDICION_OPTS = [
-  {
-    id: 'usado',
-    label: 'Usado',
-    desc: 'Segunda mano',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-        <path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/><path d="M12 8v4l3 3"/>
-      </svg>
-    ),
-    activeCard: 'border-brand bg-brand/8 dark:bg-brand/10',
-    activeIcon: 'bg-brand/15',
-    activeIconColor: 'text-brand',
-    inactiveCard: 'border-slate-200 dark:border-white/10 hover:border-slate-300',
-    inactiveIcon: 'bg-surface-card-2 dark:bg-white/8',
-    inactiveIconColor: 'text-ink-dim',
-  },
-  {
-    id: 'nuevo',
-    label: 'Nuevo',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-        <path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/>
-      </svg>
-    ),
-    activeCard: 'border-amber-400 bg-amber-50 dark:bg-amber-500/10',
-    activeIcon: 'bg-amber-400/15',
-    activeIconColor: 'text-amber-500',
-    inactiveCard: 'border-slate-200 dark:border-white/10 hover:border-amber-300',
-    inactiveIcon: 'bg-surface-card-2 dark:bg-white/8',
-    inactiveIconColor: 'text-ink-dim',
-  },
-];
-
 const cardCls = 'bg-surface-card rounded-2xl border border-slate-200 dark:border-white/10 p-4';
 const labelCls = 'text-xs font-bold text-ink-dim uppercase tracking-wider';
 const inputCls = 'w-full bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-brand transition-colors dark:text-white placeholder:text-ink-dim';
@@ -117,23 +82,31 @@ function BadgesSection({ form, set, labelCls }) {
 
   return (
     <div className={cardCls}>
-      <p className={`${labelCls} mb-1`}>Badges</p>
-      <p className="text-xs text-ink-dim mb-3">Se calculan solos según precio y fechas — tocá uno para forzarlo u ocultarlo manualmente.</p>
+      {/* "Etiquetas" y no "Badges": el dueño de la tienda no tiene por qué
+          saber qué es un badge. El texto explicativo largo que había acá
+          se sacó — con los chips visibles y el estado a la vista, no
+          agregaba nada que no se entienda tocándolos.
+          Ícono + texto en UNA fila (no apilados): la etiqueta más larga
+          se abrevia solo acá ("Últimos días" → "Últimos") para que las 3
+          entren sin apretarse; en las cards del público sigue completa
+          (ver BADGE_CONFIG en productBadges.js). */}
+      <p className={`${labelCls} mb-3`}>Etiquetas</p>
       <div className="grid grid-cols-3 gap-2">
         {Object.entries(BADGE_CONFIG).map(([id, cfg]) => {
           const Icon = cfg.Icon;
           const isActive = activos.has(id);
           const isOculto = ocultar.includes(id) && !agregar.includes(id);
+          const labelCorta = id === 'por_vencer' ? 'Últimos' : cfg.label;
           return (
             <button
               key={id}
               type="button"
               onClick={() => toggleForzado(id)}
-              className={`flex flex-col items-center justify-center gap-1.5 px-2 py-3 rounded-2xl border-2 transition-all
+              className={`flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-2xl border-2 transition-all
                 ${isActive ? `${cfg.color} border-transparent text-white` : isOculto ? 'border-dashed border-slate-300 dark:border-white/20 text-ink-dim opacity-60' : 'border-slate-200 dark:border-white/15 text-ink-dim hover:border-slate-300 dark:hover:border-white/25'}`}
             >
               {isOculto ? <EyeOff className="w-4 h-4 shrink-0" /> : <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : cfg.iconColor}`} />}
-              <span className="font-semibold text-xs">{cfg.label}</span>
+              <span className="font-semibold text-xs">{labelCorta}</span>
             </button>
           );
         })}
@@ -143,10 +116,15 @@ function BadgesSection({ form, set, labelCls }) {
 }
 
 // ─── ContactoSection ──────────────────────────────────────────────────────────
+// EN PAUSA (no borrar): su render está comentado más abajo porque el chat
+// interno todavía no funciona — elegir "Chat" no llevaría a ningún lado.
+// Se vuelve a habilitar cuando el módulo de mensajes esté activo.
+//
 // tiendaWhatsapp: número ya guardado en el perfil (puede ser null)
 // Lógica:
 //   - Si tiendaWhatsapp existe → selector visual Chat / WhatsApp (usa el número del perfil)
 //   - Si no existe → Chat siempre activo + campo opcional para ingresar número
+// eslint-disable-next-line no-unused-vars
 function ContactoSection({ form, set, tiendaWhatsapp, inputCls, labelCls }) {
   // modo derivado del form: 'chat' si contactoWhatsapp está vacío, 'whatsapp' si tiene valor
   const modo = form.contactoWhatsapp ? 'whatsapp' : 'chat';
@@ -256,10 +234,6 @@ function ContactoSection({ form, set, tiendaWhatsapp, inputCls, labelCls }) {
 // Props opcionales de tienda:
 //   attributes / setAttributes — para AttributesEditor
 //   categories / onCreateCategory — para CategoryPicker avanzado
-//
-// Props opcionales de home:
-//   canPostNew — si false, bloquea la opción "Nuevo" con nudge modal
-//   setNudgeModal — fn({ type }) requerida si canPostNew puede ser false
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ProductoForm({
   form,
@@ -274,8 +248,6 @@ export default function ProductoForm({
   saving = false,
   error = null,
   isEditing = false,
-  canPostNew = true,
-  setNudgeModal,
   categories,
   onCreateCategory,
   tiendaWhatsapp = null,
@@ -303,38 +275,13 @@ export default function ProductoForm({
   return (
     <div className="max-w-lg mx-auto px-4 pt-5 pb-6 space-y-4">
 
-      {/* ── Condición ── */}
-      <div className={cardCls}>
-        <p className={`${labelCls} mb-3`}>¿Qué vas a vender?</p>
-        <div className="flex gap-2 items-stretch">
-          {CONDICION_OPTS.map(opt => {
-            const isActive = (form.condicion || 'usado') === opt.id;
-            const locked = opt.id === 'nuevo' && !canPostNew;
-            return (
-              <button
-                key={opt.id}
-                onClick={() => {
-                  if (locked) { setNudgeModal?.({ type: 'producto-nuevo' }); return; }
-                  set('condicion', opt.id);
-                }}
-                className={`flex-1 flex items-center gap-2.5 rounded-xl border-2 px-3 py-2 transition-all text-left
-                  ${isActive ? opt.activeCard : locked ? 'border-slate-100 dark:border-white/5 opacity-60' : opt.inactiveCard}`}
-              >
-                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${isActive ? opt.activeIcon : opt.inactiveIcon}`}>
-                  <span className={isActive ? opt.activeIconColor : opt.inactiveIconColor}>{opt.icon}</span>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-ink leading-tight">{opt.label}</p>
-                  <p className="text-[11px] text-ink-dim leading-tight">
-                    {opt.id === 'usado' ? 'Segunda mano' : canPostNew ? 'De tu negocio' : 'Solo negocios'}
-                  </p>
-                  {locked && <span className="text-[10px] font-bold text-amber-600">↑ Subir nivel</span>}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {/* La sección "¿Qué vas a vender?" (Nuevo/Usado) se sacó: estas
+          tiendas venden productos nuevos, así que era un paso extra que
+          casi nadie iba a cambiar y ocupaba una card entera arriba de
+          todo. El campo `condicion` sigue existiendo en el modelo y en el
+          backend (queda en 'nuevo', ver el default de productoForm en
+          StoreApp.jsx), y los badges/filtros que lo leen siguen
+          funcionando — se puede reactivar sin migrar datos. */}
 
       {/* ── Fotos ── */}
       <div className={cardCls}>
@@ -376,7 +323,7 @@ export default function ProductoForm({
           <input
             value={form.titulo}
             onChange={e => set('titulo', e.target.value)}
-            placeholder={form.condicion === 'nuevo' ? 'Ej: Remera oversize negra talle M' : 'Ej: Bicicleta MTB rodado 26'}
+            placeholder="Ej: Remera oversize negra talle M"
             className={inputCls}
           />
         </div>
@@ -446,20 +393,26 @@ export default function ProductoForm({
       {/* ── Badges dinámicos (Nuevo/Oferta/Últimos días) ── */}
       <BadgesSection form={form} set={set} labelCls={labelCls} />
 
-      {/* ── Presentación (kg, cc, unidad...) ── */}
-      <div className={cardCls}>
-        <label className={`${labelCls} block mb-2`}>Presentación <span className="font-normal normal-case text-ink-dim">(opcional)</span></label>
-        <input value={form.presentacion} onChange={e => set('presentacion', e.target.value)} placeholder="Ej: 1kg, 500cc, unidad" className={inputCls} />
-      </div>
+      {/* "Presentación" (campo libre: 1kg, 500cc...) se sacó: se pisaba
+          con el atributo "Presentación" que varias categorías ya traen
+          con opciones predefinidas (ver categories.js: bebidas, gaseosas,
+          cervezas), así que había dos campos con el mismo nombre pidiendo
+          lo mismo. Donde no hay atributo de categoría, el dato va en el
+          título o la descripción, que es donde el comprador lo lee igual.
 
-      {/* ── Financiación (campo libre, independiente de los badges) ── */}
-      <div className={cardCls}>
-        <label className={`${labelCls} block mb-2`}>Financiación <span className="font-normal normal-case text-ink-dim">(opcional)</span></label>
-        <input value={form.financiacion} onChange={e => set('financiacion', e.target.value)} placeholder="Ej: 12 cuotas sin interés" className={inputCls} />
-      </div>
+          "Financiación" (campo libre) también se sacó por lo mismo que la
+          condición: ocupaba una card entera para algo que casi ninguna de
+          estas tiendas usa.
 
-      {/* ── Contacto ── */}
-      <ContactoSection form={form} set={set} tiendaWhatsapp={tiendaWhatsapp} inputCls={inputCls} labelCls={labelCls} />
+          Ambos campos siguen en el modelo y en el backend — los productos
+          ya cargados conservan su valor, solo dejan de editarse acá.
+
+          ContactoSection queda comentada, NO borrada: el chat interno
+          todavía no funciona, así que elegir "Chat" no lleva a ningún
+          lado. Se vuelve a habilitar cuando el módulo de mensajes esté
+          activo.
+          <ContactoSection form={form} set={set} tiendaWhatsapp={tiendaWhatsapp} inputCls={inputCls} labelCls={labelCls} />
+      */}
 
       {/* ── Error ── */}
       {error && (
@@ -470,14 +423,28 @@ export default function ProductoForm({
       )}
 
       {/* ── Guardar ── */}
-      <button
-        onClick={onSave}
-        disabled={saving || !form.titulo?.trim()}
-        className="w-full py-3.5 bg-brand hover:bg-brand-light disabled:opacity-50 text-white rounded-2xl font-bold flex items-center justify-center gap-2 transition-colors shadow-lg shadow-brand/25"
+      {/* sticky al fondo del viewport: este formulario es largo (fotos,
+          título, precio, categoría, atributos, etiquetas), así que dejar
+          el botón solo al final obligaba a scrollear hasta abajo cada vez
+          para publicar. Se mantiene la misma condición de habilitado (hay
+          título) — el botón se ve siempre, pero sigue deshabilitado hasta
+          completar lo obligatorio.
+          -mx-4 px-4 contrarresta el padding lateral del contenedor para
+          que la barra llegue de borde a borde; el degradado evita que el
+          contenido "choque" contra el botón al scrollear por debajo. */}
+      <div
+        className="sticky bottom-0 -mx-4 px-4 pt-4 bg-gradient-to-t from-[#f5f5f5] via-[#f5f5f5] to-transparent dark:from-[#080808] dark:via-[#080808]"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}
       >
-        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-        {saving ? 'Guardando...' : isEditing ? 'Guardar cambios' : 'Publicar producto'}
-      </button>
+        <button
+          onClick={onSave}
+          disabled={saving || !form.titulo?.trim()}
+          className="w-full py-3.5 bg-brand hover:bg-brand-light disabled:opacity-50 text-white rounded-2xl font-bold flex items-center justify-center gap-2 transition-colors shadow-lg shadow-brand/25"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+          {saving ? 'Guardando...' : isEditing ? 'Guardar cambios' : 'Publicar producto'}
+        </button>
+      </div>
     </div>
   );
 }

@@ -2568,7 +2568,11 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
     return (
       <>
-        <div className="fixed inset-0 z-[5000] bg-[#f5f5f5] dark:bg-[#080808] overflow-y-auto no-scrollbar pb-24">
+        {/* Sin pb-24: el botón "Publicar" ahora es sticky al fondo dentro
+            de ProductoForm y ya reserva su propio espacio (incluida la
+            safe-area) — el padding extra acá dejaba un hueco vacío
+            scrolleable debajo del botón. */}
+        <div className="fixed inset-0 z-[5000] bg-[#f5f5f5] dark:bg-[#080808] overflow-y-auto no-scrollbar">
           <StorePageHeader
             title={productoEditing ? 'Editar producto' : 'Nuevo producto'}
             onBack={() => setProductoShowForm(false)}

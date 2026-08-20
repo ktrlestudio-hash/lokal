@@ -244,13 +244,16 @@ export default function CategoryPicker({
   return (
     <div ref={containerRef} className={`relative ${className}`}>
 
-      {/* Trigger */}
+      {/* Trigger — borde celeste mientras open=true, no solo en :hover:
+          sin esto, con el dropdown ya abierto el trigger se veía idéntico
+          a cerrado (borde gris fijo), sin ninguna señal de que este campo
+          es el que está activo. */}
       <div
         role="button"
         tabIndex={0}
         onClick={handleOpen}
         onKeyDown={e => e.key === 'Enter' && handleOpen()}
-        className="w-full flex items-center gap-2 px-4 py-3 rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-surface-card text-left transition-colors hover:border-primary dark:hover:border-primary cursor-pointer select-none active:scale-100"
+        className={`w-full flex items-center gap-2 px-4 py-3 rounded-2xl border-2 bg-surface-card text-left transition-colors hover:border-brand cursor-pointer select-none active:scale-100 ${open ? 'border-brand' : 'border-slate-200 dark:border-white/10'}`}
       >
         <Tag className="w-4 h-4 text-ink-dim shrink-0" />
         {selectedLabel ? (
@@ -272,9 +275,17 @@ export default function CategoryPicker({
       {open && (
         <div className="absolute z-50 left-0 right-0 mt-1.5 rounded-2xl border-2 border-slate-200 dark:border-white/10 bg-surface-card shadow-xl overflow-hidden animate-dropdown-in">
 
-          {/* Search */}
+          {/* Search — sin autoFocus: abrir el selector no debe levantar el
+              teclado del celular. Buscar es opcional (la mayoría navega la
+              lista), así que el teclado aparece recién si el usuario toca
+              el campo a propósito.
+              focus-within en el contenedor (no focus en el <input>): el
+              recuadro que el usuario ve es este chip con la lupa, así que
+              el resaltado de foco tiene que marcarlo a él. El input interno
+              es transparente y sin borde propio — marcarlo a él dibujaba un
+              segundo recuadro adentro del primero. */}
           <div className="p-2 border-b border-slate-100 dark:border-white/8">
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface-card-2 dark:bg-white/5 border border-slate-200 dark:border-white/10 focus-within:border-brand transition-colors">
               <Search className="w-3.5 h-3.5 text-ink-dim shrink-0" />
               <input
                 ref={searchRef}
@@ -282,8 +293,7 @@ export default function CategoryPicker({
                 value={query}
                 onChange={e => { setQuery(e.target.value); setCreating(false); }}
                 placeholder="Buscar por nombre, marca, tipo..."
-                autoFocus
-                className="flex-1 text-sm bg-transparent outline-none text-ink dark:text-ink-dim placeholder:text-ink-dim dark:placeholder:text-ink-dim"
+                className="flex-1 min-w-0 text-sm bg-transparent outline-none text-ink dark:text-ink-dim placeholder:text-ink-dim dark:placeholder:text-ink-dim"
               />
               {query && (
                 <button type="button" onClick={() => setQuery('')}>
@@ -336,18 +346,18 @@ export default function CategoryPicker({
                       Sugerido: <strong>{getCategoryPath(suggCat.id, CATEGORIES).map(c => c.name).join(' › ')}</strong>
                     </p>
                     {suggestion.reason && (
-                      <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70 truncate">{suggestion.reason}</p>
+                      <p className="text-xs text-brand/70 truncate">{suggestion.reason}</p>
                     )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <button
                       type="button"
                       onClick={applySuggestion}
-                      className="px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-medium transition-colors"
+                      className="px-2.5 py-1 rounded-lg bg-brand hover:bg-brand-light text-white text-xs font-medium transition-colors"
                     >
                       Usar
                     </button>
-                    <button type="button" onClick={dismissSuggestion} className="p-1 text-emerald-500/60 hover:text-emerald-600 dark:hover:text-emerald-300">
+                    <button type="button" onClick={dismissSuggestion} className="p-1 text-brand/60 hover:text-brand-dark">
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -394,8 +404,8 @@ export default function CategoryPicker({
                 onClick={() => handleSelect(breadcrumb[breadcrumb.length - 1])}
                 className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-colors text-left
                   ${value === breadcrumb[breadcrumb.length - 1].id
-                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                    : 'bg-surface-card-2 dark:bg-white/5 text-ink-dim dark:text-ink-dim hover:bg-emerald-500/8 hover:text-emerald-600 dark:hover:text-emerald-400'
+                    ? 'bg-brand/10 text-brand'
+                    : 'bg-surface-card-2 dark:bg-white/5 text-ink-dim dark:text-ink-dim hover:bg-brand/8 hover:text-brand'
                   }`}
               >
                 <Check className="w-3.5 h-3.5 shrink-0" />
@@ -431,7 +441,7 @@ export default function CategoryPicker({
                     onClick={() => handleSelect(cat)}
                     className={`flex-1 flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-left transition-colors
                       ${isSelected
-                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                        ? 'bg-brand/10 text-brand'
                         : 'text-ink dark:text-ink-dim hover:bg-surface-card-2 dark:hover:bg-white/8'
                       }`}
                   >
@@ -482,6 +492,11 @@ export default function CategoryPicker({
               <p className="text-xs text-ink-dim px-1">
                 Ingresá el nombre de tu categoría.
               </p>
+              {/* min-w-0 en el input y shrink-0 en el botón: sin eso el
+                  input reclamaba su ancho de contenido y empujaba el botón
+                  "Usar" fuera del dropdown, que lo recortaba contra el
+                  borde derecho. Con min-w-0 el input cede ancho y el botón
+                  queda completo, respetando el padding del contenedor. */}
               <div className="flex gap-1.5">
                 <input
                   autoFocus
@@ -490,13 +505,13 @@ export default function CategoryPicker({
                   onChange={e => setNewName(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleCreateConfirm(); if (e.key === 'Escape') setCreating(false); }}
                   placeholder="Ej: Repuestos de tractor..."
-                  className="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-surface-card-2 dark:bg-white/5 text-sm text-ink dark:text-ink-dim placeholder:text-ink-dim dark:placeholder:text-ink-dim outline-none focus:border-primary"
+                  className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-slate-200 dark:border-white/10 bg-surface-card-2 dark:bg-white/5 text-sm text-ink dark:text-ink-dim placeholder:text-ink-dim dark:placeholder:text-ink-dim outline-none focus:border-brand"
                 />
                 <button
                   type="button"
                   onClick={handleCreateConfirm}
                   disabled={!newName.trim() || creatingLoading}
-                  className="px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+                  className="shrink-0 px-3 py-2 rounded-xl bg-brand hover:bg-brand-light disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
                 >
                   {creatingLoading ? '...' : 'Usar'}
                 </button>
