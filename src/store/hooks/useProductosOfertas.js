@@ -18,30 +18,41 @@ import { cacheGet, cacheSet } from '../../lokCache';
 
 const API_BASE = '/.netlify/functions';
 const CACHE_TTL_MS = 10 * 60 * 1000;
-// Una lista vacía es un dato mucho más estable que uno con productos: no
-// "vence" sola, solo cambia cuando el propio dueño publica algo — y esa
-// mutación (upsert) ya actualiza la caché en el momento. Guardarla con el
-// mismo TTL corto de 10min hacía que, pasado ese rato, la cuenta "se
-// olvidara" de que estaba vacía y volviera a mostrar el skeleton de carga
-// como si no supiera nada, aunque la respuesta real no hubiera cambiado.
-const EMPTY_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// "¿Esta tienda tiene productos/ofertas?" es un HECHO, no un dato que
+// vence — no cambia solo con el paso del tiempo, cambia únicamente cuando
+// el dueño publica o borra algo (y ahí ya se actualiza en el momento, ver
+// setVacioConocido más abajo). Por eso vive aparte del caché normal
+// (que sí tiene TTL, pensado para datos que sí pueden quedar viejos): un
+// simple '1'/'0' en localStorage, sin fecha de vencimiento. Antes esto
+// usaba el mismo cacheSet/TTL que el resto (7 días) — el usuario reportó
+// que en la práctica "no andaba", y tiene sentido: pasado ese plazo la
+// cuenta volvía a "no saber" si estaba vacía y mostraba el skeleton de
+// nuevo, aunque la respuesta real siguiera siendo la misma.
+const vacioKey = (tiendaId) => `lokal-vacio-conocido:${tiendaId || 'store'}`;
+function getVacioConocido(tiendaId) {
+  try { return localStorage.getItem(vacioKey(tiendaId)) === '1'; } catch { return false; }
+}
+function setVacioConocido(tiendaId, vacio) {
+  try {
+    if (vacio) localStorage.setItem(vacioKey(tiendaId), '1');
+    else localStorage.removeItem(vacioKey(tiendaId));
+  } catch { /* storage lleno/bloqueado — ignorar */ }
+}
 
 export function useProductosOfertas(tiendaId) {
   const cacheKey = `productos-${tiendaId || 'store'}`;
   // cacheGet devuelve null cuando no hay entrada (nunca se cacheó, o venció
-  // el TTL) y el array real (incluso []) cuando sí la hay — por eso se lee
-  // una sola vez acá y se distingue explícitamente de "no sé todavía".
+  // el TTL normal de 10min) y el array real cuando sí la hay.
   const cached = cacheGet(cacheKey);
   const [items, setItemsState] = useState(() => cached || []);
-  // loading arranca en true SOLO si no hay ninguna pista en caché. Si la
-  // caché dice que la lista está vacía ([]), eso ya es una respuesta real
-  // (confirmada por el servidor la última vez que se sincronizó) — ir a
-  // skeleton en ese caso sería mostrar una carga falsa antes de terminar
-  // en el mismo empty state que ya sabíamos. El salto molesto era
-  // exactamente ese: empty (antes de que loading se active) → skeleton →
-  // empty otra vez. Con esto, "vacío confirmado" va directo al empty y
-  // "no sé" va directo al skeleton, sin pasos intermedios de más.
-  const [loading, setLoading] = useState(() => cached === null);
+  // loading arranca en true salvo que ya sepamos la respuesta de antemano:
+  // hay datos cacheados recientes, O el flag permanente confirma que la
+  // cuenta está vacía. Sin esto se veía el salto empty→skeleton→empty: el
+  // primer render (antes de que loading se active) ya mostraba el empty
+  // state con items=[], luego loading pasaba a true y aparecía el
+  // skeleton, y al terminar el fetch volvía al mismo empty de siempre.
+  const [loading, setLoading] = useState(() => cached === null && !getVacioConocido(tiendaId));
 
   // Todo setItems pasa por acá: sin esto, una mutación (crear/editar/
   // borrar/vaciar) solo actualizaba React state, nunca el snapshot de
@@ -52,10 +63,11 @@ export function useProductosOfertas(tiendaId) {
   const setItems = useCallback((updater) => {
     setItemsState(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      cacheSet(cacheKey, next, next.length === 0 ? EMPTY_CACHE_TTL_MS : CACHE_TTL_MS);
+      cacheSet(cacheKey, next, CACHE_TTL_MS);
+      setVacioConocido(tiendaId, next.length === 0);
       return next;
     });
-  }, [cacheKey]);
+  }, [cacheKey, tiendaId]);
 
   // all=1: el dueño ve también vencidas/ocultas en su panel (para poder
   // reactivarlas); el listado público (GET ?slug=...) sigue filtrando solo
@@ -73,7 +85,11 @@ export function useProductosOfertas(tiendaId) {
   // terminaban apareciendo en Ofertas aunque vivieran en productos.json).
   const fetchAll = useCallback(async () => {
     if (!tiendaId) return;
-    setLoading(true);
+    // Solo mostrar skeleton si de verdad no sabemos qué hay — con el flag
+    // de "vacío conocido" en true, este fetch sigue corriendo igual (para
+    // detectar si algo cambió desde otro dispositivo), pero en silencio:
+    // la pantalla ya muestra el empty state correcto de entrada.
+    if (!getVacioConocido(tiendaId)) setLoading(true);
     try {
       const [resProductos, resOfertas] = await Promise.all([
         apiFetch(`${API_BASE}/productos?tiendaId=${tiendaId}&all=1`, { authRequired: true }),
