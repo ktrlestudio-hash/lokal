@@ -1140,7 +1140,20 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
 
   const StorePageHeader = StorePageHeaderBase;
 
-  const closeCreateSheet = () => { setCreateSheetClosing(true); setTimeout(() => { setCreateSheetOpen(false); setCreateSheetClosing(false); }, 220); };
+  // createSheetOpen baja YA (síncrono): es lo que uiStack usa para saber
+  // si la capa del sheet sigue ocupando una entrada de historial (ver
+  // useCapaUI({ abierto: createSheetOpen, ... }) más arriba). createSheetClosing
+  // sostiene el RENDER visual mientras corre la animación de salida
+  // (StoreCreateSheet.jsx: `if (!createSheetOpen && !createSheetClosing) return null`).
+  // Antes createSheetOpen recién bajaba dentro del setTimeout de 220ms —
+  // si en ese medio tiempo se abría otra capa (el usuario elige una opción
+  // del sheet, que abre el formulario en el MISMO clic), la capa del sheet
+  // quedaba "viva" para uiStack por debajo de la nueva, y al completarse
+  // el timeout se cerraban las dos entradas de historial juntas (ver
+  // cerrarCapa en uiStack.js: corta todo lo que esté por encima de la capa
+  // que se cierra). El atrás terminaba saltando directo a la pantalla
+  // base, saltándose el formulario recién abierto.
+  const closeCreateSheet = () => { setCreateSheetOpen(false); setCreateSheetClosing(true); setTimeout(() => setCreateSheetClosing(false), 220); };
 
   // Un solo badge visible en las cards chicas de la grilla/lista (mismo
   // criterio que el sistema viejo VENTAJA_OPTS/AdvantageBadge, que ya no
