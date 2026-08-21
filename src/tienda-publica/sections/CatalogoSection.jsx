@@ -44,8 +44,38 @@ const SORT_OPTIONS = [
 // props) — no hay costo real en montarlos acá Y en el modal, cada uno con
 // su propio estado local.
 const PREVIEW_LIMIT = 6;
-const ALTO_BARRA = 40; // alto único compartido por buscador, ordenar, filtro y toggle de vista (card-preview)
+const ALTO_BARRA = 40; // alto único compartido por buscador, ordenar y filtro (card-preview)
 const ALTO_BARRA_MODAL = 46; // ídem, dentro de CatalogoModal (esa barra usa controles ligeramente más grandes)
+
+/* ── Toggle grilla/lista — port literal del segmented control del admin
+   (ProductosScreen.jsx: `flex gap-0.5 ... rounded-xl p-0.5` con botones
+   `w-7 h-7 rounded-lg`). Las medidas son las mismas traducidas de Tailwind:
+   gap-0.5 = 2px, p-0.5 = 2px, w-7/h-7 = 28px → contenedor de 62x32.
+
+   Importante: los botones llevan width Y height fijos, y el contenedor NO
+   usa alignItems:'stretch'. Antes se estiraban en alto para igualar la
+   barra (stretch) conservando su ancho, así que dejaban de ser cuadrados y
+   el contenedor quedaba visualmente apretado. Acá el toggle mantiene su
+   tamaño propio y se centra en la fila, igual que en el admin. ── */
+function ViewToggle({ layout, setLayout, surf, surf2, txt, txtM }) {
+  const btn = (activo) => ({
+    width: 28, height: 28, borderRadius: RADIUS.sm, border: 'none', cursor: 'pointer',
+    display: 'grid', placeItems: 'center', transition: 'background .15s ease, color .15s ease',
+    background: activo ? surf : 'transparent',
+    color: activo ? txt : txtM,
+    boxShadow: activo ? SHADOW.sm : 'none',
+  });
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', alignSelf: 'center', gap: 2, background: surf2, borderRadius: RADIUS.md, padding: 2, flexShrink: 0 }}>
+      <button onClick={() => setLayout('grilla')} aria-label="Vista grilla" data-tooltip="Grilla" style={btn(layout === 'grilla')}>
+        <LayoutGrid size={14} />
+      </button>
+      <button onClick={() => setLayout('lista')} aria-label="Vista lista" data-tooltip="Lista" style={btn(layout === 'lista')}>
+        <LayoutList size={14} />
+      </button>
+    </div>
+  );
+}
 
 export function CatalogoSection({ productos, onAbrirModal, carritoPropsDe, onOpenDetalle, onOpenAdminMenu }) {
   const [query, setQuery] = useState('');
@@ -155,16 +185,7 @@ export function CatalogoSection({ productos, onAbrirModal, carritoPropsDe, onOpe
           <Filter size={16} />
           {activeFilterCount > 0 && <span style={{ position: 'absolute', top: -1, right: -1, width: 7, height: 7, borderRadius: '50%', background: primary, boxShadow: `0 0 0 2px ${surf}` }} />}
         </button>
-        <div style={{ display: 'flex', alignItems: 'stretch', gap: 2, background: surf2, borderRadius: RADIUS.md, padding: 3, boxSizing: 'border-box', flexShrink: 0 }}>
-          <button onClick={() => setLayout('grilla')} aria-label="Vista grilla" data-tooltip="Grilla"
-            style={{ width: ALTO_BARRA - 6, borderRadius: RADIUS.sm, border: 'none', cursor: 'pointer', display: 'grid', placeItems: 'center', background: layout === 'grilla' ? surf : 'transparent', color: layout === 'grilla' ? txt : txtM, boxShadow: layout === 'grilla' ? SHADOW.sm : 'none' }}>
-            <LayoutGrid size={15} />
-          </button>
-          <button onClick={() => setLayout('lista')} aria-label="Vista lista" data-tooltip="Lista"
-            style={{ width: ALTO_BARRA - 6, borderRadius: RADIUS.sm, border: 'none', cursor: 'pointer', display: 'grid', placeItems: 'center', background: layout === 'lista' ? surf : 'transparent', color: layout === 'lista' ? txt : txtM, boxShadow: layout === 'lista' ? SHADOW.sm : 'none' }}>
-            <LayoutList size={15} />
-          </button>
-        </div>
+        <ViewToggle layout={layout} setLayout={setLayout} surf={surf} surf2={surf2} txt={txt} txtM={txtM} />
       </div>
 
       {preview.length === 0 ? (
@@ -364,20 +385,9 @@ export function CatalogoModal({
             style={{ width: ALTO_BARRA_MODAL, borderRadius: RADIUS.md, border: `1.5px solid ${sortBy !== 'relevancia' ? primary : border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, background: surf2, color: sortBy !== 'relevancia' ? primary : txt }}>
             <ArrowUpDown size={18} />
           </button>
-          {/* Toggle de vista — segmented control, mismo lugar/forma que el
-              admin (ProductosScreen.jsx: grid/lista al lado de filtros).
-              Antes vivía escondido dentro de FiltrosSheet. Mismo ALTO_BARRA_MODAL
-              que el resto de la fila (alignItems:'stretch' en el padre). */}
-          <div style={{ display: 'flex', alignItems: 'stretch', gap: 2, background: surf2, borderRadius: RADIUS.md, padding: 3, boxSizing: 'border-box', flexShrink: 0 }}>
-            <button onClick={() => setLayout('grilla')} aria-label="Vista grilla" data-tooltip="Grilla"
-              style={{ width: ALTO_BARRA_MODAL - 6, borderRadius: RADIUS.sm, border: 'none', cursor: 'pointer', display: 'grid', placeItems: 'center', background: layout === 'grilla' ? surf : 'transparent', color: layout === 'grilla' ? txt : txtM, boxShadow: layout === 'grilla' ? SHADOW.sm : 'none' }}>
-              <LayoutGrid size={16} />
-            </button>
-            <button onClick={() => setLayout('lista')} aria-label="Vista lista" data-tooltip="Lista"
-              style={{ width: ALTO_BARRA_MODAL - 6, borderRadius: RADIUS.sm, border: 'none', cursor: 'pointer', display: 'grid', placeItems: 'center', background: layout === 'lista' ? surf : 'transparent', color: layout === 'lista' ? txt : txtM, boxShadow: layout === 'lista' ? SHADOW.sm : 'none' }}>
-              <LayoutList size={16} />
-            </button>
-          </div>
+          {/* Toggle de vista — mismo componente que la card-preview, port
+              literal del segmented control del admin (ver ViewToggle). */}
+          <ViewToggle layout={layout} setLayout={setLayout} surf={surf} surf2={surf2} txt={txt} txtM={txtM} />
         </div>
 
         {categorias.length > 0 && (
