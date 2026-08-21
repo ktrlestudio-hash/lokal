@@ -62,9 +62,10 @@ export function ProductosScreen({
   // filtro por tipo clasificaba mal cualquier producto de catálogo real
   // con precio null/vacío (ej. filas del importador sin precio en el
   // Excel): terminaban en Ofertas aunque vivieran en productos.json.
-  const misProductos = ambosModulosActivos
-    ? misProductosSinFiltrar.filter(o => o._origen === 'catalogo')
-    : misProductosSinFiltrar;
+  // Igual que en OfertasScreen: el filtro se aplica SIEMPRE, no solo con
+  // ambos módulos activos — con Ofertas apagado la condición daba false y
+  // esta pantalla listaba también las ofertas.
+  const misProductos = misProductosSinFiltrar.filter(o => o._origen === 'catalogo');
 
   const showForm = productoShowForm;
   const setShowForm = setProductoShowForm;

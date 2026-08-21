@@ -44,6 +44,8 @@ const SORT_OPTIONS = [
 // props) — no hay costo real en montarlos acá Y en el modal, cada uno con
 // su propio estado local.
 const PREVIEW_LIMIT = 6;
+const ALTO_BARRA = 40; // alto único compartido por buscador, ordenar, filtro y toggle de vista (card-preview)
+const ALTO_BARRA_MODAL = 46; // ídem, dentro de CatalogoModal (esa barra usa controles ligeramente más grandes)
 
 export function CatalogoSection({ productos, onAbrirModal, carritoPropsDe, onOpenDetalle, onOpenAdminMenu }) {
   const [query, setQuery] = useState('');
@@ -116,8 +118,14 @@ export function CatalogoSection({ productos, onAbrirModal, carritoPropsDe, onOpe
       </div>
 
       {/* Barra: buscador + ordenar + filtro + toggle de vista — mismo layout
-          que la toolbar del admin (ProductosScreen.jsx). */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          que la toolbar del admin (ProductosScreen.jsx). ALTO_BARRA fijo y
+          compartido por los 4 controles (antes el input medía ~41px por su
+          padding vertical, los botones sueltos heredaban esa altura del
+          flex, pero el toggle de vista tenía su propio padding+alto interno
+          que daba 36px — quedaba 5px más bajo que el resto, notoriamente
+          desalineado). alignItems:'stretch' fuerza a los 4 a ocupar el
+          mismo alto exacto del contenedor. */}
+      <div style={{ display: 'flex', alignItems: 'stretch', gap: 8, marginBottom: 12, height: ALTO_BARRA }}>
         <div style={{ position: 'relative', flex: 1 }}>
           <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: txtM, pointerEvents: 'none' }} />
           <input
@@ -125,7 +133,7 @@ export function CatalogoSection({ productos, onAbrirModal, carritoPropsDe, onOpe
             value={query} onChange={e => setQuery(e.target.value)}
             placeholder="Buscar productos…"
             style={{
-              width: '100%', padding: `10px ${query ? '32px' : '12px'} 10px 34px`, borderRadius: RADIUS.md,
+              width: '100%', height: '100%', boxSizing: 'border-box', padding: `0 ${query ? '32px' : '12px'} 0 34px`, borderRadius: RADIUS.md,
               borderWidth: '1.5px', borderStyle: 'solid', outline: 'none', fontSize: 13.5, fontWeight: 500, ...F,
             }}
           />
@@ -138,22 +146,22 @@ export function CatalogoSection({ productos, onAbrirModal, carritoPropsDe, onOpe
         </div>
         <button
           onClick={() => setSortOpen(true)} aria-label="Ordenar" data-tooltip="Ordenar"
-          style={{ width: 40, borderRadius: RADIUS.md, border: `1.5px solid ${sortBy !== 'relevancia' ? primary : border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, background: surf2, color: sortBy !== 'relevancia' ? primary : txt }}>
+          style={{ width: ALTO_BARRA, borderRadius: RADIUS.md, border: `1.5px solid ${sortBy !== 'relevancia' ? primary : border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, background: surf2, color: sortBy !== 'relevancia' ? primary : txt }}>
           <ArrowUpDown size={16} />
         </button>
         <button
           onClick={() => setFiltersOpen(true)} aria-label="Filtros" data-tooltip="Filtros"
-          style={{ width: 40, borderRadius: RADIUS.md, border: `1.5px solid ${activeFilterCount > 0 ? primary : border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, position: 'relative', background: activeFilterCount > 0 ? primary : surf2, color: activeFilterCount > 0 ? onPrimary : txt }}>
+          style={{ width: ALTO_BARRA, borderRadius: RADIUS.md, border: `1.5px solid ${activeFilterCount > 0 ? primary : border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, position: 'relative', background: activeFilterCount > 0 ? primary : surf2, color: activeFilterCount > 0 ? onPrimary : txt }}>
           <Filter size={16} />
           {activeFilterCount > 0 && <span style={{ position: 'absolute', top: -1, right: -1, width: 7, height: 7, borderRadius: '50%', background: primary, boxShadow: `0 0 0 2px ${surf}` }} />}
         </button>
-        <div style={{ display: 'flex', gap: 2, background: surf2, borderRadius: RADIUS.md, padding: 3, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'stretch', gap: 2, background: surf2, borderRadius: RADIUS.md, padding: 3, boxSizing: 'border-box', flexShrink: 0 }}>
           <button onClick={() => setLayout('grilla')} aria-label="Vista grilla" data-tooltip="Grilla"
-            style={{ width: 30, height: 30, borderRadius: RADIUS.sm, border: 'none', cursor: 'pointer', display: 'grid', placeItems: 'center', background: layout === 'grilla' ? surf : 'transparent', color: layout === 'grilla' ? txt : txtM, boxShadow: layout === 'grilla' ? SHADOW.sm : 'none' }}>
+            style={{ width: ALTO_BARRA - 6, borderRadius: RADIUS.sm, border: 'none', cursor: 'pointer', display: 'grid', placeItems: 'center', background: layout === 'grilla' ? surf : 'transparent', color: layout === 'grilla' ? txt : txtM, boxShadow: layout === 'grilla' ? SHADOW.sm : 'none' }}>
             <LayoutGrid size={15} />
           </button>
           <button onClick={() => setLayout('lista')} aria-label="Vista lista" data-tooltip="Lista"
-            style={{ width: 30, height: 30, borderRadius: RADIUS.sm, border: 'none', cursor: 'pointer', display: 'grid', placeItems: 'center', background: layout === 'lista' ? surf : 'transparent', color: layout === 'lista' ? txt : txtM, boxShadow: layout === 'lista' ? SHADOW.sm : 'none' }}>
+            style={{ width: ALTO_BARRA - 6, borderRadius: RADIUS.sm, border: 'none', cursor: 'pointer', display: 'grid', placeItems: 'center', background: layout === 'lista' ? surf : 'transparent', color: layout === 'lista' ? txt : txtM, boxShadow: layout === 'lista' ? SHADOW.sm : 'none' }}>
             <LayoutList size={15} />
           </button>
         </div>
@@ -314,7 +322,7 @@ export function CatalogoModal({
           </button>
           <h2 style={{ margin: 0, flex: 1, fontSize: 16, fontWeight: 800, color: txt, ...F }}>Catálogo</h2>
         </div>
-        <div style={{ padding: '0 16px', display: 'flex', gap: 10, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'stretch', padding: '0 16px', gap: 10, marginBottom: 12, height: ALTO_BARRA_MODAL }}>
           <div className="cm-search-wrap" style={{ position: 'relative', flex: 1 }}>
             <Search size={17} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: txtM, pointerEvents: 'none' }} />
             <input
@@ -323,7 +331,7 @@ export function CatalogoModal({
               value={query} onChange={e => setQuery(e.target.value)}
               placeholder="Buscar productos…"
               style={{
-                width: '100%', padding: `12px ${query ? '36px' : '14px'} 12px 38px`, borderRadius: RADIUS.md,
+                width: '100%', height: '100%', boxSizing: 'border-box', padding: `0 ${query ? '36px' : '14px'} 0 38px`, borderRadius: RADIUS.md,
                 borderWidth: '1.5px', borderStyle: 'solid', outline: 'none', fontSize: 14, fontWeight: 500,
                 ...F,
               }}
@@ -340,7 +348,7 @@ export function CatalogoModal({
             onClick={() => setFiltersOpen(true)}
             aria-label="Filtros" data-tooltip="Filtros"
             style={{
-              width: 46, borderRadius: RADIUS.md, border: `1.5px solid ${activeFilterCount > 0 ? primary : border}`,
+              width: ALTO_BARRA_MODAL, borderRadius: RADIUS.md, border: `1.5px solid ${activeFilterCount > 0 ? primary : border}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, position: 'relative',
               background: activeFilterCount > 0 ? primary : surf2, color: activeFilterCount > 0 ? onPrimary : txt,
             }}>
@@ -353,19 +361,20 @@ export function CatalogoModal({
             className="cm-toggle-btn"
             onClick={() => setSortOpen(true)}
             aria-label="Ordenar" data-tooltip="Ordenar"
-            style={{ width: 46, borderRadius: RADIUS.md, border: `1.5px solid ${sortBy !== 'relevancia' ? primary : border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, background: surf2, color: sortBy !== 'relevancia' ? primary : txt }}>
+            style={{ width: ALTO_BARRA_MODAL, borderRadius: RADIUS.md, border: `1.5px solid ${sortBy !== 'relevancia' ? primary : border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, background: surf2, color: sortBy !== 'relevancia' ? primary : txt }}>
             <ArrowUpDown size={18} />
           </button>
           {/* Toggle de vista — segmented control, mismo lugar/forma que el
               admin (ProductosScreen.jsx: grid/lista al lado de filtros).
-              Antes vivía escondido dentro de FiltrosSheet. */}
-          <div style={{ display: 'flex', gap: 2, background: surf2, borderRadius: RADIUS.md, padding: 3, flexShrink: 0 }}>
+              Antes vivía escondido dentro de FiltrosSheet. Mismo ALTO_BARRA_MODAL
+              que el resto de la fila (alignItems:'stretch' en el padre). */}
+          <div style={{ display: 'flex', alignItems: 'stretch', gap: 2, background: surf2, borderRadius: RADIUS.md, padding: 3, boxSizing: 'border-box', flexShrink: 0 }}>
             <button onClick={() => setLayout('grilla')} aria-label="Vista grilla" data-tooltip="Grilla"
-              style={{ width: 32, height: 32, borderRadius: RADIUS.sm, border: 'none', cursor: 'pointer', display: 'grid', placeItems: 'center', background: layout === 'grilla' ? surf : 'transparent', color: layout === 'grilla' ? txt : txtM, boxShadow: layout === 'grilla' ? SHADOW.sm : 'none' }}>
+              style={{ width: ALTO_BARRA_MODAL - 6, borderRadius: RADIUS.sm, border: 'none', cursor: 'pointer', display: 'grid', placeItems: 'center', background: layout === 'grilla' ? surf : 'transparent', color: layout === 'grilla' ? txt : txtM, boxShadow: layout === 'grilla' ? SHADOW.sm : 'none' }}>
               <LayoutGrid size={16} />
             </button>
             <button onClick={() => setLayout('lista')} aria-label="Vista lista" data-tooltip="Lista"
-              style={{ width: 32, height: 32, borderRadius: RADIUS.sm, border: 'none', cursor: 'pointer', display: 'grid', placeItems: 'center', background: layout === 'lista' ? surf : 'transparent', color: layout === 'lista' ? txt : txtM, boxShadow: layout === 'lista' ? SHADOW.sm : 'none' }}>
+              style={{ width: ALTO_BARRA_MODAL - 6, borderRadius: RADIUS.sm, border: 'none', cursor: 'pointer', display: 'grid', placeItems: 'center', background: layout === 'lista' ? surf : 'transparent', color: layout === 'lista' ? txt : txtM, boxShadow: layout === 'lista' ? SHADOW.sm : 'none' }}>
               <LayoutList size={16} />
             </button>
           </div>

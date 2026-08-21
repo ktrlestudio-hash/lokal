@@ -274,8 +274,16 @@ export function ProductCardList({ p, qty, onOpen, onAdd, onRemove, surf, surf2, 
           estirar la card, para no dejar aire de sobra en el 95% de los casos
           normales por planificar para el caso raro. */}
       <div style={{ position: 'relative', width: CM_LIST_H, height: CM_LIST_H }}>
-        <div style={{ width: '100%', height: '100%', borderRadius: RADIUS.md, background: surf2, overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
-          {img ? <img src={img} alt={nombreDe(p)} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <ShoppingBag size={18} style={{ color: txtM, opacity: 0.5 }} />}
+        {/* position:relative + img absoluta inset:0 — NO 'display:grid +
+            placeItems:center' con la img en flujo: dentro de un grid, el
+            height:100% de la imagen se resuelve contra el track implícito
+            (que a su vez crece con el contenido), así que una foto vertical
+            de celular (ej. 1080x2460) se salía a su alto natural en vez de
+            recortarse al cuadrado. Con inset:0 la img se ancla al div de
+            96x96 real y object-fit:cover recorta de verdad. El grid queda
+            solo para centrar el ícono placeholder cuando no hay foto. */}
+        <div style={{ position: 'relative', width: '100%', height: '100%', borderRadius: RADIUS.md, background: surf2, overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
+          {img ? <img src={img} alt={nombreDe(p)} loading="lazy" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} /> : <ShoppingBag size={18} style={{ color: txtM, opacity: 0.5 }} />}
         </div>
         {/* badge de descuento pegado a la esquina real de la foto (top:0/left:0,
             sin margen) — así queda anclado a la esquina superior, no "flotando"
@@ -401,7 +409,7 @@ export function ProductCardVertical({ p, qty, onOpen, onAdd, onRemove, surf, sur
       {/* foto: SIEMPRE el mismo tamaño fijo; el alto total de la card es
           fijo (height), calculado para el caso normal — no el peor caso. */}
       <div style={{ position: 'relative', width: '100%', height: CM_VERT_IMG, flexShrink: 0, background: surf2, borderRadius: `${RADIUS.lg} ${RADIUS.lg} 0 0`, overflow: 'hidden' }}>
-        {img ? <img src={img} alt={nombreDe(p)} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center' }}><ShoppingBag size={22} style={{ color: txtM, opacity: 0.5 }} /></div>}
+        {img ? <img src={img} alt={nombreDe(p)} loading="lazy" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center' }}><ShoppingBag size={22} style={{ color: txtM, opacity: 0.5 }} /></div>}
         {pct && <span style={{ position: 'absolute', top: 0, left: 0, padding: '3px 6px', borderRadius: `${RADIUS.lg} 0 ${RADIUS.sm} 0`, background: 'var(--accent-hex)', color: 'var(--accent-fg)', fontSize: 9.5, fontWeight: 900 }}>-{pct}%</span>}
         <OfertaMenuButton onOpen={onOpenAdminMenu ? () => onOpenAdminMenu(p) : null} top={6} right={6} />
       </div>
@@ -547,8 +555,15 @@ export function ProductCardGrid({ p, onOpen, surf, surf2, border, txt, txtM, pri
   return (
     <div onClick={onOpen} role="button" tabIndex={0} className="no-press cm-card"
       style={{ background: surf, border: `1px solid ${border}`, borderRadius: RADIUS.lg, overflow: 'hidden', cursor: 'pointer', boxShadow: SHADOW.sm, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ position: 'relative', aspectRatio: '1 / 1', background: surf2 }}>
-        {img ? <img src={img} alt={nombreDe(p)} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center' }}><ShoppingBag size={26} style={{ color: txtM, opacity: 0.5 }} /></div>}
+      {/* overflow:'hidden' PROPIO del contenedor de la foto (no solo heredado
+          del .cm-card externo) — sin esto, una foto muy vertical/horizontal
+          (aspect-ratio real bien distinto de 1:1) hace que el <img> con
+          height:100% empuje el alto real del div más allá de lo que
+          aspect-ratio:1/1 calcula, agrandando toda la card en vez de
+          recortarse. Mismo bug potencial en ProductCardList/Vertical, que ya
+          tenían overflow:hidden explícito acá — a esta card le faltaba. */}
+      <div style={{ position: 'relative', aspectRatio: '1 / 1', overflow: 'hidden', background: surf2 }}>
+        {img ? <img src={img} alt={nombreDe(p)} loading="lazy" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center' }}><ShoppingBag size={26} style={{ color: txtM, opacity: 0.5 }} /></div>}
         {pct && <span style={{ position: 'absolute', top: 8, left: 8, padding: '3px 8px', borderRadius: RADIUS.sm, background: 'var(--tp-secondary)', color: 'var(--tp-on-secondary)', fontSize: 11, fontWeight: 900 }}>-{pct}%</span>}
         {!pct && badge && (
           <span style={{ position: 'absolute', top: 8, left: 8, padding: '3px 8px', borderRadius: RADIUS.sm, display: 'inline-flex', alignItems: 'center', gap: 3, background: 'var(--tp-surface)', color: txt, fontSize: 10, fontWeight: 800, boxShadow: SHADOW.sm }}>

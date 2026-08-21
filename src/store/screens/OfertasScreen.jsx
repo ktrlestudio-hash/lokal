@@ -39,11 +39,15 @@ export function OfertasScreen({
   // /productos o /ofertas — vino cada ítem), NO por `typeof precio`: un
   // producto de catálogo real con precio null/vacío (fila del importador
   // sin precio en el Excel) igual tiene _origen:'catalogo', así que ya no
-  // aparece acá por error. Con un solo módulo activo, este filtro no
-  // cambia nada (ambosModulosActivos da false y misProductos pasa igual).
-  const misProductos = ambosModulosActivos
-    ? misProductosSinFiltrar.filter(o => o._origen !== 'catalogo')
-    : misProductosSinFiltrar;
+  // aparece acá por error.
+  //
+  // El filtro se aplica SIEMPRE, no solo con ambos módulos activos. Antes
+  // estaba condicionado a ambosModulosActivos y eso rompía el caso real de
+  // tener Ofertas apagado y Catálogo prendido: la condición daba false y
+  // esta pantalla pasaba a listar TODO, mostrando los productos de catálogo
+  // dentro de Ofertas. Cada pantalla muestra lo suyo, independientemente de
+  // qué módulos estén activos.
+  const misProductos = misProductosSinFiltrar.filter(o => o._origen !== 'catalogo');
 
   const openNew = () => {
     setOfertaEditing(null);
