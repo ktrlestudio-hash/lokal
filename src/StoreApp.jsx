@@ -1282,6 +1282,7 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       screen={screen} navigateTo={navigateTo} setCreateSheetOpen={setCreateSheetOpen}
       isAdmin={isAdmin} onOpenAdmin={onOpenAdmin} onLogout={onLogout}
       isDark={isDark} toggleTheme={toggleTheme} mockMode={mockMode} toggleMockMode={toggleMockMode}
+      renderAccountAvatar={renderAccountAvatar}
     />
   );
 
@@ -3067,8 +3068,14 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
       `}</style>
     <div className="flex min-h-screen sa-root sa-page-bg">
       {Sidebar()}
-      {/* spacer so content shifts with sidebar on desktop */}
-      <div className="hidden lg:block shrink-0" style={{ width: sidebarExpanded ? 224 : 64, transition: 'width 380ms cubic-bezier(0.16,1,0.3,1)' }} />
+      {/* spacer so content shifts with sidebar on desktop — reacciona SOLO
+          a sidebarPinned, no a sidebarExpanded: cuando el sidebar se abre
+          por hover-preview (sin pin) queda flotando ENCIMA del contenido
+          (ver StoreSidebar.jsx), así que el contenido no debe correrse —
+          si reaccionara a expanded, cada hover cerca del sidebar generaría
+          un salto de layout en toda la página. Mismos anchos que
+          W_EXPANDED/W_COLLAPSED en StoreSidebar.jsx (232/72). */}
+      <div className="hidden lg:block shrink-0" style={{ width: sidebarPinned ? 232 : 72, transition: 'width 380ms cubic-bezier(0.16,1,0.3,1)' }} />
       <div className="flex-1 min-w-0">
         {/* Banner suscripción — vencida o por vencer. Compacto: título corto
             + detalle mucho más chico al lado (no un párrafo largo en una
