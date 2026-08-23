@@ -6,6 +6,7 @@ import CarritoPublica from './CarritoPublica';
 import AdminLogin from './AdminLogin';
 import LegalPageView from './LegalPages';
 import LandingScreen from './LandingScreen';
+import HomeGlobal from './HomeGlobal';
 
 // Estas cuatro se cargan aparte, sólo cuando se entra a ellas. Antes todo
 // venía en un único bundle de 1.24 MB: alguien que llegaba a la landing
@@ -52,7 +53,10 @@ function pathToLegal(pathname) {
 }
 
 // Rutas reservadas del sistema — NO son slugs de tienda.
-const RESERVED = new Set(['admin', 'terminos-y-condiciones', 'politica-de-privacidad', 'condiciones-para-comercios', 'quienes-somos', '']);
+// 'vender' = landing comercial de venta del producto a dueños de negocio
+// (antes vivía en la raíz "/"; la raíz ahora es HomeGlobal, el marketplace
+// multi-tienda — ver el bloque de la raíz más abajo).
+const RESERVED = new Set(['admin', 'vender', 'terminos-y-condiciones', 'politica-de-privacidad', 'condiciones-para-comercios', 'quienes-somos', '']);
 
 // Detecta /:tienda/o/:oferta (oferta individual). Devuelve {tiendaSlug,
 // ofertaSlug} o null. El separador /o/ distingue la oferta de futuras
@@ -610,20 +614,25 @@ export default function Root() {
     );
   }
 
-  // ── Raíz → landing pública. Antes caía en TIENDA_SLUG_FIJA: cualquiera
-  //    que entrara sin slug veía la tienda de UN negocio concreto, que no
-  //    es lo que espera alguien que llega a la raíz del producto.
+  // ── Raíz → Home global (marketplace multi-tienda). Antes caía en
+  //    TIENDA_SLUG_FIJA (una tienda concreta) y después en LandingScreen (la
+  //    landing COMERCIAL de venta del producto a dueños de negocio) — esa
+  //    landing sigue existiendo tal cual, pero se movió a /vender (ver
+  //    RESERVED más arriba). Alguien que entra a "/" sin slug ahora ve
+  //    HomeGlobal: buscador + vidriera de todas las tiendas activas, que es
+  //    lo que espera un VISITANTE final del ecosistema — el dueño de negocio
+  //    que quiere vender sigue teniendo su propia puerta en /vender.
   //    Las tiendas siguen sirviéndose por su slug propio (/:tienda). ──────
   // (rebotarLandingLogueada ya se resolvió arriba, dentro del bloque
   // isAdminRoute unificado — nunca llega hasta acá con sesión activa.)
   // Sesión todavía sin resolver en la raíz: esperar acá (mismo loader que
   // ya usa el resto de la app, primer pintado real de React) en vez de
-  // mostrar el landing y recién después rebotar si resulta haber sesión
-  // — sin esto, cualquier carga con sesión guardada mostraba el landing
+  // mostrar la Home y recién después rebotar si resulta haber sesión
+  // — sin esto, cualquier carga con sesión guardada mostraba la Home
   // "flasheando" un instante antes de saltar al admin.
   if (esperandoAuthEnRaiz) return <AppLoader />;
 
-  if (!pathToTiendaSlug(window.location.pathname)) {
+  if (window.location.pathname === '/vender') {
     return (
       <LandingScreen
         isDark={isDark}
@@ -635,8 +644,20 @@ export default function Root() {
         // "Ver la tienda completa": misma navegación interna, a la tienda de
         // ejemplo real. No abre pestaña ni recarga — cambia la URL y Root
         // renderiza TiendaPublica, que es cómo se ve de verdad. El "atrás"
-        // del navegador vuelve a la landing.
+        // del navegador vuelve a /vender.
         onVerEjemplo={() => { window.history.pushState({}, '', `/${TIENDA_SLUG_FIJA}`); forceUrlRecheck(); }}
+      />
+    );
+  }
+
+  if (!pathToTiendaSlug(window.location.pathname)) {
+    return (
+      <HomeGlobal
+        isDark={isDark}
+        toggleTheme={toggleTheme}
+        // Mismo mecanismo pushState+recheck que el resto de la navegación
+        // interna — nunca window.location.href (evita el flash de splash).
+        onIrAlPanel={() => { window.history.pushState({}, '', '/admin'); forceUrlRecheck(); }}
       />
     );
   }
