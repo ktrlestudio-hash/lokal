@@ -126,8 +126,6 @@ export default function LoginCard({
   // JavaScript origins" (ver useBotonGoogleGIS). El click real, cuando GIS
   // SÍ está disponible, lo recibe el iframe invisible superpuesto (abajo).
   const handleGoogle = async () => {
-    clearTimeout(reintentarTimerRef.current);
-    setMostrarReintentar(false);
     setLoading(true);
     setError(null);
     try {
@@ -146,30 +144,36 @@ export default function LoginCard({
   // sheet (que el usuario confirmó que SÍ hace volver a funcionar el sheet
   // nativo). Caso real: el usuario cierra el sheet NATIVO de Google (sin
   // loguearse) pero deja este sheet de LOKAL abierto — Chrome puede negarse
-  // a reabrir FedCM para ese mismo iframe ya "gastado", y como el cierre
-  // del sheet nativo no siempre dispara el evento 'blur' que activa el
-  // timeout de seguridad de useBotonGoogleGIS, el botón podía quedar mudo
-  // sin que ni el fallback de popup se activara. En vez de depender de
-  // detectar el fallo automáticamente, se le da control directo al
-  // usuario: un botón "Reintentar" aparece pasado un rato sin resultado,
-  // y fuerza un iframe totalmente nuevo.
+  // a reabrir FedCM para ese mismo iframe ya "gastado".
+  //
+  // SIN temporizador perceptible: el pedido explícito fue una salida
+  // INSTANTÁNEA. El caso "el sheet nativo SÍ abrió y se cerró" lo detecta
+  // el propio hook (evento 'focus' de window) y llama a
+  // onFocoSinResultado más abajo, sin que este componente tenga que
+  // esperar nada. tocoIframeRef solo marca si el iframe llegó a tomar el
+  // foco alguna vez (mismo evento 'blur'), para que el timeout corto de
+  // antesDeTocar sepa distinguir "no pasó nada" de "sí pasó algo".
   const [resetGisKey, setResetGisKey] = useState(0);
-  const [mostrarReintentar, setMostrarReintentar] = useState(false);
-  const reintentarTimerRef = React.useRef(null);
+  const tocoIframeRef = React.useRef(false);
 
   // GIS/FedCM: abre el selector de cuenta como sheet NATIVO del sistema en
   // vez de una ventana emergente aparte — mismo patrón que ya resolvió
   // LandingScreen.jsx. onLogin llega con la sesión de Firebase ya resuelta
   // (loginConIdToken corrió adentro de firebase.js), así que acá solo hace
   // falta continuar con resolverWhoami, igual que el camino de popup.
-  const { slotRef, gisActivo } = useBotonGoogleGIS({
+  const { slotRef, gisActivo, gisEnCurso } = useBotonGoogleGIS({
     key: resetGisKey,
     isDark,
     width: GOOGLE_BTN_W,
     mountDelayMs,
+    onIframeTouch: () => { tocoIframeRef.current = true; },
+    // El sheet nativo se cerró (con o sin login) y no hubo resultado: el
+    // hook ya lo detecta solo (focus de window vuelve sin onLogin/onError)
+    // y avisa acá — remonta el iframe AL INSTANTE, sin esperar a que el
+    // usuario vuelva a tocar. Esto es lo que resuelve "el sheet se cierra
+    // o falla, el botón automáticamente detecta el login salvavidas".
+    onFocoSinResultado: () => { tocoIframeRef.current = false; setResetGisKey((k) => k + 1); },
     onLogin: async () => {
-      clearTimeout(reintentarTimerRef.current);
-      setMostrarReintentar(false);
       setLoading(true);
       setError(null);
       try {
@@ -180,22 +184,25 @@ export default function LoginCard({
         setLoading(false);
       }
     },
-    onError: (err) => { clearTimeout(reintentarTimerRef.current); setMostrarReintentar(false); handleErrorLogin(err); },
+    onError: (err) => handleErrorLogin(err),
   });
 
-  // El botón "Reintentar" aparece a los 5s de tocar (sin distinguir si el
-  // toque llegó al iframe o no — es más simple y más confiable que tratar
-  // de detectar el caso exacto): si en ese tiempo no hay loading ni error
-  // visibles, algo no completó, así que se ofrece la salida.
-  const marcarIntento = () => {
-    setMostrarReintentar(false);
-    clearTimeout(reintentarTimerRef.current);
-    reintentarTimerRef.current = setTimeout(() => setMostrarReintentar(true), 5000);
-  };
-  const reintentar = () => {
-    setMostrarReintentar(false);
-    clearTimeout(reintentarTimerRef.current);
-    setResetGisKey((k) => k + 1);
+  // Segunda capa del salvavidas: cubre el caso en que el toque ni siquiera
+  // logró abrir el sheet nativo (FedCM bloqueado "puertas adentro" — nunca
+  // hay blur porque el iframe nunca tomó foco real, así que el mecanismo
+  // de foco de useBotonGoogleGIS, que resuelve el caso "el sheet SÍ abrió
+  // y se cerró", no se dispara). Un timeout corto arranca EN EL TOQUE
+  // MISMO del botón señuelo: si a los ~900ms no hubo blur (el iframe ni
+  // reaccionó) ni loading, se asume que ese toque se perdió y se remonta
+  // el iframe, listo para el PRÓXIMO toque del mismo usuario.
+  const tocoTimeoutRef = React.useRef(null);
+  const antesDeTocar = () => {
+    if (tocoTimeoutRef.current) clearTimeout(tocoTimeoutRef.current);
+    tocoTimeoutRef.current = setTimeout(() => {
+      if (!tocoIframeRef.current && !loading) {
+        setResetGisKey((k) => k + 1);
+      }
+    }, 900);
   };
 
   if (paso === 'elegir-rol') {
@@ -272,19 +279,19 @@ export default function LoginCard({
           técnica que ya usa LandingScreen.jsx, portada acá vía
           useBotonGoogleGIS sin cambiar el look de este botón.
           onPointerDown en el contenedor (no onClick, que el iframe se
-          queda con el evento real): marca el intento de tocar ANTES de
-          saber a quién le llega el click, así el temporizador de
-          "Reintentar" arranca sin importar si el toque terminó en el
-          iframe o en el botón de abajo. */}
-      <div className="relative" onPointerDown={marcarIntento}>
+          queda con el evento real): arma el salvavidas de dos capas (ver
+          antesDeTocar) ANTES de saber a quién le llega el click, así
+          funciona sin importar si el toque terminó en el iframe o en el
+          botón de abajo. */}
+      <div className="relative" onPointerDown={antesDeTocar}>
         <button
           onClick={handleGoogle}
-          disabled={loading}
+          disabled={loading || gisEnCurso}
           className="w-full flex items-center justify-center gap-3 bg-ink dark:bg-white hover:bg-ink/90 dark:hover:bg-white/90 text-white dark:text-[#18181b] font-bold rounded-2xl transition-all shadow-lg hover:shadow-xl disabled:opacity-60 active:scale-[0.98]"
           style={{ padding: 'clamp(14px, 1.4vw, 17px) clamp(24px, 2vw, 28px)', fontSize: 'clamp(.9375rem, 1vw, 1.0625rem)' }}
         >
-          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <GoogleIcon size={20} />}
-          {loading ? 'Entrando...' : 'Continuar con Google'}
+          {(loading || gisEnCurso) ? <Loader2 className="w-5 h-5 animate-spin" /> : <GoogleIcon size={20} />}
+          {(loading || gisEnCurso) ? 'Entrando...' : 'Continuar con Google'}
         </button>
         {/* pointerEvents:none cuando gisActivo pasa a false (timeout de
             seguridad en useBotonGoogleGIS): si FedCM quedó bloqueado por
@@ -300,21 +307,6 @@ export default function LoginCard({
             style={{ colorScheme: isDark ? 'dark' : 'light', width: GOOGLE_BTN_W + 20, height: 44 }} />
         </div>
       </div>
-
-      {/* Salvavidas: si pasaron 5s desde el último toque sin loading ni
-          error visibles, algo no completó (caso real: el usuario cerró el
-          sheet nativo de Google sin loguearse, dejando este sheet abierto
-          — el iframe puede quedar "gastado" sin que el timeout interno de
-          useBotonGoogleGIS llegue a dispararse). Reintentar fuerza un
-          iframe de Google completamente nuevo. */}
-      {mostrarReintentar && !loading && (
-        <button
-          onClick={reintentar}
-          className="w-full mt-2.5 text-xs font-semibold text-brand hover:text-brand-dark transition-colors py-1.5"
-        >
-          ¿No pasó nada? Tocá para reintentar
-        </button>
-      )}
 
       <p className="text-[11px] mt-4" style={{ color: 'var(--text-secondary, #999)' }}>
         Al continuar, aceptás los <a href="/terminos-y-condiciones" target="_blank" rel="noopener noreferrer" className="underline hover:text-brand transition-colors">términos y condiciones</a> de LOKAL.

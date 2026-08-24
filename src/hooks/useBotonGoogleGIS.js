@@ -25,14 +25,19 @@
 // entonces falla puertas adentro (AbortError en su propio origen, nunca
 // llega como evento a nuestro código — onError NO se dispara) y el botón
 // visual queda "mudo": el click lo sigue recibiendo el iframe invisible
-// (que no hace nada), nunca el fallback de popup de abajo. Sin forma de
-// detectar el fallo desde afuera del iframe, se usa un timeout de
-// seguridad: si el usuario tocó el botón (el iframe pierde el foco, mismo
-// mecanismo que detecta el "press" visual) y no llegó onLogin/onError en un
-// tiempo razonable, se asume que FedCM está bloqueado y gisActivo pasa a
-// false — pointerEvents:none en el overlay deja de interceptar el click, y
-// el botón de abajo (popup) vuelve a responder en el siguiente toque.
-const TIMEOUT_INTENTO_MS = 4000;
+// (que no hace nada), nunca el fallback de popup de abajo.
+//
+// Detección INSTANTÁNEA (sin timeout, sin espera): al tocar el iframe,
+// `window` pierde el foco (el sheet nativo lo toma). Cuando el sheet nativo
+// se CIERRA — con éxito o cancelado — `window` recupera el foco de vuelta,
+// disparando 'focus'. Si en ese momento no llegó onLogin ni onError, el
+// intento se cerró sin completar: se remonta el iframe YA MISMO (misma key
+// que "Reintentar" usaría manualmente), sin esperar ningún tiempo fijo —
+// el próximo toque del usuario, sea inmediato o no, encuentra un iframe
+// fresco. TIMEOUT_INTENTO_MS queda como red de seguridad SOLO para el caso
+// en que el foco nunca vuelva a dispararse (poco común, pero posible según
+// el navegador) — mucho más largo porque ya no es el mecanismo principal.
+const TIMEOUT_INTENTO_MS = 8000;
 
 import { useEffect, useRef, useState } from 'react';
 import { renderBotonGoogle, gisDisponible } from '../firebase';
@@ -45,19 +50,26 @@ import { renderBotonGoogle, gisDisponible } from '../firebase';
 // niega FedCM de nuevo para el mismo iframe) sin que el timeout de arriba
 // llegue a dispararse (el cierre del sheet nativo no siempre dispara
 // 'blur'). El caller expone un botón "Reintentar" que incrementa `key`.
-export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mountDelayMs = 0, key = 0 }) {
+export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mountDelayMs = 0, key = 0, onIframeTouch, onFocoSinResultado }) {
   const slotRef = useRef(null);
   const [gisListo, setGisListo] = useState(false);
   const [gisActivo, setGisActivo] = useState(true);
+  // gisEnCurso: true desde que el iframe toma el foco (el usuario tocó y
+  // el sheet nativo se abrió) hasta que resuelve (onLogin/onError) o el
+  // foco vuelve sin resultado — el caller lo usa para mostrar el mismo
+  // loading visual que ya tenía para el popup de respaldo, así el botón
+  // no se ve "muerto" mientras el sheet nativo está en curso.
+  const [gisEnCurso, setGisEnCurso] = useState(false);
   const timeoutRef = useRef(null);
+  const resolvioRef = useRef(false);
 
   // Los callbacks viajan por ref, NO por dependencias: el caller los crea
   // inline en cada render, así que como dependencias reejecutarían este
   // efecto en bucle — montar el iframe, desmontarlo, montarlo otra vez — y
   // el botón nunca llegaría a estabilizarse (gisListo se quedaría en false
   // para siempre).
-  const cbRef = useRef({ onLogin, onError });
-  cbRef.current = { onLogin, onError };
+  const cbRef = useRef({ onLogin, onError, onFocoSinResultado });
+  cbRef.current = { onLogin, onError, onFocoSinResultado };
 
   const limpiarTimeoutIntento = () => {
     if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
@@ -84,8 +96,8 @@ export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mount
         theme: isDark ? 'outline' : 'outline_dark',
         colorScheme: isDark ? 'dark' : 'light',
         width,
-        onLogin: (u) => { limpiarTimeoutIntento(); cbRef.current.onLogin?.(u); },
-        onError: (e) => { limpiarTimeoutIntento(); cbRef.current.onError?.(e); },
+        onLogin: (u) => { resolvioRef.current = true; setGisEnCurso(false); limpiarTimeoutIntento(); cbRef.current.onLogin?.(u); },
+        onError: (e) => { resolvioRef.current = true; setGisEnCurso(false); limpiarTimeoutIntento(); cbRef.current.onError?.(e); },
         // El dominio no está en "Authorized JavaScript origins": el botón de
         // Google fallaría con "Acceso bloqueado" al tocarlo, así que se
         // esconde y el caller usa su fallback de popup.
@@ -108,6 +120,8 @@ export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mount
     if (slotRef.current) slotRef.current.innerHTML = '';
     setGisActivo(true);
     setGisListo(false);
+    setGisEnCurso(false);
+    resolvioRef.current = false;
 
     const t = mountDelayMs > 0 ? setTimeout(montar, mountDelayMs) : (montar(), null);
     return () => { vivo = false; if (t) clearTimeout(t); limpiar?.(); limpiarTimeoutIntento(); };
@@ -117,20 +131,50 @@ export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mount
   }, [isDark, width, mountDelayMs, key]);
 
   // Detecta que el iframe recibió el click (mismo mecanismo que la técnica
-  // original: al tocarlo, el iframe toma el foco y window dispara 'blur').
-  // Arranca el timeout de seguridad ahí — si FedCM completa (onLogin) o
-  // falla de forma visible (onError), el timeout se cancela arriba.
+  // original: al tocarlo, el iframe toma el foco y window dispara 'blur') Y
+  // detecta cuándo VUELVE ese foco (el sheet nativo se cerró, con o sin
+  // éxito). Si el foco vuelve y no llegó onLogin/onError, el intento se
+  // cerró sin completar — se remonta el iframe DE INMEDIATO (mismo efecto
+  // que "Reintentar" manual), sin depender de ningún tiempo fijo: el
+  // próximo toque, sea instantáneo o no, ya encuentra un iframe fresco.
   useEffect(() => {
+    let tocado = false;
+
     const alPerderFoco = () => {
       const dentro = slotRef.current?.contains(document.activeElement);
       if (document.activeElement?.tagName === 'IFRAME' && dentro && gisActivo) {
+        tocado = true;
+        resolvioRef.current = false;
+        setGisEnCurso(true);
+        onIframeTouch?.();
         limpiarTimeoutIntento();
         timeoutRef.current = setTimeout(() => setGisActivo(false), TIMEOUT_INTENTO_MS);
       }
     };
+
+    // window recupera el foco cuando el sheet nativo se cierra, con o sin
+    // login. Si no llegó onLogin/onError (resolvioRef sigue false), el
+    // intento se cerró sin completar: avisarle YA MISMO al caller (que
+    // remonta el iframe incrementando su `key`), sin esperar el timeout de
+    // seguridad — esto es lo que hace que "el sheet se cierra o falla" deje
+    // el botón listo para el próximo toque al instante, en vez de recién a
+    // los 8s. El hook no posee `key` (es prop del caller), por eso delega.
+    const alRecuperarFoco = () => {
+      if (tocado && !resolvioRef.current) {
+        tocado = false;
+        setGisEnCurso(false);
+        limpiarTimeoutIntento();
+        cbRef.current.onFocoSinResultado?.();
+      }
+    };
+
     window.addEventListener('blur', alPerderFoco);
-    return () => window.removeEventListener('blur', alPerderFoco);
+    window.addEventListener('focus', alRecuperarFoco);
+    return () => {
+      window.removeEventListener('blur', alPerderFoco);
+      window.removeEventListener('focus', alRecuperarFoco);
+    };
   }, [gisActivo]);
 
-  return { slotRef, gisListo, gisActivo };
+  return { slotRef, gisListo, gisActivo, gisEnCurso };
 }
