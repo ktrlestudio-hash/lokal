@@ -274,10 +274,19 @@ export default function LoginCard({
               esta misma card (el X de cerrar del sheet, el toggle de tema):
               bg-brand/[0.08] translúcido de marca, no un gris neutro sólido
               (bg-surface-card se leía plano/apagado al lado de esas otras
-              piezas ya tintadas). active:scale suma el feedback táctil. */}
-          <a
-            href="/vender#quienes-somos"
-            className="w-full flex items-center gap-3 rounded-2xl p-3.5 text-left no-underline hover:no-underline transition-all active:scale-[0.98] bg-brand/[0.08] hover:bg-brand/[0.16]"
+              piezas ya tintadas). active:scale suma el feedback táctil.
+
+              <button> con pushState, NO <a href="/vender#quienes-somos">:
+              ese hash no existe (no hay ningún id="quienes-somos" en
+              LandingScreen.jsx — la sección real vive en la ruta separada
+              /quienes-somos, ver Root.jsx). El <a href> a un fragmento
+              inexistente disparaba una recarga COMPLETA de página sin
+              scrollear a nada, el parpadeo brusco reportado. pushState +
+              el evento popstate (que Root.jsx ya escucha para el resto de
+              la navegación interna) evita la recarga por completo. */}
+          <button
+            onClick={() => { window.history.pushState({}, '', '/quienes-somos'); window.dispatchEvent(new PopStateEvent('popstate')); }}
+            className="w-full flex items-center gap-3 rounded-2xl p-3.5 text-left transition-all active:scale-[0.98] bg-brand/[0.08] hover:bg-brand/[0.16]"
           >
             <div className="w-9 h-9 rounded-xl bg-brand/15 flex items-center justify-center shrink-0">
               <HelpCircle className="w-4 h-4 text-brand" />
@@ -287,7 +296,7 @@ export default function LoginCard({
               <p className="text-[11px]" style={{ color: 'var(--text-secondary, #999)' }}>Descubrí cómo funciona</p>
             </div>
             <ArrowRight className="w-4 h-4 shrink-0" style={{ color: 'var(--text-secondary, #999)' }} />
-          </a>
+          </button>
 
           {/* Mismo bloque "Creado por KTRL" que el footer de HomeGlobal
               (.hg-footer-ktrl) TAL CUAL — color text-ink (negro/color

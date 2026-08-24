@@ -952,7 +952,12 @@ function HomeGlobalFooter({ dark, toggleDark, onVender }) {
               como botones en vez de prosa subrayable. */}
           <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-3">
             <nav className="order-1 sm:order-2 flex items-center justify-center gap-x-2 text-xs font-semibold text-ink-dim">
-              <a href="/vender#quienes-somos" className="lok-tap lok-link-btn no-underline hover:no-underline hover:text-brand">Quiénes somos</a>
+              {/* button con pushState, no <a href="/vender#quienes-somos">:
+                  ese hash no existe (la sección real es la ruta separada
+                  /quienes-somos, ver Root.jsx) — el <a href> a un fragmento
+                  inexistente disparaba una recarga completa de página. */}
+              <button onClick={() => { window.history.pushState({}, '', '/quienes-somos'); window.dispatchEvent(new PopStateEvent('popstate')); }}
+                className="lok-tap lok-link-btn hover:text-brand">Quiénes somos</button>
               <button onClick={() => setLegalOpen(true)} className="lok-tap lok-link-btn hover:text-brand">Legal</button>
             </nav>
             <p className="order-2 sm:order-1 text-center text-[10px] text-ink-dim">

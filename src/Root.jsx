@@ -139,6 +139,16 @@ function AppLoader() {
 // que esperar 300ms de más. Solo aplica a la primera carga real.
 const SPLASH_MIN_MS = 1700;
 
+// Duración de la secuencia de entrada de InlineLoader (mismo SVG que
+// SplashScreenFull, sin wordmark/KTRL después): ring 0.85s+0.1s delay,
+// punto 0.5s+0.7s delay → termina a los ~1.2s. Antes esta protección solo
+// existía para la primera carga de página completa (login siempre pasaba
+// por AdminLogin, página propia de /admin) — con el login desde
+// LoginSheet (dentro de una sesión SPA ya iniciada, HomeGlobal→/admin) el
+// InlineLoader puede aparecer y desaparecer en un parpadeo si la tienda
+// carga rápido, cortando esta misma animación a mitad de camino.
+const INLINE_SPLASH_MIN_MS = 1200;
+
 // Debug: ?debug-splash=1 en la URL deja el splash montado para siempre, sin
 // correr ninguna otra lógica de carga (auth/fetch de tienda) — para poder
 // inspeccionarlo en vivo con DevTools sin que se desmonte solo a los ~1.7s.
@@ -434,7 +444,44 @@ function RootInner() {
   const authSinResolver = rutaDependeDeAuth && (firebaseUser === undefined || !redirectChecked);
   const vaAlBackoffice = (isAdminRoute || rebotarLandingLogueada) && !!firebaseUser;
   const backofficeSinPreparar = vaAlBackoffice && (loadingTienda || !chunksAdminListos);
-  const mostrandoSplash = !splashMinCumplido || authSinResolver || backofficeSinPreparar;
+  const mostrandoSplashCrudo = !splashMinCumplido || authSinResolver || backofficeSinPreparar;
+
+  // Piso de tiempo mínimo TAMBIÉN para InlineLoader — el comentario de
+  // arriba asumía que ahí "no aplica" porque "solo gira el logo sin
+  // secuencia", pero InlineLoader SÍ tiene la misma animación de entrada
+  // que SplashScreenFull (lk-draw + lk-dot-in, ~1.2s), solo que sin el
+  // wordmark/KTRL después. Bug real: loguearse desde LoginSheet (avatar de
+  // HomeGlobal) navega a /admin, o simplemente abrir la PWA con
+  // IS_FIRST_LOAD ya en false (localStorage sobrevive a "cerrar" la PWA) —
+  // backofficeSinPreparar/authSinResolver se activan un instante y si
+  // resuelven rápido se desactivan de nuevo antes de que la animación de
+  // entrada del logo termine.
+  //
+  // inlineMinDesde vive en un REF, no en useState: con estado + efecto
+  // encadenado (setInlineMinDesde → useEffect → setInlineMinCumplido) hay
+  // una ventana real de un render donde mostrandoSplashCrudo YA pasó a
+  // false pero inlineMinCumplido todavía no llegó a ponerse en false —
+  // mostrandoSplash daba false ahí, dejando escapar el corte que se quería
+  // evitar. Con ref, el timestamp de inicio se fija SINCRÓNICAMENTE en el
+  // mismo render en que mostrandoSplashCrudo se vuelve true, sin esperar
+  // al próximo ciclo de efectos.
+  const inlineMinDesdeRef = useRef(null);
+  if (!IS_FIRST_LOAD) {
+    if (mostrandoSplashCrudo && inlineMinDesdeRef.current === null) {
+      inlineMinDesdeRef.current = Date.now();
+    } else if (!mostrandoSplashCrudo) {
+      inlineMinDesdeRef.current = null;
+    }
+  }
+  const [, forceRenderTick] = useState(0);
+  useEffect(() => {
+    if (inlineMinDesdeRef.current === null) return undefined;
+    const restante = INLINE_SPLASH_MIN_MS - (Date.now() - inlineMinDesdeRef.current);
+    const t = setTimeout(() => { inlineMinDesdeRef.current = null; forceRenderTick((n) => n + 1); }, Math.max(0, restante));
+    return () => clearTimeout(t);
+  }, [mostrandoSplashCrudo]);
+
+  const mostrandoSplash = mostrandoSplashCrudo || inlineMinDesdeRef.current !== null;
 
   if (mostrandoSplash) return <AppLoader />;
 
