@@ -126,6 +126,8 @@ export default function LoginCard({
   // JavaScript origins" (ver useBotonGoogleGIS). El click real, cuando GIS
   // SÍ está disponible, lo recibe el iframe invisible superpuesto (abajo).
   const handleGoogle = async () => {
+    clearTimeout(reintentarTimerRef.current);
+    setMostrarReintentar(false);
     setLoading(true);
     setError(null);
     try {
@@ -139,16 +141,35 @@ export default function LoginCard({
     }
   };
 
+  // resetGisKey: cambia la `key` del hook de GIS para forzar un remontaje
+  // completo del iframe — mismo efecto que cerrar y volver a abrir el
+  // sheet (que el usuario confirmó que SÍ hace volver a funcionar el sheet
+  // nativo). Caso real: el usuario cierra el sheet NATIVO de Google (sin
+  // loguearse) pero deja este sheet de LOKAL abierto — Chrome puede negarse
+  // a reabrir FedCM para ese mismo iframe ya "gastado", y como el cierre
+  // del sheet nativo no siempre dispara el evento 'blur' que activa el
+  // timeout de seguridad de useBotonGoogleGIS, el botón podía quedar mudo
+  // sin que ni el fallback de popup se activara. En vez de depender de
+  // detectar el fallo automáticamente, se le da control directo al
+  // usuario: un botón "Reintentar" aparece pasado un rato sin resultado,
+  // y fuerza un iframe totalmente nuevo.
+  const [resetGisKey, setResetGisKey] = useState(0);
+  const [mostrarReintentar, setMostrarReintentar] = useState(false);
+  const reintentarTimerRef = React.useRef(null);
+
   // GIS/FedCM: abre el selector de cuenta como sheet NATIVO del sistema en
   // vez de una ventana emergente aparte — mismo patrón que ya resolvió
   // LandingScreen.jsx. onLogin llega con la sesión de Firebase ya resuelta
   // (loginConIdToken corrió adentro de firebase.js), así que acá solo hace
   // falta continuar con resolverWhoami, igual que el camino de popup.
   const { slotRef, gisActivo } = useBotonGoogleGIS({
+    key: resetGisKey,
     isDark,
     width: GOOGLE_BTN_W,
     mountDelayMs,
     onLogin: async () => {
+      clearTimeout(reintentarTimerRef.current);
+      setMostrarReintentar(false);
       setLoading(true);
       setError(null);
       try {
@@ -159,8 +180,23 @@ export default function LoginCard({
         setLoading(false);
       }
     },
-    onError: (err) => handleErrorLogin(err),
+    onError: (err) => { clearTimeout(reintentarTimerRef.current); setMostrarReintentar(false); handleErrorLogin(err); },
   });
+
+  // El botón "Reintentar" aparece a los 5s de tocar (sin distinguir si el
+  // toque llegó al iframe o no — es más simple y más confiable que tratar
+  // de detectar el caso exacto): si en ese tiempo no hay loading ni error
+  // visibles, algo no completó, así que se ofrece la salida.
+  const marcarIntento = () => {
+    setMostrarReintentar(false);
+    clearTimeout(reintentarTimerRef.current);
+    reintentarTimerRef.current = setTimeout(() => setMostrarReintentar(true), 5000);
+  };
+  const reintentar = () => {
+    setMostrarReintentar(false);
+    clearTimeout(reintentarTimerRef.current);
+    setResetGisKey((k) => k + 1);
+  };
 
   if (paso === 'elegir-rol') {
     return (
@@ -234,8 +270,13 @@ export default function LoginCard({
           emergente. handleGoogle (el <button> visible) queda como
           fallback si GIS no cargó o el dominio no está autorizado — mismo
           técnica que ya usa LandingScreen.jsx, portada acá vía
-          useBotonGoogleGIS sin cambiar el look de este botón. */}
-      <div className="relative">
+          useBotonGoogleGIS sin cambiar el look de este botón.
+          onPointerDown en el contenedor (no onClick, que el iframe se
+          queda con el evento real): marca el intento de tocar ANTES de
+          saber a quién le llega el click, así el temporizador de
+          "Reintentar" arranca sin importar si el toque terminó en el
+          iframe o en el botón de abajo. */}
+      <div className="relative" onPointerDown={marcarIntento}>
         <button
           onClick={handleGoogle}
           disabled={loading}
@@ -259,6 +300,21 @@ export default function LoginCard({
             style={{ colorScheme: isDark ? 'dark' : 'light', width: GOOGLE_BTN_W + 20, height: 44 }} />
         </div>
       </div>
+
+      {/* Salvavidas: si pasaron 5s desde el último toque sin loading ni
+          error visibles, algo no completó (caso real: el usuario cerró el
+          sheet nativo de Google sin loguearse, dejando este sheet abierto
+          — el iframe puede quedar "gastado" sin que el timeout interno de
+          useBotonGoogleGIS llegue a dispararse). Reintentar fuerza un
+          iframe de Google completamente nuevo. */}
+      {mostrarReintentar && !loading && (
+        <button
+          onClick={reintentar}
+          className="w-full mt-2.5 text-xs font-semibold text-brand hover:text-brand-dark transition-colors py-1.5"
+        >
+          ¿No pasó nada? Tocá para reintentar
+        </button>
+      )}
 
       <p className="text-[11px] mt-4" style={{ color: 'var(--text-secondary, #999)' }}>
         Al continuar, aceptás los <a href="/terminos-y-condiciones" target="_blank" rel="noopener noreferrer" className="underline hover:text-brand transition-colors">términos y condiciones</a> de LOKAL.

@@ -37,7 +37,15 @@ const TIMEOUT_INTENTO_MS = 4000;
 import { useEffect, useRef, useState } from 'react';
 import { renderBotonGoogle, gisDisponible } from '../firebase';
 
-export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mountDelayMs = 0 }) {
+// `key` (no es la key de React, es un valor cualquiera que el caller
+// controla) fuerza un remontaje REAL del iframe cuando cambia — mismo
+// efecto que cerrar y reabrir el contenedor que aloja este botón. Caso de
+// uso real: el usuario cierra el sheet nativo de Google sin loguearse pero
+// deja el sheet de LOKAL abierto; ese iframe puede quedar "gastado" (Chrome
+// niega FedCM de nuevo para el mismo iframe) sin que el timeout de arriba
+// llegue a dispararse (el cierre del sheet nativo no siempre dispara
+// 'blur'). El caller expone un botón "Reintentar" que incrementa `key`.
+export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mountDelayMs = 0, key = 0 }) {
   const slotRef = useRef(null);
   const [gisListo, setGisListo] = useState(false);
   const [gisActivo, setGisActivo] = useState(true);
@@ -93,11 +101,20 @@ export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mount
         });
     };
 
+    // Antes de montar el iframe nuevo, limpiar cualquier contenido viejo
+    // del slot (relevante en un remontaje por `key`: React no vacía el div
+    // solo porque este efecto se re-ejecuta, el iframe anterior quedaría
+    // colgado al lado del nuevo).
+    if (slotRef.current) slotRef.current.innerHTML = '';
+    setGisActivo(true);
+    setGisListo(false);
+
     const t = mountDelayMs > 0 ? setTimeout(montar, mountDelayMs) : (montar(), null);
     return () => { vivo = false; if (t) clearTimeout(t); limpiar?.(); limpiarTimeoutIntento(); };
     // isDark: Google no reestila un botón ya montado, hay que volver a
-    // pedirlo para que acompañe el cambio de tema.
-  }, [isDark, width, mountDelayMs]);
+    // pedirlo para que acompañe el cambio de tema. key: fuerza remontaje
+    // manual (ver comentario del parámetro).
+  }, [isDark, width, mountDelayMs, key]);
 
   // Detecta que el iframe recibió el click (mismo mecanismo que la técnica
   // original: al tocarlo, el iframe toma el foco y window dispara 'blur').
