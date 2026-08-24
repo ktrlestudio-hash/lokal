@@ -25,7 +25,7 @@ import CategoryIcon from './CategoryIcon';
 import { CATEGORIES, getCategoryPath } from './categories';
 import NavArrowBtn from './components/ui/NavArrowBtn';
 import useScrollEdges from './hooks/useScrollEdges';
-import { Carrusel, ProductCardVertical } from './tienda-publica/components/ProductCards.jsx';
+import { Carrusel, ProductCardVertical, CM_VERT_W, CM_VERT_IMG, CM_VERT_BODY } from './tienda-publica/components/ProductCards.jsx';
 import { getEstadoApertura } from './tienda-publica/utils.js';
 import { API_BASE } from './config/flags';
 import { SheetLegal, CARD_TINTED } from './components/LegalSheet.jsx';
@@ -623,9 +623,15 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
               </h2>
             </div>
             {loadingProductos && productosFiltrados.length === 0 ? (
+              // Mismas dimensiones EXACTAS que ProductCardVertical (mismas
+              // constantes que la card real importa) — antes w-36 h-56
+              // (144×224px) eran valores inventados, 52px más bajos que la
+              // card real (152+124=276px de alto), así que el layout
+              // "saltaba" al llegar el contenido de verdad.
               <div className="px-4 lg:px-6 flex gap-3 overflow-hidden">
                 {[0, 1, 2, 3].map((i) => (
-                  <div key={i} className="w-36 h-56 rounded-2xl bg-surface-card-2 animate-pulse shrink-0" />
+                  <div key={i} className="rounded-2xl bg-surface-card-2 animate-pulse shrink-0"
+                    style={{ width: CM_VERT_W, height: CM_VERT_IMG + CM_VERT_BODY }} />
                 ))}
               </div>
             ) : productosFiltrados.length === 0 ? (
