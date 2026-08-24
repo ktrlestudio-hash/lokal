@@ -299,12 +299,26 @@ export default function LoginCard({
             action"), el iframe de Google sigue montado pero no completa el
             flujo — sin esto seguiría capturando el click para siempre y el
             botón se sentiría "muerto". Con pointerEvents:none el click cae
-            al <button> de abajo (popup real, funciona siempre). */}
-        <div className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-2xl" style={{ opacity: 0, pointerEvents: gisActivo ? 'auto' : 'none' }}>
+            al <button> de abajo (popup real, funciona siempre).
+
+            BUG REAL encontrado: este overlay cubre TODO el botón visible
+            (inset:0) con pointerEvents:auto, pero el iframe de Google
+            adentro es un rectángulo fijo mucho más chico (340×44) centrado
+            por flex. Fuera de ese rectángulo central el overlay seguía
+            interceptando el click (pointerEvents:auto) sin tener nada de
+            Google debajo para recibirlo — el toque se perdía en silencio,
+            ni abría el sheet nativo ni caía al botón de abajo. Esto
+            explica el reporte de "toco varias veces hasta que por fin le
+            pego": solo la franja central angosta funcionaba. Fix: el
+            overlay en sí pasa a pointerEvents:none, y SOLO el rectángulo
+            real donde vive el iframe (mismo tamaño que slotRef) tiene
+            pointerEvents:auto — así un toque fuera de esa franja cae
+            directo al <button> de abajo en vez de perderse en el overlay. */}
+        <div className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-2xl" style={{ opacity: 0, pointerEvents: 'none' }}>
           {/* +20 = el margen invisible que Google agrega al iframe (~10px
               por lado, constante sin importar el width pedido). */}
           <div ref={slotRef} className="flex items-center justify-center shrink-0"
-            style={{ colorScheme: isDark ? 'dark' : 'light', width: GOOGLE_BTN_W + 20, height: 44 }} />
+            style={{ colorScheme: isDark ? 'dark' : 'light', width: GOOGLE_BTN_W + 20, height: 44, pointerEvents: gisActivo ? 'auto' : 'none' }} />
         </div>
       </div>
 
