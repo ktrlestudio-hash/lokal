@@ -483,7 +483,17 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
                 {(() => { const BIcon = banners[bannerIdx].Icon; return <BIcon className="absolute right-6 top-1/2 -translate-y-1/2 w-20 h-20 text-white opacity-15 pointer-events-none" />; })()}
                 <div className="relative">
                   <p className="text-white font-black text-xl leading-tight mb-1">{banners[bannerIdx].title}</p>
-                  <p className="text-white/75 text-sm mb-4">{banners[bannerIdx].sub}</p>
+                  {/* line-clamp-2 + minHeight de 2 líneas SIEMPRE reservado
+                      (no solo cuando el texto lo necesita): el subtítulo
+                      del slide de "Productos destacados" es el más largo de
+                      los 4 y se envolvía a 2 líneas mientras el resto usaba
+                      1 — eso hacía que la card entera (con minHeight:150
+                      como piso, no altura fija) creciera solo en ESE slide,
+                      un salto de alto real al rotar entre banners. Con las
+                      2 líneas siempre reservadas, el título y el CTA de
+                      abajo quedan en la misma posición vertical sin
+                      importar cuál slide esté activo. */}
+                  <p className="text-white/75 text-sm mb-4 line-clamp-2" style={{ minHeight: '2.6em' }}>{banners[bannerIdx].sub}</p>
                   <span className="inline-flex items-center gap-1.5 bg-white/25 backdrop-blur-sm text-white text-xs font-bold px-3.5 py-1.5 rounded-xl">
                     {banners[bannerIdx].dots && <MapPin className="w-3 h-3" />}{banners[bannerIdx].cta} →
                   </span>
@@ -635,8 +645,17 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
                 ))}
               </div>
             ) : productosFiltrados.length === 0 ? (
+              // Misma altura que el skeleton y que la card real
+              // (CM_VERT_IMG+CM_VERT_BODY) — antes esta card ancha
+              // horizontal medía lo que su padding+contenido pedían
+              // (~150-180px), bastante menos que el skeleton de 276px que
+              // la precede: la transición cargando→vacío saltaba de
+              // altura igual que cargando→contenido real ya se había
+              // corregido. flex+justify-center en vez de depender del
+              // padding para llegar a esa altura — más robusto si el
+              // texto cambia de largo.
               <div className="px-4 lg:px-6">
-                <div className="rounded-3xl border p-6 text-center" style={CARD_TINTED}>
+                <div className="rounded-3xl border p-6 text-center flex flex-col items-center justify-center" style={{ ...CARD_TINTED, height: CM_VERT_IMG + CM_VERT_BODY }}>
                   <div className="w-12 h-12 rounded-2xl bg-brand/10 flex items-center justify-center mx-auto mb-3">
                     <ShoppingBag className="w-6 h-6 text-brand" />
                   </div>
@@ -676,12 +695,16 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
                 {[0, 1, 2].map((i) => <div key={i} className="w-52 h-24 rounded-2xl bg-surface-card-2 animate-pulse shrink-0" />)}
               </div>
             ) : tiendasFiltradas.length === 0 ? (
+              // Misma altura que el skeleton (h-24/96px) y la card real de
+              // tienda (hg-tienda-card) — mismo criterio que Destacados: el
+              // padding+contenido de esta card ancha pedían ~128px por
+              // defecto, más que el resto de estados de esta sección.
               <div className="px-4 lg:px-6">
-                <div className="rounded-3xl border p-6 text-center" style={CARD_TINTED}>
-                  <div className="w-12 h-12 rounded-2xl bg-brand/10 flex items-center justify-center mx-auto mb-3">
-                    <Store className="w-6 h-6 text-brand" />
+                <div className="h-24 rounded-3xl border text-center flex flex-col items-center justify-center" style={CARD_TINTED}>
+                  <div className="w-9 h-9 rounded-2xl bg-brand/10 flex items-center justify-center mx-auto mb-1.5">
+                    <Store className="w-4 h-4 text-brand" />
                   </div>
-                  <p className="text-sm font-semibold text-ink">{activeCat ? 'Sin tiendas en esta categoría todavía' : 'Todavía no hay tiendas publicadas'}</p>
+                  <p className="text-xs font-semibold text-ink px-4 truncate w-full">{activeCat ? 'Sin tiendas en esta categoría todavía' : 'Todavía no hay tiendas publicadas'}</p>
                 </div>
               </div>
             ) : (
