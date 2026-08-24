@@ -276,16 +276,18 @@ export default function LoginCard({
               (bg-surface-card se leía plano/apagado al lado de esas otras
               piezas ya tintadas). active:scale suma el feedback táctil.
 
-              <button> con pushState, NO <a href="/vender#quienes-somos">:
-              ese hash no existe (no hay ningún id="quienes-somos" en
-              LandingScreen.jsx — la sección real vive en la ruta separada
-              /quienes-somos, ver Root.jsx). El <a href> a un fragmento
-              inexistente disparaba una recarga COMPLETA de página sin
-              scrollear a nada, el parpadeo brusco reportado. pushState +
-              el evento popstate (que Root.jsx ya escucha para el resto de
-              la navegación interna) evita la recarga por completo. */}
+              <button> con pushState a /vender (LandingScreen.jsx — el pitch
+              comercial real: logo animado, título con palabra rotativa,
+              CTA "Continuar con Google", FAQ), NO /quienes-somos (esa es
+              LegalPages.jsx, contenido institucional/legal, otra pantalla
+              completamente distinta — corregido tras confundirla con el
+              destino real la vuelta anterior). Antes era <a
+              href="/vender#quienes-somos">, un hash que no existe en
+              ningún lado — recargaba la página entera sin scrollear a
+              nada. pushState + el evento popstate (que Root.jsx ya escucha
+              para el resto de la navegación interna) evita la recarga. */}
           <button
-            onClick={() => { window.history.pushState({}, '', '/quienes-somos'); window.dispatchEvent(new PopStateEvent('popstate')); }}
+            onClick={() => { window.history.pushState({}, '', '/vender'); window.dispatchEvent(new PopStateEvent('popstate')); }}
             className="w-full flex items-center gap-3 rounded-2xl p-3.5 text-left transition-all active:scale-[0.98] bg-brand/[0.08] hover:bg-brand/[0.16]"
           >
             <div className="w-9 h-9 rounded-xl bg-brand/15 flex items-center justify-center shrink-0">
