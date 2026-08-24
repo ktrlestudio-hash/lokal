@@ -168,11 +168,22 @@ export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mount
       }
     };
 
+    // visibilitychange como señal EXTRA: en algunos navegadores/sheets
+    // nativos, la pestaña vuelve a quedar "visible" antes de que `window`
+    // dispare 'focus' (reportado como "el botón queda unos segundos
+    // bloqueado después de cerrar la ventana") — cualquiera de las dos
+    // señales que llegue primero apaga el loading y limpia el intento.
+    const alVolverVisible = () => {
+      if (document.visibilityState === 'visible') alRecuperarFoco();
+    };
+
     window.addEventListener('blur', alPerderFoco);
     window.addEventListener('focus', alRecuperarFoco);
+    document.addEventListener('visibilitychange', alVolverVisible);
     return () => {
       window.removeEventListener('blur', alPerderFoco);
       window.removeEventListener('focus', alRecuperarFoco);
+      document.removeEventListener('visibilitychange', alVolverVisible);
     };
   }, [gisActivo]);
 

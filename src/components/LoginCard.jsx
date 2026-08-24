@@ -22,7 +22,10 @@ import { API_BASE } from '../config/flags';
 import { KtrlMark } from '../Brand';
 import { useBotonGoogleGIS } from '../hooks/useBotonGoogleGIS.js';
 
-const GOOGLE_BTN_W = 320;
+// 400 = el máximo que Google Identity Services acepta en `width` (doc
+// oficial de renderButton) — no hay forma de pedirle un iframe más ancho,
+// así que este es el techo real de la zona clickeable horizontal.
+const GOOGLE_BTN_W = 400;
 
 const GoogleIcon = ({ size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24">
@@ -156,6 +159,28 @@ export default function LoginCard({
   const [resetGisKey, setResetGisKey] = useState(0);
   const tocoIframeRef = React.useRef(false);
 
+  // Mide el botón visible en runtime (usa clamp()/w-full, no un tamaño
+  // fijo) para escalar el iframe invisible de Google (fijo en
+  // GOOGLE_BTN_W+20 × 44 puertas adentro) hasta cubrir el 100% del área
+  // clickeable real — así cualquier punto del botón que el usuario ve
+  // dispara el sheet nativo, no solo una franja central angosta.
+  const botonRef = React.useRef(null);
+  const [escala, setEscala] = useState({ x: 1, y: 1 });
+  React.useEffect(() => {
+    const el = botonRef.current;
+    if (!el) return;
+    const medir = () => {
+      const w = el.offsetWidth, h = el.offsetHeight;
+      if (w > 0 && h > 0) {
+        setEscala({ x: w / (GOOGLE_BTN_W + 20), y: h / 44 });
+      }
+    };
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // GIS/FedCM: abre el selector de cuenta como sheet NATIVO del sistema en
   // vez de una ventana emergente aparte — mismo patrón que ya resolvió
   // LandingScreen.jsx. onLogin llega con la sesión de Firebase ya resuelta
@@ -285,6 +310,7 @@ export default function LoginCard({
           botón de abajo. */}
       <div className="relative" onPointerDown={antesDeTocar}>
         <button
+          ref={botonRef}
           onClick={handleGoogle}
           disabled={loading || gisEnCurso}
           className="w-full flex items-center justify-center gap-3 bg-ink dark:bg-white hover:bg-ink/90 dark:hover:bg-white/90 text-white dark:text-[#18181b] font-bold rounded-2xl transition-all shadow-lg hover:shadow-xl disabled:opacity-60 active:scale-[0.98]"
@@ -301,24 +327,37 @@ export default function LoginCard({
             botón se sentiría "muerto". Con pointerEvents:none el click cae
             al <button> de abajo (popup real, funciona siempre).
 
-            BUG REAL encontrado: este overlay cubre TODO el botón visible
-            (inset:0) con pointerEvents:auto, pero el iframe de Google
-            adentro es un rectángulo fijo mucho más chico (340×44) centrado
-            por flex. Fuera de ese rectángulo central el overlay seguía
-            interceptando el click (pointerEvents:auto) sin tener nada de
-            Google debajo para recibirlo — el toque se perdía en silencio,
-            ni abría el sheet nativo ni caía al botón de abajo. Esto
-            explica el reporte de "toco varias veces hasta que por fin le
-            pego": solo la franja central angosta funcionaba. Fix: el
-            overlay en sí pasa a pointerEvents:none, y SOLO el rectángulo
-            real donde vive el iframe (mismo tamaño que slotRef) tiene
-            pointerEvents:auto — así un toque fuera de esa franja cae
-            directo al <button> de abajo en vez de perderse en el overlay. */}
+            BUG REAL #1 (ya corregido): el overlay cubría TODO el botón
+            visible con pointerEvents:auto, pero el iframe de Google
+            adentro es un rectángulo angosto y bajo (máx. 400×44, Google no
+            deja pedirle otro tamaño) centrado por flex — fuera de esa
+            franja el overlay interceptaba el click sin tener nada debajo
+            para recibirlo, y el toque se perdía en silencio.
+            BUG REAL #2 (este fix): angostar el área clickeable al tamaño
+            real de Google (400×44) es correcto para que NO se pierdan
+            toques, pero deja una franja demasiado chica en botones altos
+            — el usuario pidió explícitamente que TODA el área visible del
+            botón sea zona de toque amplia, no una franja. Con
+            `transform: scale()` se estira el iframe (que sigue siendo
+            400×44 puertas adentro, Google no lo sabe) para que ocupe el
+            100% del ancho y alto reales del botón — el toque en cualquier
+            punto del botón visible ahora cae dentro del iframe escalado.
+            scaleX/scaleY se calculan en runtime (ver medirBoton) porque el
+            botón usa clamp()/w-full, no un tamaño fijo. */}
         <div className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-2xl" style={{ opacity: 0, pointerEvents: 'none' }}>
           {/* +20 = el margen invisible que Google agrega al iframe (~10px
               por lado, constante sin importar el width pedido). */}
-          <div ref={slotRef} className="flex items-center justify-center shrink-0"
-            style={{ colorScheme: isDark ? 'dark' : 'light', width: GOOGLE_BTN_W + 20, height: 44, pointerEvents: gisActivo ? 'auto' : 'none' }} />
+          <div
+            className="flex items-center justify-center shrink-0"
+            style={{
+              width: GOOGLE_BTN_W + 20,
+              height: 44,
+              transform: `scale(${escala.x}, ${escala.y})`,
+              pointerEvents: gisActivo ? 'auto' : 'none',
+            }}
+          >
+            <div ref={slotRef} style={{ colorScheme: isDark ? 'dark' : 'light', width: GOOGLE_BTN_W + 20, height: 44 }} />
+          </div>
         </div>
       </div>
 
