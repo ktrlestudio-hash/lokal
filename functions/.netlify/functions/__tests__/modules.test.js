@@ -3,17 +3,26 @@
 // "cerrado" (false) a propósito si la config falta o viene mal formada.
 // Cualquier regresión acá abriría o cerraría un módulo sin que el dueño lo
 // haya pedido.
+//
+// 'catalogo' se testea contra la key REAL 'productos' (no 'catalogo') —
+// SECCIONES_DEFAULT (src/tienda-publica/tokens.js) siempre usó 'productos'
+// para lo que la UI llama "Catálogo"; el editor visual y la vista pública
+// leen/escriben esa key. isModuleActive('catalogo') tiene un alias interno
+// que mapea a 'productos' (ver MODULE_KEY_ALIAS en modules.js) — antes de
+// ese alias, el switch de "Diseño de página" no tenía ningún efecto acá
+// (bug real reportado en producción: Catálogo activo en el editor, pero el
+// admin/Home global seguían tratándolo como inactivo).
 import { describe, expect, it } from 'vitest';
 import { isModuleActive } from '../_lib/modules.js';
 
 describe('isModuleActive', () => {
   it('true cuando la sección existe y activa es true', () => {
-    const tienda = { pagina: { secciones: { catalogo: { activa: true } } } };
+    const tienda = { pagina: { secciones: { productos: { activa: true } } } };
     expect(isModuleActive(tienda, 'catalogo')).toBe(true);
   });
 
   it('false cuando la sección existe pero activa es false', () => {
-    const tienda = { pagina: { secciones: { catalogo: { activa: false } } } };
+    const tienda = { pagina: { secciones: { productos: { activa: false } } } };
     expect(isModuleActive(tienda, 'catalogo')).toBe(false);
   });
 
@@ -29,7 +38,20 @@ describe('isModuleActive', () => {
   });
 
   it('acepta el formato legado (booleano suelto) por compatibilidad con tiendas viejas', () => {
-    const tienda = { pagina: { secciones: { catalogo: true } } };
+    const tienda = { pagina: { secciones: { productos: true } } };
     expect(isModuleActive(tienda, 'catalogo')).toBe(true);
+  });
+
+  it('catalogo lee la key productos, no una key "catalogo" literal', () => {
+    // Regresión del bug real: una tienda con secciones.catalogo activo (la
+    // key vieja, incorrecta) NO debe activar el módulo — solo productos
+    // (la key real) lo hace.
+    const tienda = { pagina: { secciones: { catalogo: { activa: true } } } };
+    expect(isModuleActive(tienda, 'catalogo')).toBe(false);
+  });
+
+  it('ofertas sigue leyendo su propia key sin alias', () => {
+    const tienda = { pagina: { secciones: { ofertas: { activa: true } } } };
+    expect(isModuleActive(tienda, 'ofertas')).toBe(true);
   });
 });

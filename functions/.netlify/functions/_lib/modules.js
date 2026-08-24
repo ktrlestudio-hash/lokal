@@ -88,13 +88,25 @@ export function defaultSecciones(rubros = []) {
   return secciones;
 }
 
+// Bug real encontrado en producción (2026-08-24): SECCIONES_DEFAULT
+// (src/tienda-publica/tokens.js) usa la key 'productos' para lo que la UI
+// llama "Catálogo" — el editor visual y la vista pública siempre leyeron/
+// escribieron esa key, consistentes entre sí. Pero isModuleActive('catalogo')
+// buscaba secciones.catalogo, una key que el switch de "Diseño de página"
+// nunca tocaba — activar/desactivar Catálogo ahí no tenía ningún efecto acá
+// (admin "Productos", este backend). Ver el espejo en
+// src/tienda-publica/utils.js para el detalle completo — misma lógica en
+// ambos lados, actualizar juntos si se toca.
+const MODULE_KEY_ALIAS = { catalogo: 'productos' };
+
 // ¿Tiene la tienda el módulo `moduleId` activo? Falla "cerrado" (false) si
 // la tienda no tiene pagina/secciones todavía, para que un módulo nunca
 // opere sobre una tienda sin configurar explícitamente. Acepta tanto el
 // formato nuevo ({activa: bool}) como un booleano suelto legado, por si
 // alguna tienda vieja quedó con el formato anterior de este archivo.
 export function isModuleActive(tienda, moduleId) {
-  const seccion = tienda?.pagina?.secciones?.[moduleId];
+  const key = MODULE_KEY_ALIAS[moduleId] || moduleId;
+  const seccion = tienda?.pagina?.secciones?.[key];
   if (seccion && typeof seccion === 'object') return !!seccion.activa;
   return !!seccion;
 }
