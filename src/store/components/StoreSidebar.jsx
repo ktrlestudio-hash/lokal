@@ -19,7 +19,7 @@
 //      visual permanente comparado con Adobe (avatar → menú desplegable).
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  PanelLeftClose, PanelLeftOpen, Plus, MessageSquare, Zap, TrendingUp, CreditCard, Store, Palette,
+  PanelLeftClose, PanelLeftOpen, Plus, MessageSquare, Zap, Tag, TrendingUp, CreditCard, Store, Palette,
   ShieldCheck, Globe, ExternalLink, Sun, Moon, FlaskConical, LogOut, ChevronsUpDown,
 } from 'lucide-react';
 import { LogoFull, KtrlMark } from '../../Brand';
@@ -73,11 +73,19 @@ export function StoreSidebar({
     localStorage.setItem('lokal-store-sidebar-pinned', String(next));
   };
 
+  // Productos (Catálogo) y Ofertas son DOS ítems propios, ambos siempre
+  // visibles — antes era un solo ítem "Mis productos"/"Ofertas" cuyo label
+  // Y pantalla cambiaban según isModuleActive('catalogo'), la misma causa
+  // del bug real de producción (con tiendaData sin resolver al montar,
+  // isModuleActive fallaba cerrado y mostraba lo contrario a lo
+  // configurado). El módulo ya no decide qué ve el dueño, solo qué se
+  // publica (switch "Visible en tu tienda" en el header de cada pantalla).
   const navItems = [
     // "Inicio" (feed marketplace multi-tienda) se sacó: no aplica a la
     // gestión de un mono-negocio.
     ...(isModuleActive(tiendaData, 'mensajes') ? [{ label: 'Mensajes', icon: MessageSquare, id: 'mensajes' }] : []),
-    { label: isModuleActive(tiendaData, 'catalogo') ? 'Mis productos' : 'Ofertas', icon: Zap, id: 'productos', badge: misProductosSinFiltrar.filter(o => o.activa !== false && o.visible !== false).length || null },
+    { label: 'Mis productos', icon: Zap, id: 'productos', badge: misProductosSinFiltrar.filter(o => o._origen === 'catalogo' && o.activa !== false).length || null },
+    { label: 'Ofertas', icon: Tag, id: 'ofertas', badge: misProductosSinFiltrar.filter(o => o._origen !== 'catalogo' && o.visible !== false).length || null },
     // Estadísticas y Suscripción: transversales a todo plan/rubro (la
     // suscripción es 1 mes gratis + monto por rubro que fija el admin
     // general). Antes gateadas con isEmpresa, lo que las ocultaba a las

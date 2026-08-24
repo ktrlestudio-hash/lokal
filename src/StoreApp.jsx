@@ -150,15 +150,24 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const productLimit = isEmprendimiento ? 5 : (isBasico ? 20 : Infinity);
   const galleryLimit = isEmprendimiento ? 3 : (isBasico ? 6 : 10);
 
-  // Antes la pantalla "productos" del nav renderizaba SOLO Ofertas o SOLO
-  // Catálogo según isModuleActive('catalogo') — una tienda con los dos
-  // módulos activos no tenía forma de administrar el que perdía ese
-  // if/else. Con ambosModulosActivos, OfertasScreen/ProductosScreen se
-  // filtran entre sí por tipo (ver el shadowing de misProductos dentro de
-  // cada una) y el selector de abajo deja elegir cuál ver.
-  const ambosModulosActivos = isModuleActive(tiendaData, 'ofertas') && isModuleActive(tiendaData, 'catalogo');
-
-  const STORE_SCREENS = ['perfil', 'mensajes', 'productos', 'stats', 'suscripcion'];
+  // "productos" (Catálogo) y "ofertas" son DOS pantallas propias del nav,
+  // no una con selector interno — antes había un selector Ofertas/Catálogo
+  // DENTRO de una sola pantalla "productos", visible solo si ambos módulos
+  // estaban activos (ambosModulosActivos/subScreenProductos), y si ninguno
+  // o solo uno estaba activo, isModuleActive decidía CUÁL de las dos veía
+  // el dueño — el mismo mecanismo cuyo bug de sincronización (tiendaData
+  // vs tienda, dos fuentes fetcheando la misma tienda en paralelo) causaba
+  // que la pantalla mostrara Ofertas o Catálogo al azar según qué fetch
+  // ganara la carrera en cada recarga (bug real de producción 2026-08-24).
+  //
+  // Ahora el admin SIEMPRE muestra las dos pantallas — isModuleActive deja
+  // de decidir qué ve el DUEÑO (solo sigue gobernando qué se publica en la
+  // tienda pública y qué entra al feed de Destacados de la Home global).
+  // Cada pantalla tiene su propio switch "Visible en tu tienda" en el
+  // header, que escribe directo en tienda.pagina.secciones.<key>.activa —
+  // mismo dato que antes solo se tocaba desde "Diseño de página", ahora
+  // accesible desde donde el dueño realmente administra el contenido.
+  const STORE_SCREENS = ['perfil', 'mensajes', 'productos', 'ofertas', 'stats', 'suscripcion'];
   // Key por tienda (no global al navegador): sin el id, la última pantalla
   // visitada por UNA cuenta se filtraba a la sesión de cualquier otra
   // cuenta que abriera el panel en el mismo navegador (ej. probando varias
@@ -166,16 +175,6 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   const storeScreenKey = tiendaData?.id ? `lokal-store-screen-${tiendaData.id}` : null;
   const savedScreen = storeScreenKey ? localStorage.getItem(storeScreenKey) : null;
   const [screen, setScreen] = useState(STORE_SCREENS.includes(savedScreen) ? savedScreen : 'perfil');
-
-  // Sub-selector DENTRO de la pantalla "productos", solo relevante cuando
-  // la tienda tiene los módulos 'ofertas' Y 'catalogo' activos a la vez —
-  // antes de esto, la pantalla renderizaba SOLO Ofertas o SOLO Catálogo
-  // según isModuleActive('catalogo'), así que una tienda con ambos módulos
-  // no tenía forma de administrar el que perdía el if/else (ver
-  // plan de profesionalización, Fase 2). 'ofertas' por default: es la
-  // vista más simple, coherente con que LOKAL LINKS nace mono-rubro
-  // 'ofertas' y el catálogo es el módulo que se agrega encima.
-  const [subScreenProductos, setSubScreenProductos] = useState('ofertas');
 
   // Mock test mode (solo admins)
   const [mockMode, setMockMode] = useState(false);
@@ -190,6 +189,25 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   // Datos
   const [tienda, setTienda] = useState(null);
   const tiendaPatch = useTiendaPatch({ tiendaId: tienda?.id || tiendaData?.id, setTienda, onTiendaUpdate });
+
+  // Switch "Visible en tu tienda" del header de Productos/Ofertas — PATCH
+  // directo de UNA sección (no todo pagina.secciones vía el editor visual),
+  // mismo endpoint/formato que savePagina usa. tiendaPatch (useTiendaPatch)
+  // ya sincroniza tienda + onTiendaUpdate al resolver, así que el resto de
+  // la UI (bottom-nav, isModuleActive) ve el cambio sin depender de F5.
+  const toggleSeccionModulo = async (moduleKey, nuevaActiva) => {
+    const seccionesActuales = tiendaData?.pagina?.secciones || {};
+    const seccionActual = seccionesActuales[moduleKey];
+    await tiendaPatch({
+      pagina: {
+        ...tiendaData?.pagina,
+        secciones: {
+          ...seccionesActuales,
+          [moduleKey]: { ...seccionActual, activa: nuevaActiva },
+        },
+      },
+    });
+  };
 
   // ── Inbox (mensajes directos de clientes) ─────────────────────────────────
   // Estado + fetch en useInbox (Fase 3, mismo criterio que
@@ -703,7 +721,9 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   }, []);
 
   useEffect(() => {
-    fetchTienda();
+    // fetchTienda() se eliminó: `tienda` ahora se hidrata desde la prop
+    // `tiendaData` (ver el useEffect de hidratación más abajo) en vez de
+    // pegarle por segunda vez al mismo endpoint que Root.jsx.
     fetchMisProductos();
     apiFetch(`${API_BASE}/categories`)
       .then(r => r.ok ? r.json() : [])
@@ -895,18 +915,25 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     });
   }, [tienda]);
 
-  const fetchTienda = async () => {
-    try {
-      // Buscar por googleUid (el UID de Firebase del usuario actual)
-      // El id numérico de la tienda en R2 puede no estar en el prop tiendaData
-      const uid = firebaseUser?.uid;
-      if (!uid) return;
-      const res = await apiFetch(`${API_BASE}/tiendas-crud?googleUid=${encodeURIComponent(uid)}`, {
-        authRequired: true,
-      });
-      if (res.ok) setTienda(await res.json());
-    } catch { /* usa session data como fallback */ }
-  };
+  // `tienda` se HIDRATA desde `tiendaData` (la prop), no de un fetch propio.
+  //
+  // Antes acá había un fetchTienda() que pegaba al MISMO endpoint que
+  // Root.jsx (tiendas-crud?googleUid=...) sin coordinarse con él: dos
+  // fetches en paralelo de la misma tienda, poblando dos estados distintos
+  // (`tienda` local y `tiendaData` prop). Como las decisiones de módulo
+  // (isModuleActive) leen `tiendaData` y el editor visual lee `tienda`,
+  // según cuál ganara la carrera en cada recarga la pantalla "Productos"
+  // mostraba Catálogo u Ofertas — el bug de "recargo y cambia solo" que
+  // el usuario reportó. isModuleActive falla cerrado (false) con la tienda
+  // todavía en null, así que cualquier render antes de que resolviera el
+  // fetch caía a Ofertas.
+  //
+  // Con una sola fuente (la prop) las dos vistas siempre coinciden, y
+  // `tienda` deja de poder quedar viejo respecto de `tiendaData` — los
+  // guardados siguen actualizando ambos (setTienda + onTiendaUpdate).
+  useEffect(() => {
+    if (tiendaData) setTienda(prev => (prev === tiendaData ? prev : tiendaData));
+  }, [tiendaData]);
 
   const savePublicPage = async () => {
     const storeId = tienda?.id || tiendaData?.id;
@@ -2929,7 +2956,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   // primera de las 5 pantallas grandes).
   const OfertasScreen = () => (
     <OfertasScreenBase
-      ambosModulosActivos={ambosModulosActivos} subScreenProductos={subScreenProductos} setSubScreenProductos={setSubScreenProductos}
+      seccionActiva={isModuleActive(tiendaData, 'ofertas')}
+      onToggleSeccion={(nuevaActiva) => toggleSeccionModulo('ofertas', nuevaActiva)}
       misProductosSinFiltrar={misProductosSinFiltrar}
       setMisProductos={setMisProductos} loadingProductos={loadingProductos}
       tiendaId={tiendaData?.id}
@@ -2944,10 +2972,10 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
   );
 
   // ── Perfil tienda ──────────────────────────────────────────────────────────
-  // ── Módulo "catalogo" (isModuleActive(tienda, 'catalogo')) ─────────────────
+  // ── Módulo "productos" (isModuleActive(tienda, 'catalogo')) ────────────────
   // Producto de e-commerce completo: precio, stock, condición, categoría,
   // financiación, atributos. Para tiendas mono-oferta (módulo 'ofertas'),
-  // ver OfertasScreen más abajo — mismo patrón que MODULES.catalogo vs
+  // ver OfertasScreen más abajo — mismo patrón que MODULES.productos vs
   // MODULES.ofertas en netlify/functions/_lib/modules.js.
   // ProductosScreen vive en src/store/screens/ProductosScreen.jsx (Fase 3,
   // segunda de las 5 pantallas grandes).
@@ -2955,7 +2983,8 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
     <ProductosScreenBase
       onAbrirImportador={abrirImportador} tiendaId={tiendaData?.id}
       importacionEnCurso={importadorFlotanteVisible}
-      ambosModulosActivos={ambosModulosActivos} subScreenProductos={subScreenProductos} setSubScreenProductos={setSubScreenProductos}
+      seccionActiva={isModuleActive(tiendaData, 'catalogo')}
+      onToggleSeccion={(nuevaActiva) => toggleSeccionModulo('productos', nuevaActiva)}
       misProductosSinFiltrar={misProductosSinFiltrar}
       setMisProductos={setMisProductos} loadingProductos={loadingProductos}
       productoShowForm={productoShowForm} setProductoShowForm={setProductoShowForm}
@@ -3136,20 +3165,18 @@ export default function StoreApp({ firebaseUser, tiendaData, userProfile, onLogo
         }}>
           {screen === 'mensajes' && isModuleActive(tiendaData, 'mensajes') && MensajesScreen()}
           {screen === 'stats' && StatsScreen()}
-          {screen === 'productos' && (
-            ambosModulosActivos ? (
-              // Selector Ofertas/Catálogo — SOLO aparece con los 2 módulos
-              // activos a la vez (ver ambosModulosActivos arriba). Vive
-              // DENTRO del header de cada screen (leftSlot, reemplaza el
-              // título) en vez de como una barra aparte encima: así no le
-              // resta altura al h-[100dvh] interno de la screen (antes
-              // generaba scroll extra en la zona vacía, la suma de tabs +
-              // 100dvh excedía el viewport real).
-              subScreenProductos === 'catalogo' ? ProductosScreen() : OfertasScreen()
-            ) : (
-              isModuleActive(tiendaData, 'catalogo') ? ProductosScreen() : OfertasScreen()
-            )
-          )}
+          {/* Productos y Ofertas son pantallas SIEMPRE visibles en el nav,
+              sin condicionar a isModuleActive — el módulo ya no decide qué
+              ve el DUEÑO (antes sí, y eso era la causa del bug real: con
+              tiendaData todavía sin resolver al montar, isModuleActive
+              fallaba cerrado y la pantalla mostraba la sección equivocada
+              hasta que el fetch terminara). El dueño gestiona ambas
+              colecciones siempre, y decide qué se PUBLICA con el switch
+              "Visible en tu tienda" de cada header (ver
+              SeccionVisibleToggle) — isModuleActive sigue gobernando eso,
+              más el feed de Destacados de la Home global. */}
+          {screen === 'productos' && ProductosScreen()}
+          {screen === 'ofertas' && OfertasScreen()}
           {screen === 'suscripcion' && SuscripcionScreen()}
           {screen === 'mi-pagina' && MiPaginaScreen()}
           {screen === 'perfil' && PerfilScreen()}

@@ -1,8 +1,14 @@
-// StoreMoreSheet — sheet mobile "Más" (avatar de cuenta, Estadísticas,
-// Suscripción, Diseño de página, Panel Admin, mock, tema, salir). Cuarto
-// componente de "shell" extraído en la Fase 3.
+// StoreMoreSheet — sheet mobile "Más" (avatar de cuenta, Ofertas,
+// Estadísticas, Suscripción, Diseño de página, Panel Admin, mock, tema,
+// salir). Cuarto componente de "shell" extraído en la Fase 3.
+//
+// "Ofertas" vive acá (no en la bottom-nav, que ya tiene sus 5 posiciones
+// ocupadas con Productos/Mensajes-Estadísticas/Crear/Mi tienda/Más) — es
+// un módulo secundario, mientras Productos (Catálogo) es el que sí merece
+// slot fijo. En desktop (StoreSidebar.jsx) Ofertas SÍ tiene su propio
+// ítem — ahí hay espacio de sobra.
 import React from 'react';
-import { TrendingUp, CreditCard, Palette, ShieldCheck, FlaskConical, Sun, Moon, LogOut } from 'lucide-react';
+import { Tag, TrendingUp, CreditCard, Palette, ShieldCheck, FlaskConical, Sun, Moon, LogOut } from 'lucide-react';
 
 export function StoreMoreSheet({
   onClose,
@@ -18,6 +24,7 @@ export function StoreMoreSheet({
     // público, no aplica a la gestión de un mono-negocio. Estadísticas y
     // Suscripción ya no van gateadas por isEmpresa (ver navItems del
     // sidebar) — visibles para todo plan/rubro.
+    { label: 'Ofertas', icon: Tag, action: () => { navigateTo('ofertas'); cerrar(); } },
     { label: 'Estadísticas', icon: TrendingUp, action: () => { navigateTo('stats'); cerrar(); } },
     { label: 'Suscripción', icon: CreditCard, action: () => { navigateTo('suscripcion'); cerrar(); } },
     {

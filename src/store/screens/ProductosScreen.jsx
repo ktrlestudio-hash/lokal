@@ -11,7 +11,7 @@ import {
 import { SkeletonProductosGrid } from '../../Skeletons';
 import LazyImg from '../../LazyImg';
 import { StorePageHeader } from '../components/StorePageHeader.jsx';
-import { ProductosOfertasToggle } from '../components/ProductosOfertasToggle.jsx';
+import { SeccionVisibleToggle } from '../components/SeccionVisibleToggle.jsx';
 import { useCapaUI } from '../navegacion/useCapaUI.js';
 
 export function ProductosScreen({
@@ -21,7 +21,7 @@ export function ProductosScreen({
   // encima de la que corre no tiene sentido, y el chip ya comunica que
   // hay uno en curso.
   onAbrirImportador, tiendaId, importacionEnCurso = false,
-  ambosModulosActivos, subScreenProductos, setSubScreenProductos,
+  seccionActiva, onToggleSeccion,
   misProductosSinFiltrar, setMisProductos, loadingProductos,
   productoShowForm, setProductoShowForm, productoEditing, setProductoEditing,
   productoForm, setProductoForm, productoFotoFiles, setProductoFotoFiles,
@@ -55,16 +55,13 @@ export function ProductosScreen({
   const [vaciarConfirm, setVaciarConfirm] = useState(false);
   const [vaciando, setVaciando] = useState(false);
   useCapaUI({ abierto: vaciarConfirm, onCerrar: () => setVaciarConfirm(false) });
-  // Shadowing simétrico al de OfertasScreen (ver comentario ahí): con
-  // ambos módulos activos, esta pantalla solo muestra ítems de Catálogo.
-  // Filtra por _origen (marcado en useProductosOfertas.js según de qué
-  // endpoint vino cada ítem), NO por `typeof precio === 'number'` — ese
-  // filtro por tipo clasificaba mal cualquier producto de catálogo real
-  // con precio null/vacío (ej. filas del importador sin precio en el
-  // Excel): terminaban en Ofertas aunque vivieran en productos.json.
-  // Igual que en OfertasScreen: el filtro se aplica SIEMPRE, no solo con
-  // ambos módulos activos — con Ofertas apagado la condición daba false y
-  // esta pantalla listaba también las ofertas.
+  // Shadowing simétrico al de OfertasScreen (ver comentario ahí): esta
+  // pantalla solo muestra ítems de Catálogo. Filtra por _origen (marcado
+  // en useProductosOfertas.js según de qué endpoint vino cada ítem), NO
+  // por `typeof precio === 'number'` — ese filtro por tipo clasificaba mal
+  // cualquier producto de catálogo real con precio null/vacío (ej. filas
+  // del importador sin precio en el Excel): terminaban en Ofertas aunque
+  // vivieran en productos.json.
   const misProductos = misProductosSinFiltrar.filter(o => o._origen === 'catalogo');
 
   const showForm = productoShowForm;
@@ -549,7 +546,7 @@ export function ProductosScreen({
       <StorePageHeader
         title="Mis productos"
         subtitle={`${misProductos.length} publicación${misProductos.length !== 1 ? 'es' : ''} · ${activos.length} activa${activos.length !== 1 ? 's' : ''}`}
-        leftSlot={ambosModulosActivos ? <ProductosOfertasToggle value={subScreenProductos} onChange={setSubScreenProductos} /> : null}
+        secondarySlot={<SeccionVisibleToggle activa={seccionActiva} onToggle={onToggleSeccion} />}
         actionSlot={(
           <>
             {/* Sin indicador de sincronización de fondo: con contenido ya

@@ -37,10 +37,22 @@ export const MODULES = {
     desc: 'Galería de imágenes con enlace individual y Open Graph dinámico para compartir.',
     orden: 8, // después de SECCIONES_DEFAULT (hero..mapa, orden 1-7)
   },
-  catalogo: {
+  // key REAL 'productos' (no 'catalogo'): así se llama tanto en
+  // SECCIONES_DEFAULT (src/tienda-publica/tokens.js) como en el editor
+  // visual y la vista pública. Antes esta key era 'catalogo', un nombre
+  // que nadie más en el proyecto usaba — el editor de "Diseño de página"
+  // escribía en secciones.productos, y este archivo (junto con
+  // isModuleActive) leía secciones.catalogo: dos keys distintas para el
+  // mismo módulo, nunca sincronizadas. El switch de Catálogo no tenía
+  // ningún efecto real en el admin/Home global (bug encontrado en
+  // producción 2026-08-24). Unificado a un solo nombre en todo el
+  // proyecto — moduleId sigue llamándose 'catalogo' en las llamadas a
+  // isModuleActive(tienda, 'catalogo') por legibilidad ("el módulo
+  // catálogo"), pero la KEY donde vive el dato es 'productos'.
+  productos: {
     label: 'Catálogo',
     desc: 'Productos con precio, stock y carrito de compra.',
-    orden: 2, // coincide con la sección "productos" ya existente — alias
+    orden: 2, // coincide con la sección "productos" de SECCIONES_DEFAULT
   },
   mensajes: {
     label: 'Mensajes',
@@ -66,9 +78,9 @@ const RUBRO_DEFAULTS = {
   // otro rubro más adelante, pero su backend (netlify/functions/messages.js)
   // fue retirado en el recorte de LOKAL LINKS — no se pre-activa hasta que
   // vuelva a tener función propia detrás.
-  comida: ['catalogo'],
-  restaurante: ['catalogo'],
-  almacen: ['catalogo'],
+  comida: ['productos'],
+  restaurante: ['productos'],
+  almacen: ['productos'],
 };
 
 // Devuelve el objeto `secciones` inicial para una tienda nueva, en el MISMO
@@ -88,15 +100,11 @@ export function defaultSecciones(rubros = []) {
   return secciones;
 }
 
-// Bug real encontrado en producción (2026-08-24): SECCIONES_DEFAULT
-// (src/tienda-publica/tokens.js) usa la key 'productos' para lo que la UI
-// llama "Catálogo" — el editor visual y la vista pública siempre leyeron/
-// escribieron esa key, consistentes entre sí. Pero isModuleActive('catalogo')
-// buscaba secciones.catalogo, una key que el switch de "Diseño de página"
-// nunca tocaba — activar/desactivar Catálogo ahí no tenía ningún efecto acá
-// (admin "Productos", este backend). Ver el espejo en
-// src/tienda-publica/utils.js para el detalle completo — misma lógica en
-// ambos lados, actualizar juntos si se toca.
+// 'catalogo' sigue aceptándose como alias de 'productos' EN LA LLAMADA
+// (isModuleActive(tienda, 'catalogo')) por legibilidad — pero ambos leen
+// la MISMA key real ('productos') en tienda.pagina.secciones. No hay dos
+// keys de datos distintas, solo dos formas válidas de nombrar el módulo
+// al llamar a esta función.
 const MODULE_KEY_ALIAS = { catalogo: 'productos' };
 
 // ¿Tiene la tienda el módulo `moduleId` activo? Falla "cerrado" (false) si

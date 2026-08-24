@@ -43,11 +43,9 @@ export function StoreCreateSheet({
     setOfertaShowForm(true);
   };
 
-  // Con AMBOS módulos activos (mismo caso que ambosModulosActivos en
-  // StoreApp.jsx — ver ProductosOfertasToggle), antes esta card era
-  // excluyente: usaCatalogo elegía "Nuevo producto" O "Nueva oferta", nunca
-  // las dos — así que una tienda con los dos módulos jamás podía crear una
-  // oferta desde el FAB central, solo desde dentro de la pantalla Ofertas.
+  // Con AMBOS módulos activos, las dos opciones conviven acá (no es
+  // excluyente) — usaCatalogo y usaOfertas se evalúan por separado, cada
+  // una agrega su propia card si corresponde.
   const opts = [];
   if (usaCatalogo) {
     opts.push({

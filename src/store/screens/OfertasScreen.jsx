@@ -11,11 +11,11 @@ import {
 import { SkeletonProductosGrid } from '../../Skeletons';
 import LazyImg from '../../LazyImg';
 import { StorePageHeader } from '../components/StorePageHeader.jsx';
-import { ProductosOfertasToggle } from '../components/ProductosOfertasToggle.jsx';
+import { SeccionVisibleToggle } from '../components/SeccionVisibleToggle.jsx';
 import { useCapaUI } from '../navegacion/useCapaUI.js';
 
 export function OfertasScreen({
-  ambosModulosActivos, subScreenProductos, setSubScreenProductos,
+  seccionActiva, onToggleSeccion,
   misProductosSinFiltrar, setMisProductos, loadingProductos, tiendaId,
   ofertaShowForm, setOfertaEditing, setOfertaForm, setOfertaFotoFile, setOfertaFotoPreview,
   setOfertaIntentoGuardar, setOfertaFotoRemoved, setOfertaFotoLoading, setOfertaShowForm,
@@ -39,14 +39,8 @@ export function OfertasScreen({
   // /productos o /ofertas — vino cada ítem), NO por `typeof precio`: un
   // producto de catálogo real con precio null/vacío (fila del importador
   // sin precio en el Excel) igual tiene _origen:'catalogo', así que ya no
-  // aparece acá por error.
-  //
-  // El filtro se aplica SIEMPRE, no solo con ambos módulos activos. Antes
-  // estaba condicionado a ambosModulosActivos y eso rompía el caso real de
-  // tener Ofertas apagado y Catálogo prendido: la condición daba false y
-  // esta pantalla pasaba a listar TODO, mostrando los productos de catálogo
-  // dentro de Ofertas. Cada pantalla muestra lo suyo, independientemente de
-  // qué módulos estén activos.
+  // aparece acá por error. El filtro se aplica siempre — Ofertas y
+  // Productos son pantallas propias, cada una muestra solo lo suyo.
   const misProductos = misProductosSinFiltrar.filter(o => o._origen !== 'catalogo');
 
   const openNew = () => {
@@ -262,7 +256,7 @@ export function OfertasScreen({
         title="Ofertas"
         subtitle={`${misProductos.length} publicación${misProductos.length !== 1 ? 'es' : ''}`}
         icon={Tag}
-        leftSlot={ambosModulosActivos ? <ProductosOfertasToggle value={subScreenProductos} onChange={setSubScreenProductos} /> : null}
+        secondarySlot={<SeccionVisibleToggle activa={seccionActiva} onToggle={onToggleSeccion} />}
         actionSlot={(
           <>
             {/* Sin indicador de sincronización de fondo: con contenido ya

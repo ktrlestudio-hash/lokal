@@ -12,6 +12,14 @@
 // dispositivo. Cuando el nav no se renderiza (return null más abajo) la
 // variable se limpia a 0 para que las screens que lo consultan no dejen un
 // padding fantasma.
+//
+// El label de este ítem era antes condicional a isModuleActive('catalogo')
+// ("Productos" si el módulo estaba activo, "Ofertas" si no) — eso era
+// parte del bug real de producción: con tiendaData sin resolver al montar,
+// isModuleActive fallaba cerrado y el label/pantalla mostrados no
+// coincidían con lo que el dueño acababa de configurar. Ahora "Productos"
+// (screen 'productos', el catálogo) es fijo acá — Ofertas es su propia
+// pantalla, accesible desde "Más" (ver StoreMoreSheet.jsx).
 import React, { useRef } from 'react';
 import { Tag, MessageSquare, TrendingUp, Plus, Store, Menu } from 'lucide-react';
 import { isModuleActive } from '../../tienda-publica/utils.js';
@@ -37,7 +45,7 @@ export function StoreBottomNav({
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${screen === 'productos' ? 'bg-primary/10 dark:bg-primary/15' : 'hover:bg-surface-card-2 dark:hover:bg-white/8'}`}>
             <Tag className={`w-5 h-5 ${screen === 'productos' ? 'text-primary' : 'text-ink-dim'}`} />
           </div>
-          <span className={`text-[10px] font-semibold ${screen === 'productos' ? 'text-primary' : 'text-ink-dim'}`}>{isModuleActive(tiendaData, 'catalogo') ? 'Productos' : 'Ofertas'}</span>
+          <span className={`text-[10px] font-semibold ${screen === 'productos' ? 'text-primary' : 'text-ink-dim'}`}>Productos</span>
         </button>
         {/* Segundo slot: Mensajes si el módulo está activo (rubro tienda);
             si no (rubro ofertas tipo Bovril), Estadísticas — así el nav

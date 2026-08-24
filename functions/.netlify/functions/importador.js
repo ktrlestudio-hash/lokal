@@ -243,26 +243,33 @@ async function accionAplicar({ event, env, body }) {
 
   await safeWrite(bucket, PRODUCTOS_KEY, productos, etag);
 
-  // Activar el módulo 'catalogo' si todavía no lo estaba — el propósito
-  // mismo de este importador es cargar un catálogo, así que exigirle al
-  // dueño ir a "Diseño de página" a prenderlo a mano antes de poder ver lo
-  // que acaba de importar es fricción innecesaria (y, sin esto, Catálogo/
-  // Ofertas se mostraban mezclados en el admin porque el filtro que las
-  // separa solo corre cuando AMBOS módulos están activos — ver
-  // ambosModulosActivos en StoreApp.jsx). Solo escribe si hace falta:
-  // no pisa ninguna otra configuración de la tienda en el camino común.
+  // Activar el módulo 'catalogo' (key real: secciones.productos, ver
+  // MODULE_KEY_ALIAS en _lib/modules.js) si todavía no lo estaba — el
+  // propósito mismo de este importador es cargar un catálogo, así que
+  // exigirle al dueño ir a "Diseño de página" a prenderlo a mano antes de
+  // poder ver lo que acaba de importar es fricción innecesaria. Solo
+  // escribe si hace falta: no pisa ninguna otra configuración de la tienda
+  // en el camino común.
+  //
+  // Bug real encontrado en producción (2026-08-24): este bloque escribía
+  // en secciones.CATALOGO (la key vieja, huérfana — nadie más la leía ni
+  // el editor visual la mostraba), no en secciones.PRODUCTOS (la real).
+  // El importador nunca terminaba de activar el módulo que el resto del
+  // sistema necesita — cada corrida disparaba este bloque de nuevo (la
+  // condición de arriba seguía dando false) sin que el catálogo importado
+  // llegara a mostrarse en el admin/vista pública/Home global.
   if (!isModuleActive(tienda, 'catalogo')) {
     const { data: tiendas, etag: etagTiendas } = await readTiendasWithEtag(bucket);
     const idx = tiendas.findIndex((t) => String(t.id) === String(tiendaId));
     if (idx !== -1) {
-      const seccionActual = tiendas[idx].pagina?.secciones?.catalogo;
+      const seccionActual = tiendas[idx].pagina?.secciones?.productos;
       tiendas[idx] = {
         ...tiendas[idx],
         pagina: {
           ...tiendas[idx].pagina,
           secciones: {
             ...tiendas[idx].pagina?.secciones,
-            catalogo: { ...seccionActual, activa: true, orden: seccionActual?.orden ?? 2, label: seccionActual?.label ?? 'Catálogo', desc: seccionActual?.desc ?? 'Productos con precio, stock y carrito de compra.' },
+            productos: { ...seccionActual, activa: true, orden: seccionActual?.orden ?? 2, label: seccionActual?.label ?? 'Catálogo', desc: seccionActual?.desc ?? 'Productos con precio, stock y carrito de compra.' },
           },
         },
       };

@@ -94,18 +94,14 @@ export function getSeccionesActivas(secciones) {
 // como tiendas existentes que lo tuvieran guardado activo de antes.
 const MODULOS_SIN_BACKEND = new Set(['mensajes']);
 
-// Bug real encontrado en producción (2026-08-24): SECCIONES_DEFAULT
-// (tokens.js) usa la key 'productos' para lo que la UI llama "Catálogo" —
-// el editor visual (toggleSeccion en StoreApp.jsx) y la vista pública
-// (getSeccionesActivas) siempre leyeron/escribieron esa key, consistentes
-// entre sí. Pero isModuleActive('catalogo') buscaba secciones.catalogo, una
-// key que el switch de "Diseño de página" NUNCA tocaba — activar/desactivar
-// Catálogo ahí no tenía ningún efecto en el admin (pantalla "Productos",
-// bottom-nav) ni en productos-globales.js (Destacados de la Home), que
-// seguían leyendo el valor por default (false) sin importar qué dijera el
-// switch. Se mapea acá 'catalogo' → 'productos' para que TODO el sistema
-// termine leyendo la misma key real, sin tocar el editor visual, la vista
-// pública, ni los datos ya guardados de ninguna tienda.
+// 'catalogo' sigue aceptándose como alias de 'productos' EN LA LLAMADA
+// (isModuleActive(tienda, 'catalogo')) por legibilidad — pero ambos leen
+// la MISMA key real ('productos') en tienda.pagina.secciones, la misma que
+// usan SECCIONES_DEFAULT (tokens.js), el editor visual (toggleSeccion en
+// StoreApp.jsx) y la vista pública (getSeccionesActivas). No hay dos keys
+// de datos distintas — antes SÍ las había ('productos' vs 'catalogo' sin
+// sincronizar, bug real de producción 2026-08-24), esto ya quedó unificado
+// también del lado de MODULES en _lib/modules.js.
 const MODULE_KEY_ALIAS = { catalogo: 'productos' };
 
 export function isModuleActive(tienda, moduleId) {
