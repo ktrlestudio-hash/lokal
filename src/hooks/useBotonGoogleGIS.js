@@ -34,10 +34,19 @@
 // intento se cerró sin completar: se remonta el iframe YA MISMO (misma key
 // que "Reintentar" usaría manualmente), sin esperar ningún tiempo fijo —
 // el próximo toque del usuario, sea inmediato o no, encuentra un iframe
-// fresco. TIMEOUT_INTENTO_MS queda como red de seguridad SOLO para el caso
-// en que el foco nunca vuelva a dispararse (poco común, pero posible según
-// el navegador) — mucho más largo porque ya no es el mecanismo principal.
-const TIMEOUT_INTENTO_MS = 8000;
+// fresco.
+//
+// Detector de "frustración" (red de seguridad, no el mecanismo principal):
+// si el sheet queda "en curso" sin resolver más de EN_CURSO_MAX_MS, o si ya
+// hubo varios toques reales sin ningún login/error de por medio, GIS/FedCM
+// está en un estado roto para esta sesión (bloqueado por el navegador, o el
+// sheet nativo no llega a mostrarse) — se apaga el iframe del todo
+// (gisActivo:false) y el botón de abajo (popup, 100% fiable) queda como
+// único camino, en vez de seguir insistiendo con un mecanismo que ya
+// demostró no responder.
+const EN_CURSO_MAX_MS = 10000; // 10s con el sheet "en curso" sin resolver → login de ventana fiable
+const TOQUES_SIN_RESULTADO_LIMITE = 3; // toques reales seguidos sin login/error
+const TOQUES_VENTANA_MS = 15000; // ventana de tiempo en la que esos toques cuentan como "seguidos"
 
 import { useEffect, useRef, useState } from 'react';
 import { renderBotonGoogle, gisDisponible } from '../firebase';
@@ -62,6 +71,9 @@ export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mount
   const [gisEnCurso, setGisEnCurso] = useState(false);
   const timeoutRef = useRef(null);
   const resolvioRef = useRef(false);
+  // Toques sin resultado dentro de TOQUES_VENTANA_MS — ver detector de
+  // frustración arriba.
+  const toquesRef = useRef([]);
 
   // Los callbacks viajan por ref, NO por dependencias: el caller los crea
   // inline en cada render, así que como dependencias reejecutarían este
@@ -96,7 +108,7 @@ export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mount
         theme: isDark ? 'outline' : 'outline_dark',
         colorScheme: isDark ? 'dark' : 'light',
         width,
-        onLogin: (u) => { resolvioRef.current = true; setGisEnCurso(false); limpiarTimeoutIntento(); cbRef.current.onLogin?.(u); },
+        onLogin: (u) => { resolvioRef.current = true; toquesRef.current = []; setGisEnCurso(false); limpiarTimeoutIntento(); cbRef.current.onLogin?.(u); },
         onError: (e) => { resolvioRef.current = true; setGisEnCurso(false); limpiarTimeoutIntento(); cbRef.current.onError?.(e); },
         // El dominio no está en "Authorized JavaScript origins": el botón de
         // Google fallaría con "Acceso bloqueado" al tocarlo, así que se
@@ -168,8 +180,32 @@ export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mount
       resolvioRef.current = false;
       setGisEnCurso(true);
       onIframeTouch?.();
+
+      // Detector de frustración, parte 1: registra este toque y descarta
+      // los que ya salieron de la ventana de TOQUES_VENTANA_MS. Si ya van
+      // TOQUES_SIN_RESULTADO_LIMITE toques reales (cada uno activó el
+      // iframe de verdad) sin ningún login/error de por medio, GIS no está
+      // respondiendo para este usuario — apagarlo del todo y dejar el
+      // botón de abajo (popup) como único camino, sin ni siquiera esperar
+      // los 10s de la parte 2.
+      const ahora = Date.now();
+      toquesRef.current = [...toquesRef.current.filter((t) => ahora - t < TOQUES_VENTANA_MS), ahora];
+      if (toquesRef.current.length >= TOQUES_SIN_RESULTADO_LIMITE) {
+        toquesRef.current = [];
+        limpiarTimeoutIntento();
+        setGisActivo(false);
+        return;
+      }
+
+      // Detector de frustración, parte 2: si este intento se queda "en
+      // curso" (sheet nativo abierto o foco atascado) más de EN_CURSO_MAX_MS
+      // sin resolver, también es momento de rendirse — cubre el caso de
+      // "paso mucho tiempo con el sheet abierto sin hacer nada", donde no
+      // hay un segundo toque que dispare el conteo de la parte 1.
       limpiarTimeoutIntento();
-      timeoutRef.current = setTimeout(() => setGisActivo(false), TIMEOUT_INTENTO_MS);
+      timeoutRef.current = setTimeout(() => {
+        if (!resolvioRef.current) setGisActivo(false);
+      }, EN_CURSO_MAX_MS);
     };
 
     const alSoltarPointer = () => {
@@ -196,7 +232,8 @@ export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mount
     // remonta el iframe incrementando su `key`), sin esperar el timeout de
     // seguridad — esto es lo que hace que "el sheet se cierra o falla" deje
     // el botón listo para el próximo toque al instante, en vez de recién a
-    // los 8s. El hook no posee `key` (es prop del caller), por eso delega.
+    // los EN_CURSO_MAX_MS. El hook no posee `key` (es prop del caller), por
+    // eso delega.
     const alRecuperarFoco = () => {
       if (tocado && !resolvioRef.current) {
         tocado = false;
