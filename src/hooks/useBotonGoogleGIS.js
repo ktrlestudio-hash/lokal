@@ -6,7 +6,7 @@
 // use el hook, ej. LoginCard.jsx, que ya tenía su botón pulido).
 //
 // Uso:
-//   const { slotRef, gisActivo } = useBotonGoogleGIS({ isDark, onLogin, onError });
+//   const { slotRef, gisActivo } = useBotonGoogleGIS({ isDark, onLogin, onError, mountDelayMs: 260 });
 //   <button onClick={fallbackPopup}>...tu botón visual normal...</button>
 //   <div style={{ position: 'absolute', inset: 0, opacity: 0, pointerEvents: gisActivo ? 'auto' : 'none' }}>
 //     <div ref={slotRef} style={{ width: BTN_W + 20, height: 44 }} />
@@ -37,7 +37,7 @@ const TIMEOUT_INTENTO_MS = 4000;
 import { useEffect, useRef, useState } from 'react';
 import { renderBotonGoogle, gisDisponible } from '../firebase';
 
-export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError }) {
+export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mountDelayMs = 0 }) {
   const slotRef = useRef(null);
   const [gisListo, setGisListo] = useState(false);
   const [gisActivo, setGisActivo] = useState(true);
@@ -59,29 +59,45 @@ export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError }) {
     if (!gisDisponible() || !slotRef.current) return;
     let limpiar;
     let vivo = true;
-    renderBotonGoogle(slotRef.current, {
-      theme: isDark ? 'outline' : 'outline_dark',
-      colorScheme: isDark ? 'dark' : 'light',
-      width,
-      onLogin: (u) => { limpiarTimeoutIntento(); cbRef.current.onLogin?.(u); },
-      onError: (e) => { limpiarTimeoutIntento(); cbRef.current.onError?.(e); },
-      // El dominio no está en "Authorized JavaScript origins": el botón de
-      // Google fallaría con "Acceso bloqueado" al tocarlo, así que se
-      // esconde y el caller usa su fallback de popup.
-      onOrigenRechazado: () => { if (vivo) setGisListo(false); },
-    })
-      .then((fn) => {
-        if (!vivo) { fn?.(); return; }
-        limpiar = fn;
-        setGisListo(true);
+
+    // mountDelayMs: si este botón vive dentro de un sheet/modal que TODAVÍA
+    // se está animando al montar (ej. LoginSheet.jsx: translateY entrando,
+    // 240ms), Google calcula la posición/hit-area del iframe con el layout
+    // del momento del montaje — si el contenedor sigue moviéndose, el
+    // iframe puede terminar con su área de toque desalineada del botón
+    // señuelo visible, o el usuario tocar antes de que Google termine de
+    // instalar sus listeners internos. Esperar a que la animación de
+    // entrada del contenedor termine antes de pedirle el botón a Google
+    // evita ese desalineo — reportado en producción como "el sheet nativo
+    // a veces no detecta el toque".
+    const montar = () => {
+      if (!vivo || !slotRef.current) return;
+      renderBotonGoogle(slotRef.current, {
+        theme: isDark ? 'outline' : 'outline_dark',
+        colorScheme: isDark ? 'dark' : 'light',
+        width,
+        onLogin: (u) => { limpiarTimeoutIntento(); cbRef.current.onLogin?.(u); },
+        onError: (e) => { limpiarTimeoutIntento(); cbRef.current.onError?.(e); },
+        // El dominio no está en "Authorized JavaScript origins": el botón de
+        // Google fallaría con "Acceso bloqueado" al tocarlo, así que se
+        // esconde y el caller usa su fallback de popup.
+        onOrigenRechazado: () => { if (vivo) setGisListo(false); },
       })
-      .catch((err) => {
-        console.warn('[LOKAL] Google Identity Services no cargó:', err?.message || err);
-      });
-    return () => { vivo = false; limpiar?.(); limpiarTimeoutIntento(); };
+        .then((fn) => {
+          if (!vivo) { fn?.(); return; }
+          limpiar = fn;
+          setGisListo(true);
+        })
+        .catch((err) => {
+          console.warn('[LOKAL] Google Identity Services no cargó:', err?.message || err);
+        });
+    };
+
+    const t = mountDelayMs > 0 ? setTimeout(montar, mountDelayMs) : (montar(), null);
+    return () => { vivo = false; if (t) clearTimeout(t); limpiar?.(); limpiarTimeoutIntento(); };
     // isDark: Google no reestila un botón ya montado, hay que volver a
     // pedirlo para que acompañe el cambio de tema.
-  }, [isDark, width]);
+  }, [isDark, width, mountDelayMs]);
 
   // Detecta que el iframe recibió el click (mismo mecanismo que la técnica
   // original: al tocarlo, el iframe toma el foco y window dispara 'blur').

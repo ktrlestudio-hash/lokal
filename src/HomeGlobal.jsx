@@ -467,9 +467,18 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
               compartía composición con el banner. */}
           <div className="px-4 lg:px-6 pt-3">
             <div className="relative group">
+              {/* height FIJO (no minHeight): con solo un mínimo, el slide
+                  con el texto más largo ("Creá tu propia tienda gratis" /
+                  "Lo más nuevo de todas las tiendas...") seguía pudiendo
+                  crecer más que el resto si se envolvía a una línea de más
+                  — el line-clamp de abajo evita el envolvido visual, pero
+                  sin una altura fija real el contenedor podía igual
+                  "respirar" distinto entre slides según el navegador.
+                  Fijar el número es lo único que garantiza CERO salto al
+                  rotar, sin importar el texto de cada slide. */}
               <div onClick={banners[bannerIdx].action}
                 className={`hg-banner bg-gradient-to-br ${banners[bannerIdx].className} rounded-3xl p-6 cursor-pointer select-none shadow-lg relative overflow-hidden`}
-                style={{ minHeight: 150 }}>
+                style={{ height: 150 }}>
                 {banners[bannerIdx].dots && (
                   <svg className="absolute inset-0 w-full h-full opacity-20" xmlns="http://www.w3.org/2000/svg">
                     <defs>
@@ -482,7 +491,12 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
                 )}
                 {(() => { const BIcon = banners[bannerIdx].Icon; return <BIcon className="absolute right-6 top-1/2 -translate-y-1/2 w-20 h-20 text-white opacity-15 pointer-events-none" />; })()}
                 <div className="relative">
-                  <p className="text-white font-black text-xl leading-tight mb-1">{banners[bannerIdx].title}</p>
+                  {/* line-clamp-2 también en el título — "Creá tu propia
+                      tienda gratis" es más largo que el resto y podía
+                      envolverse a 2 líneas en pantallas angostas mientras
+                      los demás usaban 1, el mismo salto que tenía el
+                      subtítulo. */}
+                  <p className="text-white font-black text-xl leading-tight mb-1 line-clamp-2">{banners[bannerIdx].title}</p>
                   {/* line-clamp-2 + minHeight de 2 líneas SIEMPRE reservado
                       (no solo cuando el texto lo necesita): el subtítulo
                       del slide de "Productos destacados" es el más largo de

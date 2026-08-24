@@ -64,6 +64,10 @@ export default function LoginCard({
   ilustracionAltura = 200,
   mostrarQueEsLokal = false,
   mostrarIlustracion = true,
+  // mountDelayMs: retraso antes de pedirle el botón real a Google — 0 en
+  // AdminLogin (pantalla completa, sin animación de entrada), > 0 en
+  // LoginSheet (sheet con transform entrando, ver ese componente).
+  mountDelayMs = 0,
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -143,6 +147,7 @@ export default function LoginCard({
   const { slotRef, gisActivo } = useBotonGoogleGIS({
     isDark,
     width: GOOGLE_BTN_W,
+    mountDelayMs,
     onLogin: async () => {
       setLoading(true);
       setError(null);

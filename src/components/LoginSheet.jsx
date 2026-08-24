@@ -115,6 +115,12 @@ export default function LoginSheet({ abierto, isDark, onCerrar, onEsTienda, onEs
                   "continuar" tres veces seguidas (botón de Google → este
                   subtítulo → el texto legal de abajo, que también dice
                   "Al continuar..."). */}
+              {/* mountDelayMs=260: el panel de este sheet anima su entrada
+                  con translateY (lk-login-sheet-up, 240ms) — sin esperar a
+                  que termine, Google calculaba la posición/hit-area de su
+                  iframe con el layout todavía en movimiento, y el sheet
+                  nativo podía no detectar el toque (reportado en
+                  producción). 260ms = 240ms de animación + margen. */}
               <LoginCard
                 isDark={isDark}
                 whoami
@@ -124,6 +130,7 @@ export default function LoginSheet({ abierto, isDark, onCerrar, onEsTienda, onEs
                 subtitulo="Tu ciudad, a un link de distancia."
                 mostrarQueEsLokal
                 mostrarIlustracion={false}
+                mountDelayMs={260}
               />
             </div>
           </div>
