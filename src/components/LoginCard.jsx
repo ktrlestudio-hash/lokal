@@ -220,8 +220,19 @@ export default function LoginCard({
   // MISMO del botón señuelo: si a los ~900ms no hubo blur (el iframe ni
   // reaccionó) ni loading, se asume que ese toque se perdió y se remonta
   // el iframe, listo para el PRÓXIMO toque del mismo usuario.
+  //
+  // BUG real encontrado: cuando useBotonGoogleGIS ya se rindió (detector de
+  // frustración: gisActivo pasó a false tras varios toques/mucho tiempo sin
+  // resultado) el iframe queda apagado a propósito — el click del usuario
+  // debe caer al <button onClick={handleGoogle}> de abajo (popup, fiable).
+  // Sin este guard, este mismo timeout veía "no hubo blur" (obvio, el
+  // iframe está apagado) y remontaba igual con setResetGisKey, lo que
+  // reactivaba gisActivo de nuevo a los 900ms — revirtiendo la decisión de
+  // rendirse ANTES de que el usuario llegara a ver el popup, dejando la
+  // sensación de "el botón cambia mas nunca abre la ventana".
   const tocoTimeoutRef = React.useRef(null);
   const antesDeTocar = () => {
+    if (!gisActivo) return; // ya nos rendimos al popup fiable, no reactivar GIS
     if (tocoTimeoutRef.current) clearTimeout(tocoTimeoutRef.current);
     tocoTimeoutRef.current = setTimeout(() => {
       if (!tocoIframeRef.current && !loading) {

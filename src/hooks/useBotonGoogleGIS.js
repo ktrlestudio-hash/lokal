@@ -192,7 +192,15 @@ export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mount
       toquesRef.current = [...toquesRef.current.filter((t) => ahora - t < TOQUES_VENTANA_MS), ahora];
       if (toquesRef.current.length >= TOQUES_SIN_RESULTADO_LIMITE) {
         toquesRef.current = [];
+        tocado = false;
         limpiarTimeoutIntento();
+        // BUG real encontrado: acá se apagaba gisActivo (el iframe) pero
+        // NO gisEnCurso — el botón visible usa
+        // disabled={loading || gisEnCurso} para mostrar "Entrando...", así
+        // que quedaba deshabilitado para siempre aunque el iframe ya
+        // estuviera apagado y el click debiera caer al popup fiable. El
+        // usuario tocaba de nuevo y el botón ni reaccionaba.
+        setGisEnCurso(false);
         setGisActivo(false);
         return;
       }
@@ -201,10 +209,16 @@ export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mount
       // curso" (sheet nativo abierto o foco atascado) más de EN_CURSO_MAX_MS
       // sin resolver, también es momento de rendirse — cubre el caso de
       // "paso mucho tiempo con el sheet abierto sin hacer nada", donde no
-      // hay un segundo toque que dispare el conteo de la parte 1.
+      // hay un segundo toque que dispare el conteo de la parte 1. Mismo fix:
+      // apagar gisEnCurso además de gisActivo, para que el botón quede
+      // habilitado y el próximo toque caiga directo al popup.
       limpiarTimeoutIntento();
       timeoutRef.current = setTimeout(() => {
-        if (!resolvioRef.current) setGisActivo(false);
+        if (!resolvioRef.current) {
+          tocado = false;
+          setGisEnCurso(false);
+          setGisActivo(false);
+        }
       }, EN_CURSO_MAX_MS);
     };
 
