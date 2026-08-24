@@ -140,30 +140,55 @@ export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mount
   useEffect(() => {
     let tocado = false;
 
-    // Mantener el dedo apretado sobre el iframe (sin soltar) ya le roba el
-    // foco del documento al iframe y dispara 'blur' de window, AUNQUE
-    // Google todavía no haya abierto ningún sheet real — antes esto se
-    // tomaba como "se abrió la ventana" y gisEnCurso quedaba en true para
-    // siempre (nunca llega un 'focus' de vuelta porque el foco nunca salió
-    // de verdad del documento). document.hasFocus() sí distingue los dos
-    // casos: al abrirse un sheet/ventana externa REAL, el documento entero
-    // pierde el foco (hasFocus() → false); un focus interno del iframe
-    // (dedo sostenido) deja hasFocus() en true. Se confirma con un margen
-    // corto porque hasFocus() puede tardar un instante en reflejar el
-    // cambio real del sistema operativo.
+    // document.hasFocus() NO sirve para distinguir "sheet real abierto" de
+    // "foco interno del iframe" (se probó y se revirtió): el iframe vive
+    // DENTRO del mismo documento, así que hasFocus() seguía devolviendo
+    // true incluso con el sheet nativo YA abierto en la práctica — el
+    // chequeo terminaba descartando toques reales y el sheet dejaba de
+    // lanzarse (regresión reportada). Vuelve a marcarse gisEnCurso en el
+    // blur mismo, sin esperar nada — es el comportamiento que sí lanzaba
+    // el sheet siempre.
+    //
+    // El caso real que había que resolver (dedo sostenido sin soltar deja
+    // "Entrando..." colgado para siempre) se resuelve distinto: como
+    // salvavidas, se escucha 'pointerup'/'pointercancel' GLOBAL — mientras
+    // el usuario no suelta el dedo el sheet nativo no puede haber
+    // terminado de verdad (no hay forma de interactuar con un sheet del
+    // sistema sin soltar primero el punto de contacto anterior), así que
+    // si sigue tocado (gisEnCurso true, sin resolver) y el puntero se
+    // suelta CERCA del slot (no se movió a otra parte de la pantalla,
+    // señal de que fue el mismo gesto sostenido, no un segundo toque
+    // distinto), se limpia gisEnCurso ahí. Si el toque real de verdad abrió
+    // el sheet, blur/focus siguen siendo la señal principal — este listener
+    // solo actúa si NO hay 'focus' porque el foco nunca salió del iframe.
     const alPerderFoco = () => {
       const dentro = slotRef.current?.contains(document.activeElement);
       if (document.activeElement?.tagName !== 'IFRAME' || !dentro || !gisActivo) return;
-      setTimeout(() => {
-        if (document.hasFocus()) return; // foco interno nomás, no se abrió nada
-        tocado = true;
-        resolvioRef.current = false;
-        setGisEnCurso(true);
-        onIframeTouch?.();
-        limpiarTimeoutIntento();
-        timeoutRef.current = setTimeout(() => setGisActivo(false), TIMEOUT_INTENTO_MS);
-      }, 120);
+      tocado = true;
+      resolvioRef.current = false;
+      setGisEnCurso(true);
+      onIframeTouch?.();
+      limpiarTimeoutIntento();
+      timeoutRef.current = setTimeout(() => setGisActivo(false), TIMEOUT_INTENTO_MS);
     };
+
+    const alSoltarPointer = () => {
+      if (!tocado || resolvioRef.current) return;
+      // Margen corto tras soltar: si el sheet nativo se abrió de verdad
+      // justo al soltar, document.hasFocus() puede tardar un instante en
+      // reflejarlo — sin este margen se podía leer "true" (foco adentro
+      // todavía) por una carrera de timing y cerrar el loading de un sheet
+      // que sí estaba abierto.
+      setTimeout(() => {
+        if (tocado && !resolvioRef.current && document.hasFocus()) {
+          tocado = false;
+          setGisEnCurso(false);
+          limpiarTimeoutIntento();
+        }
+      }, 300);
+    };
+    window.addEventListener('pointerup', alSoltarPointer, true);
+    window.addEventListener('pointercancel', alSoltarPointer, true);
 
     // window recupera el foco cuando el sheet nativo se cierra, con o sin
     // login. Si no llegó onLogin/onError (resolvioRef sigue false), el
@@ -196,6 +221,8 @@ export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mount
     return () => {
       window.removeEventListener('blur', alPerderFoco);
       window.removeEventListener('focus', alRecuperarFoco);
+      window.removeEventListener('pointerup', alSoltarPointer, true);
+      window.removeEventListener('pointercancel', alSoltarPointer, true);
       document.removeEventListener('visibilitychange', alVolverVisible);
     };
   }, [gisActivo]);
