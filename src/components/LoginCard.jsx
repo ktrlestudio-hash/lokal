@@ -140,7 +140,7 @@ export default function LoginCard({
   // LandingScreen.jsx. onLogin llega con la sesión de Firebase ya resuelta
   // (loginConIdToken corrió adentro de firebase.js), así que acá solo hace
   // falta continuar con resolverWhoami, igual que el camino de popup.
-  const { slotRef } = useBotonGoogleGIS({
+  const { slotRef, gisActivo } = useBotonGoogleGIS({
     isDark,
     width: GOOGLE_BTN_W,
     onLogin: async () => {
@@ -240,7 +240,14 @@ export default function LoginCard({
           {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <GoogleIcon size={20} />}
           {loading ? 'Entrando...' : 'Continuar con Google'}
         </button>
-        <div className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-2xl" style={{ opacity: 0 }}>
+        {/* pointerEvents:none cuando gisActivo pasa a false (timeout de
+            seguridad en useBotonGoogleGIS): si FedCM quedó bloqueado por
+            el navegador ("FedCM was disabled... based on previous user
+            action"), el iframe de Google sigue montado pero no completa el
+            flujo — sin esto seguiría capturando el click para siempre y el
+            botón se sentiría "muerto". Con pointerEvents:none el click cae
+            al <button> de abajo (popup real, funciona siempre). */}
+        <div className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-2xl" style={{ opacity: 0, pointerEvents: gisActivo ? 'auto' : 'none' }}>
           {/* +20 = el margen invisible que Google agrega al iframe (~10px
               por lado, constante sin importar el width pedido). */}
           <div ref={slotRef} className="flex items-center justify-center shrink-0"
