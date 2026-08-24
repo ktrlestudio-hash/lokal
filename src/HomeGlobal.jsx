@@ -431,16 +431,9 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
             )}
           </div>
 
-          {/* Fondo bg-brand/[0.08] SIEMPRE presente (mismo patrón que el
-              toggle del footer y AdminLogin.jsx) — pero el ÍCONO en gris
-              (text-ink-dim) en reposo, celeste solo en hover: antes era
-              text-brand fijo acá, inconsistente con el footer (que SÍ usa
-              gris base). --brand como color base en TODO ícono de UI (no
-              solo hover/focus) es demasiado invasivo — el footer ya tenía
-              el criterio correcto, esto lo replica. */}
-          <button onClick={toggleTheme} aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'} className="ui-icon-btn bg-brand/[0.08] hover:bg-brand/[0.16] text-ink-dim hover:text-brand transition-colors shrink-0 hidden sm:inline-flex border border-transparent dark:border-brand/[0.18]">
-            {isDark ? <Sun className="w-[18px] h-[18px]" /> : <Moon className="w-[18px] h-[18px]" />}
-          </button>
+          {/* Toggle de tema sacado del header a pedido explícito — sigue
+              disponible en el footer de esta misma pantalla, no hace falta
+              repetirlo arriba también. */}
           {/* Blanco sólido en light (ya estaba bien) — solo en DARK pasa a
               CARD_TINTED (mismo look de la barra de búsqueda y las empty
               cards): bg-surface-card sólido (#1f1f1f gris carbón puro) ahí

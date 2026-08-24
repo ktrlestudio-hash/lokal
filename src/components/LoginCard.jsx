@@ -20,6 +20,9 @@ import { signInWithGoogle, auth } from '../firebase';
 import { apiFetch } from '../api';
 import { API_BASE } from '../config/flags';
 import { KtrlMark } from '../Brand';
+import { useBotonGoogleGIS } from '../hooks/useBotonGoogleGIS.js';
+
+const GOOGLE_BTN_W = 320;
 
 const GoogleIcon = ({ size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24">
@@ -87,35 +90,72 @@ export default function LoginCard({
     }).catch(() => { /* el perfil optimista ya se está usando; un fallo acá es un caso raro que no bloquea la navegación */ });
   };
 
+  // Lógica compartida por los DOS caminos de login: el fallback de popup
+  // (handleGoogle) y el sheet nativo de GIS (onLogin del hook, más abajo).
+  // Ambos terminan con un usuario real de Firebase ya autenticado — desde
+  // ahí en más el flujo es idéntico sin importar cómo se logueó.
+  const resolverWhoami = async () => {
+    if (!whoami) return; // AdminLogin: Root.jsx toma el control con onAuthStateChanged
+
+    const res = await apiFetch(`${API_BASE}/usuarios?whoami=1`, { authRequired: true });
+    if (!res.ok) throw new Error('No se pudo verificar tu cuenta');
+    const data = await res.json();
+
+    if (data.rol === 'tienda') { onEsTienda(); return; }
+    if (data.rol === 'usuario') { onEsUsuario(data.usuario); return; }
+    setPaso('elegir-rol');
+  };
+
+  const handleErrorLogin = (err) => {
+    const ignored = ['auth/popup-closed-by-user', 'auth/cancelled-popup-request', 'popup-closed'];
+    if (!ignored.includes(err.code)) {
+      setError(
+        err.code === 'auth/unauthorized-domain'
+          ? 'Dominio no autorizado. Agregá este dominio en Firebase Console.'
+          : (err.message || 'No se pudo iniciar sesión')
+      );
+    }
+  };
+
+  // Fallback: signInWithPopup clásico (ventana emergente) — solo se
+  // dispara si GIS no cargó, o el dominio no está en "Authorized
+  // JavaScript origins" (ver useBotonGoogleGIS). El click real, cuando GIS
+  // SÍ está disponible, lo recibe el iframe invisible superpuesto (abajo).
   const handleGoogle = async () => {
     setLoading(true);
     setError(null);
     try {
       const user = await signInWithGoogle();
       if (!user) return; // fallback a redirect (mobile sin popup) — este componente se desmonta
-
-      if (!whoami) return; // AdminLogin: Root.jsx toma el control con onAuthStateChanged
-
-      const res = await apiFetch(`${API_BASE}/usuarios?whoami=1`, { authRequired: true });
-      if (!res.ok) throw new Error('No se pudo verificar tu cuenta');
-      const data = await res.json();
-
-      if (data.rol === 'tienda') { onEsTienda(); return; }
-      if (data.rol === 'usuario') { onEsUsuario(data.usuario); return; }
-      setPaso('elegir-rol');
-      setLoading(false);
+      await resolverWhoami();
     } catch (err) {
-      const ignored = ['auth/popup-closed-by-user', 'auth/cancelled-popup-request', 'popup-closed'];
-      if (!ignored.includes(err.code)) {
-        setError(
-          err.code === 'auth/unauthorized-domain'
-            ? 'Dominio no autorizado. Agregá este dominio en Firebase Console.'
-            : (err.message || 'No se pudo iniciar sesión')
-        );
-      }
+      handleErrorLogin(err);
+    } finally {
       setLoading(false);
     }
   };
+
+  // GIS/FedCM: abre el selector de cuenta como sheet NATIVO del sistema en
+  // vez de una ventana emergente aparte — mismo patrón que ya resolvió
+  // LandingScreen.jsx. onLogin llega con la sesión de Firebase ya resuelta
+  // (loginConIdToken corrió adentro de firebase.js), así que acá solo hace
+  // falta continuar con resolverWhoami, igual que el camino de popup.
+  const { slotRef } = useBotonGoogleGIS({
+    isDark,
+    width: GOOGLE_BTN_W,
+    onLogin: async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        await resolverWhoami();
+      } catch (err) {
+        handleErrorLogin(err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    onError: (err) => handleErrorLogin(err),
+  });
 
   if (paso === 'elegir-rol') {
     return (
@@ -182,15 +222,31 @@ export default function LoginCard({
         </div>
       )}
 
-      <button
-        onClick={handleGoogle}
-        disabled={loading}
-        className="w-full flex items-center justify-center gap-3 bg-ink dark:bg-white hover:bg-ink/90 dark:hover:bg-white/90 text-white dark:text-[#18181b] font-bold rounded-2xl transition-all shadow-lg hover:shadow-xl disabled:opacity-60 active:scale-[0.98]"
-        style={{ padding: 'clamp(14px, 1.4vw, 17px) clamp(24px, 2vw, 28px)', fontSize: 'clamp(.9375rem, 1vw, 1.0625rem)' }}
-      >
-        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <GoogleIcon size={20} />}
-        {loading ? 'Entrando...' : 'Continuar con Google'}
-      </button>
+      {/* La cara visual es SIEMPRE este botón (nunca el pill nativo que
+          Google dibuja) — abajo, superpuesto e invisible, va el iframe
+          real de Google Identity Services: es lo que recibe el click y
+          dispara el sheet nativo del sistema en vez de una ventana
+          emergente. handleGoogle (el <button> visible) queda como
+          fallback si GIS no cargó o el dominio no está autorizado — mismo
+          técnica que ya usa LandingScreen.jsx, portada acá vía
+          useBotonGoogleGIS sin cambiar el look de este botón. */}
+      <div className="relative">
+        <button
+          onClick={handleGoogle}
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-3 bg-ink dark:bg-white hover:bg-ink/90 dark:hover:bg-white/90 text-white dark:text-[#18181b] font-bold rounded-2xl transition-all shadow-lg hover:shadow-xl disabled:opacity-60 active:scale-[0.98]"
+          style={{ padding: 'clamp(14px, 1.4vw, 17px) clamp(24px, 2vw, 28px)', fontSize: 'clamp(.9375rem, 1vw, 1.0625rem)' }}
+        >
+          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <GoogleIcon size={20} />}
+          {loading ? 'Entrando...' : 'Continuar con Google'}
+        </button>
+        <div className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-2xl" style={{ opacity: 0 }}>
+          {/* +20 = el margen invisible que Google agrega al iframe (~10px
+              por lado, constante sin importar el width pedido). */}
+          <div ref={slotRef} className="flex items-center justify-center shrink-0"
+            style={{ colorScheme: isDark ? 'dark' : 'light', width: GOOGLE_BTN_W + 20, height: 44 }} />
+        </div>
+      </div>
 
       <p className="text-[11px] mt-4" style={{ color: 'var(--text-secondary, #999)' }}>
         Al continuar, aceptás los <a href="/terminos-y-condiciones" target="_blank" rel="noopener noreferrer" className="underline hover:text-brand transition-colors">términos y condiciones</a> de LOKAL.
