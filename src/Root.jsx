@@ -90,17 +90,28 @@ function pathToTiendaSlug(pathname) {
 // Decidido UNA vez al cargar el módulo (no durante el render) — mismo
 // criterio que LOKAL global: el splash completo con logo+wordmark solo debe
 // verse en una carga real de página (F5 / primera visita), no en cada
-// resolución de auth durante una sesión SPA ya abierta. IS_FIRST_LOAD es
-// true si no hubo un splash registrado en los últimos 20 minutos.
+// resolución de auth durante una sesión SPA ya abierta.
+//
+// sessionStorage, no localStorage: antes usaba localStorage con una
+// ventana de "20 minutos desde el último splash" — pero eso significa que
+// reabrir la PWA/pestaña desde cero DESPUÉS de haberla usado hace menos de
+// 20 min (algo que un usuario real percibe como "primera vez", no como
+// continuación de la misma sesión) no mostraba el splash completo. Con
+// sessionStorage el criterio es el correcto: se resetea solo cuando la
+// pestaña/proceso de la PWA arranca de cero, y sobrevive intacto a F5
+// dentro de la misma sesión (no repite el splash grande en cada recarga
+// mientras seguís usando la app). Se mantiene igual la ventana de 20 min
+// como red de seguridad extra, por si algún navegador/PWA preserva
+// sessionStorage entre reaperturas rápidas de forma inesperada.
 // Key separada por sección (admin vs. resto/tienda pública): antes era una
 // sola key global — entrar a /admin "gastaba" el flag y la próxima visita
 // al Home (u otra tienda) dentro de esos 20 min ya no veía el splash
 // completo, aunque fuera su primera vez ahí.
 const SPLASH_SECTION = window.location.pathname.startsWith('/admin') ? 'admin' : 'tienda';
 const SPLASH_TS_KEY = `lokal-links-splash-ts-${SPLASH_SECTION}`;
-const _lastSplash = Number(localStorage.getItem(SPLASH_TS_KEY) || 0);
+const _lastSplash = Number(sessionStorage.getItem(SPLASH_TS_KEY) || 0);
 const IS_FIRST_LOAD = Date.now() - _lastSplash > 20 * 60 * 1000;
-if (IS_FIRST_LOAD) localStorage.setItem(SPLASH_TS_KEY, String(Date.now()));
+if (IS_FIRST_LOAD) sessionStorage.setItem(SPLASH_TS_KEY, String(Date.now()));
 
 // AppLoader: elige entre el splash completo (primera carga) y el liviano
 // (navegación dentro de la misma sesión) — ambos importados de LokalLoader.jsx
