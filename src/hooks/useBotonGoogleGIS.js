@@ -140,16 +140,29 @@ export function useBotonGoogleGIS({ isDark, width = 260, onLogin, onError, mount
   useEffect(() => {
     let tocado = false;
 
+    // Mantener el dedo apretado sobre el iframe (sin soltar) ya le roba el
+    // foco del documento al iframe y dispara 'blur' de window, AUNQUE
+    // Google todavía no haya abierto ningún sheet real — antes esto se
+    // tomaba como "se abrió la ventana" y gisEnCurso quedaba en true para
+    // siempre (nunca llega un 'focus' de vuelta porque el foco nunca salió
+    // de verdad del documento). document.hasFocus() sí distingue los dos
+    // casos: al abrirse un sheet/ventana externa REAL, el documento entero
+    // pierde el foco (hasFocus() → false); un focus interno del iframe
+    // (dedo sostenido) deja hasFocus() en true. Se confirma con un margen
+    // corto porque hasFocus() puede tardar un instante en reflejar el
+    // cambio real del sistema operativo.
     const alPerderFoco = () => {
       const dentro = slotRef.current?.contains(document.activeElement);
-      if (document.activeElement?.tagName === 'IFRAME' && dentro && gisActivo) {
+      if (document.activeElement?.tagName !== 'IFRAME' || !dentro || !gisActivo) return;
+      setTimeout(() => {
+        if (document.hasFocus()) return; // foco interno nomás, no se abrió nada
         tocado = true;
         resolvioRef.current = false;
         setGisEnCurso(true);
         onIframeTouch?.();
         limpiarTimeoutIntento();
         timeoutRef.current = setTimeout(() => setGisActivo(false), TIMEOUT_INTENTO_MS);
-      }
+      }, 120);
     };
 
     // window recupera el foco cuando el sheet nativo se cierra, con o sin
