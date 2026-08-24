@@ -12,13 +12,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Loader2, AlertCircle, Sun, Moon, Check, ChevronDown, Store, Tag,
   MessageSquare, Share2, Instagram, BarChart3, Sparkles, ArrowUp,
-  ChevronLeft, ChevronRight, ArrowUpRight, MapPin, Clock, X, Scale,
+  ChevronLeft, ChevronRight, ArrowUpRight, MapPin, Clock, ArrowLeft,
 } from 'lucide-react';
 import { signInWithGoogle, renderBotonGoogle, gisDisponible } from './firebase';
 import { LogoFull, KtrlMark } from './Brand';
 import { TIENDA_SLUG_FIJA } from './config/constants';
 import { API_BASE } from './config/flags';
-import { useSheetOpen } from './tienda-publica/hooks/useSheetOpen.js';
+import { SheetLegal, CARD_TINTED } from './components/LegalSheet.jsx';
 
 const GoogleIcon = ({ size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24">
@@ -28,74 +28,6 @@ const GoogleIcon = ({ size = 20 }) => (
     <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
   </svg>
 );
-
-// Superficie de card enriquecida con el azul de marca. Los tokens globales
-// (--surface-solid/#f5f5f5) son gris neutro a propósito ("cero azul", ver
-// index.css §4) — correcto para el panel, pero en la landing dejaban las
-// cards planas y pálidas. Acá se les mezcla una pizca de marca, el mismo
-// recurso que hace que la card de "Empezá sin pagar" se lea viva.
-const CARD_TINTED = {
-  background: 'linear-gradient(160deg, rgb(var(--brand, 0 184 217) / 0.055), rgb(var(--brand, 0 184 217) / 0.015))',
-  borderColor: 'rgb(var(--brand, 0 184 217) / 0.14)',
-};
-
-// Sheet con los 3 documentos legales — mismo componente que usa el footer
-// compartido de LegalPages.jsx (MarcoFooter), copiado acá en vez de
-// importado para no acoplar la landing a ese archivo por un componente
-// chico. Agrupa Términos/Privacidad/Comercios detrás de un solo link
-// "Legal": con "Quiénes somos" sumado eran 4 links sueltos, y en mobile el
-// último quedaba solo en su fila, descentrado.
-function SheetLegal({ open, onClose }) {
-  const { mounted, visible } = useSheetOpen(open, 220, onClose);
-  useEffect(() => {
-    if (!open) return undefined;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [open]);
-  if (!mounted) return null;
-
-  const DOCS = [
-    { href: '/terminos-y-condiciones', label: 'Términos y Condiciones' },
-    { href: '/politica-de-privacidad', label: 'Política de Privacidad' },
-    { href: '/condiciones-para-comercios', label: 'Condiciones para Comercios' },
-  ];
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 4700, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-      <style>{`
-        .lok-sheet-ov { opacity: 0; transition: opacity 220ms ease; }
-        .lok-sheet-ov.in { opacity: 1; }
-        .lok-sheet-panel { transform: translateY(100%); transition: transform 220ms cubic-bezier(.22,1,.36,1); }
-        .lok-sheet-panel.in { transform: translateY(0); }
-      `}</style>
-      <div onClick={onClose} className={`lok-sheet-ov ${visible ? 'in' : ''}`} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.45)' }} />
-      <div className={`lok-sheet-panel ${visible ? 'in' : ''}`} style={{
-        position: 'relative', background: 'var(--surface-solid, #fff)', borderRadius: '20px 20px 0 0',
-        maxWidth: 480, margin: '0 auto', width: '100%', boxShadow: '0 -8px 30px rgba(0,0,0,.15)',
-      }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgb(var(--brand, 0 184 217) / 0.2)', margin: '10px auto 4px' }} />
-        <div className="flex items-center gap-2.5 px-5 pt-2 pb-3" style={{ borderBottom: '1px solid rgb(var(--brand, 0 184 217) / 0.1)' }}>
-          <Scale className="w-[18px] h-[18px]" style={{ color: 'var(--brand-hex, #00B8D9)' }} />
-          <h3 className="flex-1 font-black text-[15px] m-0">Documentos legales</h3>
-          <button onClick={onClose} aria-label="Cerrar" className="lok-tap w-8 h-8 rounded-lg grid place-items-center shrink-0"
-            style={{ background: 'rgb(var(--brand, 0 184 217) / 0.08)', color: 'var(--text-secondary, #999)' }}>
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="p-2.5 pb-5">
-          {DOCS.map((d) => (
-            <a key={d.href} href={d.href}
-              className="lok-tap block w-full text-left px-3.5 py-3 rounded-xl font-semibold text-sm no-underline hover:text-brand"
-              style={{ color: 'var(--text-primary)' }}>
-              {d.label}
-            </a>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // Palabra que rota en el título del hero — mismo recurso que usa Shopify en
 // su home ("Estrella de la IA" / "Marca reconocida" / "Imperio global"): da
@@ -1196,7 +1128,7 @@ function PasosCarrusel() {
   );
 }
 
-export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerEjemplo }) {
+export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerEjemplo, onVolver }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [faqOpen, setFaqOpen] = useState(null);
@@ -1370,7 +1302,24 @@ export default function LandingScreen({ isDark, toggleTheme, onIrAlPanel, onVerE
           style={{ background: 'var(--brand-hex, #00B8D9)' }} />
 
         <div className="max-w-5xl mx-auto px-5 lg:px-8 h-16 flex items-center justify-between">
-          <LogoFull size={26} animado />
+          {/* Botón de volver — antes esta pantalla no tenía ninguna forma
+              real de salir salvo el "atrás" del navegador (el botón de
+              "Entrar" solo AVANZA a /admin). Mismo lenguaje que el de
+              AdminLogin.jsx (bg-brand/[0.08] siempre presente, no solo en
+              hover). onVolver es opcional: si no viene (nadie la pasó
+              todavía), no se muestra nada — no un botón roto. */}
+          <div className="flex items-center gap-2">
+            {onVolver && (
+              <button
+                onClick={onVolver}
+                aria-label="Volver"
+                className="w-9 h-9 rounded-xl flex items-center justify-center bg-brand/[0.08] hover:bg-brand/[0.16] text-ink-dim hover:text-brand transition-colors active:scale-90 border border-transparent dark:border-brand/[0.18] shrink-0"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            )}
+            <LogoFull size={26} animado />
+          </div>
           <div className="flex items-center gap-2">
             {/* El toggle de tema NO va acá: ya vive en el footer, y en el
                 header competía con "Entrar", que es la única acción que

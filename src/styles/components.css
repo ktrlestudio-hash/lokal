@@ -262,27 +262,8 @@
 /* INPUT & FORM */
 /* ─────────────────────────────────────────────────────────────────────────── */
 
-.ui-input {
-  width: 100%;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-slate-300);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-  background-color: var(--color-bg-primary);
-  color: var(--color-text-primary);
-  transition: border-color var(--duration-fast) ease;
-}
-
-.ui-input:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
-}
-
-.ui-input:disabled {
-  background-color: var(--color-bg-secondary);
-  opacity: 0.6;
-}
+/* .ui-input real vive en index.css — antes había 3 definiciones distintas
+   compitiendo (ver ese archivo), esta era una de ellas. */
 
 .ui-input-group {
   display: flex;

@@ -139,7 +139,24 @@ function AppLoader() {
 // que esperar 300ms de más. Solo aplica a la primera carga real.
 const SPLASH_MIN_MS = 1700;
 
+// Debug: ?debug-splash=1 en la URL deja el splash montado para siempre, sin
+// correr ninguna otra lógica de carga (auth/fetch de tienda) — para poder
+// inspeccionarlo en vivo con DevTools sin que se desmonte solo a los ~1.7s.
+// Nunca se activa por accidente (requiere el query param explícito) y no
+// toca el comportamiento real de carga del resto de la app. Vive en un
+// componente WRAPPER (no un early return dentro de RootInner) porque
+// cortar antes de los hooks de RootInner violaría las reglas de hooks
+// (mismo bug ya fichado en FieldEditorSheet, ver memoria del proyecto) —
+// acá en cambio son dos componentes hermanos, cada uno con su propio orden
+// de hooks estable.
+const DEBUG_SPLASH = new URLSearchParams(window.location.search).get('debug-splash') === '1';
+
 export default function Root() {
+  if (DEBUG_SPLASH) return <AppLoader />;
+  return <RootInner />;
+}
+
+function RootInner() {
   // Ref (no state) leída por el listener global de popstate más abajo, que
   // se registra una sola vez — evita reconectar ese listener en cada
   // login/logout solo para tener el valor fresco de firebaseUser.
@@ -646,6 +663,7 @@ export default function Root() {
         // renderiza TiendaPublica, que es cómo se ve de verdad. El "atrás"
         // del navegador vuelve a /vender.
         onVerEjemplo={() => { window.history.pushState({}, '', `/${TIENDA_SLUG_FIJA}`); forceUrlRecheck(); }}
+        onVolver={() => { window.history.pushState({}, '', '/'); forceUrlRecheck(); }}
       />
     );
   }

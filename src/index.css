@@ -355,7 +355,30 @@ body {
 }
 
 .ui-chip  { border-radius: var(--ui-control-radius); }
-.ui-input { min-height: var(--ui-control-size); border-radius: var(--ui-control-radius); }
+/* Única fuente real de .ui-input — antes había 3 definiciones distintas
+   (acá, styles/components.css, styles/themes.css), dos de ellas con su
+   propio :focus (border-color + box-shadow) compitiendo entre sí y con
+   cualquier :focus-visible propio que un consumidor quisiera aplicar.
+   Sin otro selector en el proyecto salvo .ui-input real: no hay riesgo de
+   romper otro consumidor al unificarlas. */
+.ui-input {
+  min-height: var(--ui-control-size);
+  width: 100%;
+  /* Sin padding acá a propósito: un consumidor con ícono adentro (ej. la
+     barra de búsqueda de HomeGlobal.jsx, pl-10/pr-9 de Tailwind para
+     dejarle lugar a la lupa/botón de limpiar) necesita padding asimétrico
+     que este shorthand pisaba — misma especificidad que .pl-10/.pr-9, y
+     ganaba por orden de aparición en el CSS compilado, corriendo el texto
+     por debajo del ícono en vez de al lado. Cada consumidor define su
+     propio padding vía Tailwind. */
+  border: 1px solid var(--border-solid);
+  border-radius: var(--ui-control-radius);
+  font-size: 0.875rem;
+  background-color: var(--surface-solid);
+  color: var(--text-primary);
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+.ui-input:disabled { background-color: var(--surface-dim); opacity: 0.55; }
 
 /* Degradado pastel rojo→amarillo (ver --gradient-pastel, §1) — fondos suaves */
 .bg-gradient-pastel { background: var(--gradient-pastel); }
@@ -602,7 +625,15 @@ html.theme-transitioning *::after {
 .dark select {
   background-color: rgba(255,255,255,0.05) !important;
   color: var(--text-primary)                !important;
-  border-color: rgba(255,255,255,0.1)       !important;
+  /* border-color !important desactivado: todo <input>/<textarea>/<select>
+     real del proyecto ya define su propio border con clases Tailwind
+     (border-slate-200 dark:border-white/15, etc — verificado en
+     AttributesEditor/CategoryPicker/StoreApp/RegistroTienda/ProductoForm),
+     así que esta regla nunca importaba ahí. El único caso real donde SÍ
+     pisaba algo era HomeGlobal.jsx: un input con CARD_TINTED como style
+     inline (sin clase de borde Tailwind), donde el !important de acá le
+     ganaba al borde de foco de marca que se necesitaba mostrar en dark. */
+  /* border-color: rgba(255,255,255,0.1) !important; */
 }
 .dark input::placeholder,
 .dark textarea::placeholder {

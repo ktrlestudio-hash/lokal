@@ -66,12 +66,25 @@ export function LogoLoader({ size }) {
 // glow (radial-gradient celeste) se mantiene igual en ambos temas — es el
 // acento de marca, no algo que deba invertirse; lo que cambia es el fondo
 // y el color de texto detrás de él.
-const SPLASH_BG = 'bg-white dark:bg-[#040a14]';
+//
+// className propia ("lk-splash-bg"), NO bg-white dark:bg-[#040a14]: index.css
+// tiene una regla global ".dark .bg-white:not(button):not([role=button])
+// :not(a) { background-color: var(--surface-solid) !important; }" pensada
+// para normalizar bg-white "sin pensar en dark" usado en OTROS componentes
+// — pero el splash SÍ tenía su propio dark:bg-[#040a14] a propósito, y como
+// Tailwind deja ambas clases en el mismo elemento (bg-white para light,
+// dark:bg-[#040a14] con el prefijo .dark antepuesto), esa regla global con
+// !important le ganaba igual y pintaba el gris de --surface-solid
+// (#1f1f1f) en vez del negro azulado real. Encontrado por el usuario
+// inspeccionando el DOM en vivo con ?debug-splash=1 (ver Root.jsx).
+const SPLASH_BG = 'lk-splash-bg';
 
 export function SplashScreenFull() {
   return (
     <div className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center overflow-hidden ${SPLASH_BG}`}>
       <style>{`
+        .lk-splash-bg { background: #fff; }
+        .dark .lk-splash-bg { background: #040a14; }
         @keyframes lk-brand-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes lk-mark-in { from { opacity: 0; } to { opacity: 1; } }
         @keyframes lk-glow-pulse { 0%,100% { opacity: 0.55; transform: scale(1); } 50% { opacity: 0.85; transform: scale(1.08); } }
@@ -103,7 +116,11 @@ export function SplashScreenFull() {
 export function InlineLoader() {
   return (
     <div className={`fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden ${SPLASH_BG}`}>
-      <style>{`@keyframes lk-glow-pulse { 0%,100% { opacity: 0.55; transform: scale(1); } 50% { opacity: 0.85; transform: scale(1.08); } }`}</style>
+      <style>{`
+        .lk-splash-bg { background: #fff; }
+        .dark .lk-splash-bg { background: #040a14; }
+        @keyframes lk-glow-pulse { 0%,100% { opacity: 0.55; transform: scale(1); } 50% { opacity: 0.85; transform: scale(1.08); } }
+      `}</style>
       <div className="absolute inset-x-0 top-0 pointer-events-none" style={{ height: '65%', background: 'radial-gradient(ellipse 75% 55% at 50% 0%, rgba(0,184,217,0.22), transparent)', animation: 'lk-glow-pulse 3s ease-in-out 1.2s infinite' }} />
       <LogoLoader />
     </div>

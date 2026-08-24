@@ -45,16 +45,8 @@ th       { background-color: var(--surface-dim); }
 }
 .ui-btn-secondary:hover { background-color: var(--surface-dim); }
 
-.ui-input {
-  background-color: var(--surface-solid);
-  border-color: var(--border-solid);
-  color: var(--text-primary);
-}
-.ui-input:focus {
-  border-color: var(--brand-hex);
-  box-shadow: 0 0 0 3px rgba(var(--brand), 0.15);
-}
-.ui-input:disabled { background-color: var(--surface-dim); opacity: 0.55; }
+/* .ui-input real vive en index.css — antes había 3 definiciones distintas
+   compitiendo (ver ese archivo), esta era una de ellas. */
 
 .ui-popover { background-color: var(--surface-solid); border-color: var(--border-solid); }
 .ui-tooltip { background-color: var(--text-primary); color: var(--surface-solid); }
