@@ -21,11 +21,12 @@
  *     mostrarle más adelante tiendas cercanas.
  *   - términos: mismo checkbox/copy que RegistroTienda.jsx.
  */
-import React, { useState } from 'react';
-import { Loader2, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Loader2, AlertCircle, Check, Navigation } from 'lucide-react';
 import { apiFetch } from './api.js';
 import { LogoFull } from './Brand';
-import { PlaceAutocomplete } from './storeFormUtils';
+import { PlaceAutocomplete, reverseGeocode } from './storeFormUtils';
+import { useGeolocation } from './hooks';
 
 const API_BASE = '/.netlify/functions';
 
@@ -81,6 +82,19 @@ export default function RegistroUsuario({ firebaseUser, onCreado, onLogout, isDa
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // "Usar mi ubicación" — mismo patrón que RegistroTienda.jsx/StoreApp.jsx:
+  // pide el GPS del navegador y completa el campo de zona con reverse
+  // geocoding (Nominatim), sin pin de mapa (un usuario común no necesita
+  // ubicación exacta, solo ciudad/barrio de texto).
+  const geo = useGeolocation();
+  useEffect(() => {
+    if (!geo.location) return;
+    const { lat, lng } = geo.location;
+    reverseGeocode(lat, lng)
+      .then(({ ciudad: c }) => { if (c) setZona(c); })
+      .catch(() => {});
+  }, [geo.location]);
 
   const puedeEnviar = nombre.trim().length >= 2 && acceptedTerms && !loading;
 
@@ -146,16 +160,45 @@ export default function RegistroUsuario({ firebaseUser, onCreado, onLogout, isDa
               />
             </div>
             <div>
-              <label className="text-xs font-bold uppercase tracking-wider mb-1.5 block" style={{ color: 'var(--text-secondary, #999)' }}>
-                Ciudad o zona
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary, #999)' }}>
+                  Ciudad o zona
+                </label>
+                <button
+                  type="button"
+                  onClick={() => geo.requestLocation()}
+                  disabled={geo.loading}
+                  className="flex items-center gap-1 text-[11px] font-bold text-brand hover:underline disabled:opacity-60"
+                >
+                  {geo.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Navigation className="w-3 h-3" />}
+                  {geo.loading ? 'Ubicando...' : 'Usar mi ubicación'}
+                </button>
+              </div>
               <PlaceAutocomplete value={zona} onChange={setZona} placeholder="Ej: Bovril, Entre Ríos" labelParts={2} />
+              {geo.error && (
+                <p className="text-[11px] font-semibold mt-1.5 text-rose-500">
+                  No pudimos acceder a tu ubicación — probá escribir la ciudad.
+                </p>
+              )}
             </div>
           </div>
 
+          {/* Checkbox custom — mismo patrón que RegistroTienda.jsx, ver ese
+              archivo para el porqué (el <input type="checkbox"> nativo
+              renderizaba con el estilo gris neutro del navegador/SO). */}
           <label className="flex items-start gap-2.5 mb-5 cursor-pointer text-left">
-            <input type="checkbox" checked={acceptedTerms} onChange={(e) => setAcceptedTerms(e.target.checked)}
-              className="mt-0.5 w-4 h-4 shrink-0" />
+            <span className="relative mt-0.5 w-[18px] h-[18px] shrink-0 rounded-md border flex items-center justify-center transition-colors" style={{
+              borderColor: acceptedTerms ? 'rgb(var(--brand, 0 184 217))' : 'rgb(var(--brand, 0 184 217) / 0.35)',
+              background: acceptedTerms ? 'rgb(var(--brand, 0 184 217))' : 'rgb(var(--brand, 0 184 217) / 0.06)',
+            }}>
+              <input
+                type="checkbox"
+                checked={acceptedTerms}
+                onChange={(e) => setAcceptedTerms(e.target.checked)}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+              />
+              {acceptedTerms && <Check className="w-3 h-3 text-white pointer-events-none" strokeWidth={3} />}
+            </span>
             <span className="text-xs" style={{ color: 'var(--text-secondary, #999)' }}>
               Acepto los <a href="/terminos-y-condiciones" target="_blank" rel="noopener" className="underline">términos y condiciones</a> y la{' '}
               <a href="/politica-de-privacidad" target="_blank" rel="noopener" className="underline">política de privacidad</a>.

@@ -28,7 +28,7 @@
  * el envoltorio visual. Ver AdminLogin.jsx para el patrón original.
  */
 import React, { useState, useEffect, useRef } from 'react';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, Check, Navigation } from 'lucide-react';
 import { apiFetch } from './api.js';
 import { LogoFull } from './Brand';
 import { REGISTRO_MODO } from './config/constants';
@@ -37,7 +37,8 @@ import { REGISTRO_MODO } from './config/constants';
 // duplicada acá con fixes propios (foco con sugerencias, filtro
 // addresstype); esos fixes ya se aplicaron directo en storeFormUtils.jsx,
 // así benefician también a StoreApp, un solo lugar de verdad.
-import { PlaceAutocomplete, MapPicker } from './storeFormUtils';
+import { PlaceAutocomplete, MapPicker, reverseGeocode } from './storeFormUtils';
+import { useGeolocation } from './hooks';
 
 const API_BASE = '/.netlify/functions';
 
@@ -141,6 +142,21 @@ export default function RegistroTienda({ firebaseUser, onCreada, onLogout, onIrA
     }
     return undefined;
   }, [ciudadCoords, mapMounted]);
+
+  // "Usar mi ubicación" — mismo patrón que LocationEditorModal en
+  // StoreApp.jsx: pide el GPS del navegador y, apenas resuelve, dispara
+  // reverse geocoding (mismo proveedor, Nominatim) para completar ciudad Y
+  // mover el pin del mapa en un solo toque, en vez de que el usuario tenga
+  // que tipear o buscar manualmente su propia ciudad.
+  const geo = useGeolocation();
+  useEffect(() => {
+    if (!geo.location) return;
+    const { lat, lng } = geo.location;
+    setCiudadCoords({ lat, lng });
+    reverseGeocode(lat, lng)
+      .then(({ ciudad: c }) => { if (c) setCiudad(c); })
+      .catch(() => {}); // el pin ya quedó puesto; la ciudad se puede tipear a mano
+  }, [geo.location]);
 
   // Estado de la invitación: 'checking' | 'valid' | 'invalid'. En modo
   // abierto se considera siempre válida (no hay nada que chequear).
@@ -282,10 +298,29 @@ export default function RegistroTienda({ firebaseUser, onCreada, onLogout, onIrA
               />
             </div>
             <div>
-              <label className="text-xs font-bold uppercase tracking-wider mb-1.5 block" style={{ color: 'var(--text-secondary, #999)' }}>
-                Ciudad
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary, #999)' }}>
+                  Ciudad
+                </label>
+                {/* GPS: alternativa completa a tipear, no solo un atajo —
+                    ver el useEffect de geo.location más arriba, resuelve
+                    ciudad Y ubicación exacta en el mapa en un solo toque. */}
+                <button
+                  type="button"
+                  onClick={() => geo.requestLocation()}
+                  disabled={geo.loading}
+                  className="flex items-center gap-1 text-[11px] font-bold text-brand hover:underline disabled:opacity-60"
+                >
+                  {geo.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Navigation className="w-3 h-3" />}
+                  {geo.loading ? 'Ubicando...' : 'Usar mi ubicación'}
+                </button>
+              </div>
               <PlaceAutocomplete value={ciudad} onChange={setCiudad} onSelect={setCiudadCoords} placeholder="Ej: Bovril, Entre Ríos" labelParts={2} />
+              {geo.error && (
+                <p className="text-[11px] font-semibold mt-1.5 text-rose-500">
+                  No pudimos acceder a tu ubicación — probá escribir la ciudad.
+                </p>
+              )}
             </div>
             {/* Transición de entrada/salida (max-height + opacity) en vez de
                 aparecer/desaparecer de golpe al elegir o borrar la ciudad —
@@ -317,9 +352,27 @@ export default function RegistroTienda({ firebaseUser, onCreada, onLogout, onIrA
             </div>
           </div>
 
+          {/* Checkbox custom (no el <input type="checkbox"> nativo, que
+              renderiza con el estilo gris neutro del navegador/SO —
+              reportado como "no acorde a la estética enriquecida") — mismo
+              lenguaje de marca que el resto del formulario: cuadrado con
+              borde/relleno rgb(var(--brand)/X), tilde real (lucide Check)
+              en vez del ✓ del SO. El <input> real sigue existiendo (sr-only,
+              accesible por teclado/lector de pantalla), solo se le saca el
+              dibujo nativo con appearance-none. */}
           <label className="flex items-start gap-2.5 mb-5 cursor-pointer text-left">
-            <input type="checkbox" checked={acceptedTerms} onChange={(e) => setAcceptedTerms(e.target.checked)}
-              className="mt-0.5 w-4 h-4 shrink-0" />
+            <span className="relative mt-0.5 w-[18px] h-[18px] shrink-0 rounded-md border flex items-center justify-center transition-colors" style={{
+              borderColor: acceptedTerms ? 'rgb(var(--brand, 0 184 217))' : 'rgb(var(--brand, 0 184 217) / 0.35)',
+              background: acceptedTerms ? 'rgb(var(--brand, 0 184 217))' : 'rgb(var(--brand, 0 184 217) / 0.06)',
+            }}>
+              <input
+                type="checkbox"
+                checked={acceptedTerms}
+                onChange={(e) => setAcceptedTerms(e.target.checked)}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+              />
+              {acceptedTerms && <Check className="w-3 h-3 text-white pointer-events-none" strokeWidth={3} />}
+            </span>
             <span className="text-xs" style={{ color: 'var(--text-secondary, #999)' }}>
               Acepto los <a href="/terminos-y-condiciones" target="_blank" rel="noopener" className="underline">términos y condiciones</a> y la{' '}
               <a href="/politica-de-privacidad" target="_blank" rel="noopener" className="underline">política de privacidad</a>.

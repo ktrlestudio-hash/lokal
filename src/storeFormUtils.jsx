@@ -316,41 +316,71 @@ export function PlaceAutocomplete({ value, onChange, onSelect, placeholder, sear
 
   return (
     <div className="relative">
-      <div className="flex items-center gap-2 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-4 py-3 focus-within:border-brand focus-within:bg-white dark:focus-within:bg-white/8 focus-within:ring-2 focus-within:ring-brand/15 transition-all">
-        {loading
-          ? <Loader2 className="w-4 h-4 animate-spin text-slate-400 shrink-0" />
-          : <Search className="w-4 h-4 text-slate-400 shrink-0" />
-        }
-        <input
-          value={query}
-          onChange={e => { setQuery(e.target.value); onChange(e.target.value); }}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          placeholder={placeholder}
-          className="w-full bg-transparent focus:outline-none focus-visible:outline-none text-slate-900 dark:text-white placeholder:text-slate-400 text-sm"
-        />
-        {query && (
-          <button type="button" onMouseDown={clear} className="shrink-0">
-            <X className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" />
-          </button>
-        )}
-      </div>
+      {/* Input DIRECTO con ícono/borrar absolutos encima, no un <div>
+          contenedor con focus-within — antes había DOS bordes visibles: el
+          del div exterior (focus-within:border-brand) y, al lado, el
+          borde/foco propio de otros inputs del mismo formulario, dando la
+          sensación de "doble contorno" en vez de un único campo (reportado
+          explícitamente). Mismo patrón EXACTO que la barra de búsqueda de
+          HomeGlobal.jsx: un solo <input> con su propio borde, sin ring/
+          focus-within duplicado — el :focus-visible global de index.css ya
+          resalta el borde en foco para toda la app. Tokens de marca
+          (rgb(var(--brand)/X)) en vez de slate/gris neutro, mismo criterio
+          que el resto de inputs tintados del formulario. */}
+      {loading
+        ? <Loader2 className="w-4 h-4 animate-spin text-brand absolute left-4 top-1/2 -translate-y-1/2 z-10 pointer-events-none" />
+        : <Search className="w-4 h-4 text-brand/70 absolute left-4 top-1/2 -translate-y-1/2 z-10 pointer-events-none" />
+      }
+      <input
+        value={query}
+        onChange={e => { setQuery(e.target.value); onChange(e.target.value); }}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        placeholder={placeholder}
+        className="w-full rounded-2xl pl-10 pr-10 py-3 text-sm font-medium border outline-none transition-colors focus:border-brand"
+        style={{
+          color: 'var(--text-primary)',
+          background: 'rgb(var(--brand, 0 184 217) / 0.06)',
+          borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)',
+        }}
+      />
+      {query && (
+        <button type="button" onMouseDown={clear} className="absolute right-3.5 top-1/2 -translate-y-1/2 shrink-0">
+          <X className="w-3.5 h-3.5 transition-colors" style={{ color: 'var(--text-secondary, #999)' }} />
+        </button>
+      )}
       {visibleResults.length > 0 && (
         // z-[1100]: por encima de los panes internos de Leaflet (hasta
         // z-index:1000 los controles de zoom) — con z-20 el mapa de abajo
         // tapaba este dropdown cuando ambos coexisten en el mismo modal.
-        <div className="absolute top-full left-0 right-0 z-[1100] mt-2 max-h-56 overflow-y-auto rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0f172a] shadow-lg">
+        // Fondo sólido azulado en dark (#0a1420, no --surface-solid — ese
+        // token resuelve a #1f1f1f, un gris carbón NEUTRO sin componente
+        // azulado, el mismo problema que ya se corrigió antes en
+        // ProximamenteModal/LoginSheet) — un gris neutro puro no se tiñe lo
+        // suficiente con el borde translúcido de marca encima, hace falta
+        // que la base misma sea azulada. bg-[#0a1420] vía dark: en vez de
+        // style condicionado por isDark: este componente no recibe esa prop
+        // (se usa en varios lugares sin pasarla) y depender de la clase
+        // .dark del documento es más robusto que agregar una prop nueva
+        // solo para este fondo.
+        <div className="absolute top-full left-0 right-0 z-[1100] mt-2 max-h-56 overflow-y-auto rounded-2xl border shadow-lg bg-white dark:bg-[#0a1420]" style={{
+          borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)',
+        }}>
+          <style>{`
+            .dark .lk-place-result:not(:last-child) { border-bottom: 1px solid rgb(var(--brand, 0 184 217) / 0.12); }
+            .lk-place-result:not(:last-child) { border-bottom: 1px solid rgb(var(--brand, 0 184 217) / 0.1); }
+          `}</style>
           {visibleResults.map((r, i) => (
             <button
               key={r.place_id || i}
               type="button"
               onMouseDown={() => select(r)}
-              className="w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-white/5 border-b border-slate-200/70 dark:border-white/10 last:border-b-0 transition-colors"
+              className="lk-place-result w-full text-left px-4 py-3 transition-colors hover:bg-brand/[0.08]"
             >
-              <p className="text-sm font-semibold text-slate-900 dark:text-white">
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
                 {r.name || r.display_name.split(',')[0]}
               </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+              <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-secondary, #999)' }}>
                 {r.display_name}
               </p>
             </button>
