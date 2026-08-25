@@ -2,7 +2,7 @@
 // archivos, autocompletado de direcciones y selector de ubicación en mapa.
 // Extraído de StoreRegisterFlow.jsx (borrado en el recorte a mono-tienda,
 // ver CLAUDE.md) porque StoreApp.jsx sigue usando estos tres helpers.
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Loader2, X, Search, Navigation } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { apiFetch } from './api';
@@ -216,7 +216,15 @@ export async function reverseGeocode(lat, lng) {
 // anterior antes de que el siguiente abra el suyo. Si no se pasan estos
 // props (uso standalone, ej. RegistroTienda.jsx con un solo campo), el
 // componente se comporta exactamente igual que antes.
-export function PlaceAutocomplete({ value, onChange, onSelect, placeholder, searchSuffix = '', labelParts = 2, id, activeId, onActivate, onDeactivate, mode = 'ciudad', onUbicacion, ubicacionLoading = false, ubicacionError = null }) {
+// forwardRef + useImperativeHandle: expone un método `abrir()` para que un
+// campo ANTERIOR del mismo formulario (ej. "Nombre") pueda, al presionar
+// Enter, avanzar a este trigger y abrirlo directamente — mismo flujo que
+// Tab, pero sin depender del orden real del DOM ni requerir que el usuario
+// primero saque el foco del teclado a mano. Pedido explícito: en desktop,
+// Enter en "Nombre" debería sacar el teclado (no aplica en desktop, pero
+// SÍ cierra cualquier estado de foco) y abrir el panel de Ciudad como
+// siguiente paso razonable del flujo.
+export const PlaceAutocomplete = forwardRef(function PlaceAutocomplete({ value, onChange, onSelect, placeholder, searchSuffix = '', labelParts = 2, id, activeId, onActivate, onDeactivate, mode = 'ciudad', onUbicacion, ubicacionLoading = false, ubicacionError = null }, ref) {
   // onUbicacion (opcional): "Usar mi ubicación" vive DENTRO del panel, como
   // la primera fila antes de las sugerencias — no un botón aparte fuera del
   // componente (ahí competía por espacio junto al label, y quedaba
@@ -281,6 +289,19 @@ export function PlaceAutocomplete({ value, onChange, onSelect, placeholder, sear
     if (id != null && activeId != null && activeId !== id) setOpen(false);
   }, [id, activeId]);
 
+  // "Usar mi ubicación" ya resolvió (ubicacionLoading pasó de true a
+  // false, sin error): cierra el panel solo — el GPS ya asignó el valor
+  // (onUbicacion → geo.requestLocation → el caller hace onChange/onSelect),
+  // no tiene sentido dejar la lista de sugerencias abierta esperando que el
+  // usuario elija algo más. wasLoadingRef evita cerrar en el montaje
+  // inicial (ubicacionLoading arranca en false, no hay transición real).
+  const wasLoadingRef = useRef(false);
+  useEffect(() => {
+    if (ubicacionLoading) { wasLoadingRef.current = true; return; }
+    if (wasLoadingRef.current && !ubicacionError) { setOpen(false); setQuery(''); }
+    wasLoadingRef.current = false;
+  }, [ubicacionLoading, ubicacionError]);
+
   const buscar = (q, reqId) => {
     setLoading(true);
     buscarPlaces(q, { types: addressTypes })
@@ -317,6 +338,13 @@ export function PlaceAutocomplete({ value, onChange, onSelect, placeholder, sear
       .finally(() => { if (reqId === requestIdRef.current) setLoading(false); });
   };
 
+  // Expone `abrir()` para el caller (ver comentario del forwardRef arriba)
+  // — NO reusa handleOpen directo porque handleOpen hace toggle (cierra si
+  // ya estaba abierto), y acá el pedido siempre es "abrir", nunca "cerrar".
+  useImperativeHandle(ref, () => ({
+    abrir: () => { if (!open) handleOpen(); },
+  }));
+
   useEffect(() => {
     if (!open) return undefined;
     clearTimeout(timerRef.current);
@@ -351,12 +379,17 @@ export function PlaceAutocomplete({ value, onChange, onSelect, placeholder, sear
           lenguaje que el trigger de CategoryPicker.jsx (borde de marca
           mientras open=true), con los tokens de marca (rgb(var(--brand)/X))
           en vez de slate/gris neutro que ya usa el resto del formulario. */}
+      {/* active:scale-[0.99] sutil (no el 0.98 de los CTA grandes — este es
+          un campo de formulario, no una acción principal, un scale fuerte
+          se sentía "brusco" reportado explícitamente) + transición más
+          larga en el color de borde para que el toque se sienta suave, no
+          un salto instantáneo de gris a celeste. */}
       <div
         role="button"
         tabIndex={0}
         onClick={handleOpen}
         onKeyDown={(e) => e.key === 'Enter' && handleOpen()}
-        className="w-full flex items-center gap-2 pl-4 pr-3.5 py-3 rounded-2xl border cursor-pointer select-none transition-colors"
+        className="w-full flex items-center gap-2 pl-4 pr-3.5 py-3 rounded-2xl border cursor-pointer select-none transition-all duration-200 active:scale-[0.99]"
         style={{
           background: 'rgb(var(--brand, 0 184 217) / 0.06)',
           borderColor: open ? 'rgb(var(--brand, 0 184 217))' : 'rgb(var(--brand, 0 184 217) / 0.18)',
@@ -386,7 +419,10 @@ export function PlaceAutocomplete({ value, onChange, onSelect, placeholder, sear
         // este componente no recibe esa prop (se usa en varios lugares sin
         // pasarla) y depender de la clase .dark del documento es más
         // robusto que agregar una prop nueva solo para este fondo.
-        <div className="absolute top-full left-0 right-0 z-[1100] mt-2 rounded-2xl border shadow-xl overflow-hidden bg-white dark:bg-[#0a1420]" style={{
+        // animate-dropdown-in: mismo fade+scale sutil que ya usa
+        // CategoryPicker.jsx (definida en index.css) — antes aparecía sin
+        // transición, "de golpe".
+        <div className="absolute top-full left-0 right-0 z-[1100] mt-2 rounded-2xl border shadow-xl overflow-hidden bg-white dark:bg-[#0a1420] animate-dropdown-in" style={{
           borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)',
         }}>
           {/* Input de búsqueda REAL, con su propio borde — mismo criterio
@@ -473,7 +509,7 @@ export function PlaceAutocomplete({ value, onChange, onSelect, placeholder, sear
       )}
     </div>
   );
-}
+});
 
 // ─── Mapa para pinear la ubicación — usa react-leaflet + tiles CartoDB ────────
 const TILES_LIGHT = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';

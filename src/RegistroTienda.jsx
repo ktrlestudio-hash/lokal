@@ -117,6 +117,18 @@ export default function RegistroTienda({ firebaseUser, onCreada, onLogout, onIrA
   const sessionId = useRef(modoInvitacion ? getSessionId() : null).current;
 
   const [nombre, setNombre] = useState('');
+  // Enter en "Nombre del negocio" → sale del teclado (blur) y abre el
+  // panel de Ciudad directo, en vez de que el usuario tenga que tocar dos
+  // veces (Enter para cerrar teclado, después tocar Ciudad a mano) — flujo
+  // razonable pedido explícitamente, más útil en desktop (Enter avanza al
+  // siguiente campo, sin mouse) pero funciona igual en mobile.
+  const ciudadRef = useRef(null);
+  const handleNombreEnter = (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    e.currentTarget.blur();
+    ciudadRef.current?.abrir();
+  };
   const [ciudad, setCiudad] = useState('');
   const [ciudadCoords, setCiudadCoords] = useState(null);
   const [telefono, setTelefono] = useState('');
@@ -292,6 +304,7 @@ export default function RegistroTienda({ firebaseUser, onCreada, onLogout, onIrA
               </label>
               <input
                 type="text" value={nombre} onChange={(e) => setNombre(e.target.value)}
+                onKeyDown={handleNombreEnter}
                 placeholder="Ej: Almacén Don José" required maxLength={120}
                 className="w-full px-4 py-3.5 rounded-2xl text-sm font-medium border outline-none transition-colors focus:border-brand"
                 style={inputBase}
@@ -307,6 +320,7 @@ export default function RegistroTienda({ firebaseUser, onCreada, onLogout, onIrA
                   del panel de PlaceAutocomplete (onUbicacion), no como
                   botón aparte junto al label. */}
               <PlaceAutocomplete
+                ref={ciudadRef}
                 value={ciudad} onChange={setCiudad} onSelect={setCiudadCoords}
                 placeholder="Ej: Bovril, Entre Ríos" labelParts={2}
                 onUbicacion={() => geo.requestLocation()}

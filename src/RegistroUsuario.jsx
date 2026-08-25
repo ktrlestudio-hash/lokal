@@ -21,7 +21,7 @@
  *     mostrarle más adelante tiendas cercanas.
  *   - términos: mismo checkbox/copy que RegistroTienda.jsx.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Loader2, AlertCircle, Check } from 'lucide-react';
 import { apiFetch } from './api.js';
 import { LogoFull } from './Brand';
@@ -78,6 +78,16 @@ function CardGlass({ isDark, children }) {
 
 export default function RegistroUsuario({ firebaseUser, onCreado, onLogout, isDark = true }) {
   const [nombre, setNombre] = useState(firebaseUser?.displayName || '');
+  // Enter en "Tu nombre" → sale del teclado (blur) y abre el panel de
+  // Ciudad/zona directo — mismo flujo que RegistroTienda.jsx, ver ese
+  // archivo para el porqué.
+  const zonaRef = useRef(null);
+  const handleNombreEnter = (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    e.currentTarget.blur();
+    zonaRef.current?.abrir();
+  };
   const [zona, setZona] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -154,6 +164,7 @@ export default function RegistroUsuario({ firebaseUser, onCreado, onLogout, isDa
               </label>
               <input
                 type="text" value={nombre} onChange={(e) => setNombre(e.target.value)}
+                onKeyDown={handleNombreEnter}
                 placeholder="Ej: María González" required maxLength={120}
                 className="w-full px-4 py-3.5 rounded-2xl text-sm font-medium border outline-none transition-colors focus:border-brand"
                 style={inputBase}
@@ -164,6 +175,7 @@ export default function RegistroUsuario({ firebaseUser, onCreado, onLogout, isDa
                 Ciudad o zona
               </label>
               <PlaceAutocomplete
+                ref={zonaRef}
                 value={zona} onChange={setZona}
                 placeholder="Ej: Bovril, Entre Ríos" labelParts={2}
                 onUbicacion={() => geo.requestLocation()}
