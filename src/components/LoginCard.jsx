@@ -160,7 +160,15 @@ export default function LoginCard({
   mountDelayMs = 0,
 }) {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(null); // errores de Google/Apple — se muestran arriba de todo
+  // Error del envío de Email Magic Link, SEPARADO de `error`: antes
+  // compartían el mismo estado y el mensaje aparecía en el bloque genérico
+  // de arriba de la card, lejos del formulario de email (que el usuario ya
+  // había desplegado más abajo tocando "Continuar con email") — el salto
+  // de layout que eso producía (todo el contenido de abajo empujado hacia
+  // abajo de golpe) se reportó como un "glitch". Ahora el error de email se
+  // muestra DENTRO de su propio formulario, sin mover nada más.
+  const [errorEmail, setErrorEmail] = useState(null);
   // 'login' | 'registro' | 'elegir-rol'. 'elegir-rol' solo es alcanzable
   // con whoami=true, tras un login exitoso sin tienda/usuario asociado
   // todavía — igual que antes, no cambia con este rediseño.
@@ -402,12 +410,20 @@ export default function LoginCard({
   const handleEnviarLink = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError(null);
+    setErrorEmail(null);
     try {
       await enviarLinkDeAcceso(emailValor.trim());
       setEmailEnviado(true);
     } catch (err) {
-      setError(err.code === 'auth/invalid-email' ? 'Ese email no es válido.' : (err.message || 'No se pudo enviar el enlace'));
+      // auth/operation-not-allowed: el método "Email link (passwordless
+      // sign-in)" no está habilitado en Firebase Console (Authentication →
+      // Sign-in method) — no es un bug de este código, es config del
+      // proyecto de Firebase que falta activar del lado del backend.
+      setErrorEmail(
+        err.code === 'auth/invalid-email' ? 'Ese email no es válido.'
+        : err.code === 'auth/operation-not-allowed' ? 'El acceso por email todavía no está habilitado. Probá con Google mientras tanto.'
+        : (err.message || 'No se pudo enviar el enlace')
+      );
     } finally {
       setLoading(false);
     }
@@ -416,6 +432,7 @@ export default function LoginCard({
   const cambiarModo = (nuevo) => {
     setModo(nuevo);
     setError(null);
+    setErrorEmail(null);
     setIdPasswordAviso(null);
     setMetodoAbierto(null);
     setEmailEnviado(false);
@@ -664,6 +681,15 @@ export default function LoginCard({
               style={inputBase}
             />
           </div>
+          {/* Error CONTEXTUAL a este formulario — ver el comentario de
+              errorEmail más arriba (por qué está separado del error
+              genérico de Google/Apple). */}
+          {errorEmail && (
+            <div className="mb-2 flex items-center gap-2 text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 rounded-xl px-3.5 py-2.5 text-left">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>{errorEmail}</span>
+            </div>
+          )}
           <button
             type="submit"
             disabled={loading}

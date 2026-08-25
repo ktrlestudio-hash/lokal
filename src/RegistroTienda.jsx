@@ -28,7 +28,7 @@
  * el envoltorio visual. Ver AdminLogin.jsx para el patrón original.
  */
 import React, { useState, useEffect, useRef } from 'react';
-import { Loader2, AlertCircle, Check, Navigation } from 'lucide-react';
+import { Loader2, AlertCircle, Check } from 'lucide-react';
 import { apiFetch } from './api.js';
 import { LogoFull } from './Brand';
 import { REGISTRO_MODO } from './config/constants';
@@ -298,29 +298,21 @@ export default function RegistroTienda({ firebaseUser, onCreada, onLogout, onIrA
               />
             </div>
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary, #999)' }}>
-                  Ciudad
-                </label>
-                {/* GPS: alternativa completa a tipear, no solo un atajo —
-                    ver el useEffect de geo.location más arriba, resuelve
-                    ciudad Y ubicación exacta en el mapa en un solo toque. */}
-                <button
-                  type="button"
-                  onClick={() => geo.requestLocation()}
-                  disabled={geo.loading}
-                  className="flex items-center gap-1 text-[11px] font-bold text-brand hover:underline disabled:opacity-60"
-                >
-                  {geo.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Navigation className="w-3 h-3" />}
-                  {geo.loading ? 'Ubicando...' : 'Usar mi ubicación'}
-                </button>
-              </div>
-              <PlaceAutocomplete value={ciudad} onChange={setCiudad} onSelect={setCiudadCoords} placeholder="Ej: Bovril, Entre Ríos" labelParts={2} />
-              {geo.error && (
-                <p className="text-[11px] font-semibold mt-1.5 text-rose-500">
-                  No pudimos acceder a tu ubicación — probá escribir la ciudad.
-                </p>
-              )}
+              <label className="text-xs font-bold uppercase tracking-wider mb-1.5 block" style={{ color: 'var(--text-secondary, #999)' }}>
+                Ciudad
+              </label>
+              {/* GPS: alternativa completa a tipear, no solo un atajo — ver
+                  el useEffect de geo.location más arriba, resuelve ciudad Y
+                  ubicación exacta en el mapa en un solo toque. Vive DENTRO
+                  del panel de PlaceAutocomplete (onUbicacion), no como
+                  botón aparte junto al label. */}
+              <PlaceAutocomplete
+                value={ciudad} onChange={setCiudad} onSelect={setCiudadCoords}
+                placeholder="Ej: Bovril, Entre Ríos" labelParts={2}
+                onUbicacion={() => geo.requestLocation()}
+                ubicacionLoading={geo.loading}
+                ubicacionError={geo.error}
+              />
             </div>
             {/* Transición de entrada/salida (max-height + opacity) en vez de
                 aparecer/desaparecer de golpe al elegir o borrar la ciudad —

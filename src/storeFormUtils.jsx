@@ -3,7 +3,7 @@
 // Extraído de StoreRegisterFlow.jsx (borrado en el recorte a mono-tienda,
 // ver CLAUDE.md) porque StoreApp.jsx sigue usando estos tres helpers.
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Loader2, X, Search } from 'lucide-react';
+import { Loader2, X, Search, Navigation } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { apiFetch } from './api';
 
@@ -216,43 +216,91 @@ export async function reverseGeocode(lat, lng) {
 // anterior antes de que el siguiente abra el suyo. Si no se pasan estos
 // props (uso standalone, ej. RegistroTienda.jsx con un solo campo), el
 // componente se comporta exactamente igual que antes.
-export function PlaceAutocomplete({ value, onChange, onSelect, placeholder, searchSuffix = '', labelParts = 2, id, activeId, onActivate, onDeactivate, mode = 'ciudad' }) {
+export function PlaceAutocomplete({ value, onChange, onSelect, placeholder, searchSuffix = '', labelParts = 2, id, activeId, onActivate, onDeactivate, mode = 'ciudad', onUbicacion, ubicacionLoading = false, ubicacionError = null }) {
+  // onUbicacion (opcional): "Usar mi ubicación" vive DENTRO del panel, como
+  // la primera fila antes de las sugerencias — no un botón aparte fuera del
+  // componente (ahí competía por espacio junto al label, y quedaba
+  // desconectado del resto de la interacción de este mismo campo). Pedido
+  // explícito: mismo lugar donde ya aparecen las demás opciones para elegir,
+  // en vez de un atajo visual separado.
   // mode='ciudad' (default, mismo comportamiento de siempre) filtra solo
   // localidades; mode='direccion' filtra solo calles/números/edificios —
   // antes compartían el mismo filtro y el campo Dirección también mostraba
   // resultados de ciudad en su dropdown.
   const addressTypes = mode === 'direccion' ? ADDRESS_ADDRESS_TYPES : CITY_ADDRESS_TYPES;
-  const [query, setQuery] = useState(value || '');
+
+  // ── Rediseño trigger+panel (2026-08) ─────────────────────────────────
+  // Antes este campo era "un input que muestra resultados debajo mientras
+  // se escribe" — mismo patrón que un buscador. Problema real reportado:
+  // en mobile, tocar el campo levanta el teclado de inmediato (el propio
+  // <input> recibe el foco al abrir) y el panel de resultados, que se
+  // posiciona debajo del campo, terminaba tapado por el teclado cuando el
+  // campo vivía en la mitad inferior del formulario.
+  //
+  // CategoryPicker.jsx (selector de categoría del formulario de producto)
+  // ya resuelve esto con OTRO patrón, mejor para este caso: un trigger fijo
+  // (no recibe foco de teclado al tocarlo) abre un panel `absolute` con una
+  // lista de sugerencias YA visible (sin que el usuario tenga que escribir
+  // nada) y, adentro del panel, un input de búsqueda real con su propio
+  // borde — buscar es opcional, la mayoría navega la lista. Este archivo
+  // copia ESE patrón para el mismo problema.
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const timerRef = useRef(null);
-  // bloquea el effect de búsqueda justo después de seleccionar
-  const skipSearch = useRef(false);
   // Guard de race condition: cada búsqueda incrementa este contador y solo
   // aplica su resultado si sigue siendo la más reciente al volver — sin
   // esto, si el usuario tipea rápido, una respuesta vieja que llega tarde
   // puede pisar resultados más nuevos ya en pantalla.
   const requestIdRef = useRef(0);
-  // El effect de búsqueda de abajo reacciona a cambios de `query` — sin
-  // este guard, dispararía también en el MONTAJE inicial cuando el campo ya
-  // trae un valor precargado (ej. ciudad guardada de la tienda), como si el
-  // usuario acabara de tipearla: el dropdown aparecía solo con abrir el
-  // sheet, sin que nadie tocara el input.
-  const mounted = useRef(false);
-  // Cierre forzado: si hay coordinación activa (activeId definido) y este
-  // campo no es el activo, no muestra resultados aunque el state interno
-  // los tenga — garantía dura, no depende del timing de blur/focus.
-  const visibleResults = (id != null && activeId != null && activeId !== id) ? [] : results;
+  const containerRef = useRef(null);
+  const searchRef = useRef(null);
 
-  useEffect(() => { setQuery(value || ''); }, [value]);
+  // Cierre al click afuera — mismo mecanismo que CategoryPicker.jsx
+  // (listener de mousedown global), más robusto que depender solo de
+  // blur/timeout: no falla si el foco nunca estuvo realmente en el input
+  // (ej. el usuario tocó un resultado de la lista con el mouse, sin pasar
+  // por teclado).
+  useEffect(() => {
+    if (!open) return undefined;
+    const handler = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+        setQuery('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
 
-  // Foco con el campo vacío → sugerencias de la zona (Bovril y alrededores),
-  // sin esperar a que el usuario escriba nada. Solo tiene sentido en modo
-  // ciudad — en modo dirección no hay "calles sugeridas" sin que el
-  // usuario tipee algo primero.
-  const handleFocus = () => {
+  // Cierre forzado por coordinación: si hay activeId definido y este campo
+  // no es el activo, se cierra aunque estuviera abierto — garantía dura,
+  // no depende del timing de blur/focus (mismo criterio que antes).
+  useEffect(() => {
+    if (id != null && activeId != null && activeId !== id) setOpen(false);
+  }, [id, activeId]);
+
+  const buscar = (q, reqId) => {
+    setLoading(true);
+    buscarPlaces(q, { types: addressTypes })
+      .then((r) => { if (reqId === requestIdRef.current) setResults(r); })
+      .catch(() => { if (reqId === requestIdRef.current) setResults([]); })
+      .finally(() => { if (reqId === requestIdRef.current) setLoading(false); });
+  };
+
+  // Abrir: sugerencias de la zona (Bovril y alrededores) YA cargadas, sin
+  // que el usuario tenga que escribir nada primero — solo tiene sentido en
+  // modo ciudad (en modo dirección no hay "calles sugeridas" sin tipear
+  // algo). El trigger NO es un <input>, así que abrir NO levanta el
+  // teclado — el usuario decide si quiere buscar tocando el campo de texto
+  // de adentro del panel.
+  const handleOpen = () => {
+    if (open) { setOpen(false); setQuery(''); return; }
     onActivate?.(id);
-    if (query.trim() || mode === 'direccion') return;
+    setQuery('');
+    setOpen(true);
+    if (mode === 'direccion') { setResults([]); return; }
     const reqId = ++requestIdRef.current;
     setLoading(true);
     buscarPlaces(FOCUS_HOME_QUERY, { types: addressTypes })
@@ -269,122 +317,158 @@ export function PlaceAutocomplete({ value, onChange, onSelect, placeholder, sear
       .finally(() => { if (reqId === requestIdRef.current) setLoading(false); });
   };
 
-  // Delay corto: onBlur dispara antes que el onMouseDown de un resultado del
-  // dropdown — sin el timeout, el dropdown se colapsa antes de registrar el
-  // click y "select" nunca llega a ejecutarse.
-  const handleBlur = () => {
-    setTimeout(() => {
-      setResults([]);
-      // onDeactivate recibe el id propio — el padre solo limpia el activo
-      // compartido si sigue siendo este mismo campo (si el usuario ya
-      // activó otro campo coordinado en el ínterin, ese onActivate más
-      // reciente no debe ser pisado por este blur tardío).
-      onDeactivate?.(id);
-    }, 150);
-  };
-
   useEffect(() => {
-    // No dispara en el montaje inicial (ver comentario de `mounted` arriba)
-    // — solo a partir de acá cuenta como "el usuario editó el campo".
-    if (!mounted.current) { mounted.current = true; return; }
+    if (!open) return undefined;
     clearTimeout(timerRef.current);
-    if (skipSearch.current) { skipSearch.current = false; setResults([]); return; }
-    if (!query.trim()) return; // campo vacío: deja las sugerencias que puso handleFocus
-    setLoading(true);
+    if (!query.trim()) return undefined; // campo vacío: deja las sugerencias que puso handleOpen
     const searchQ = searchSuffix ? `${query}, ${searchSuffix}` : query;
     const reqId = ++requestIdRef.current;
-    timerRef.current = setTimeout(() => {
-      buscarPlaces(searchQ, { types: addressTypes })
-        .then(r => { if (reqId === requestIdRef.current) setResults(r); })
-        .catch(() => { if (reqId === requestIdRef.current) setResults([]); })
-        .finally(() => { if (reqId === requestIdRef.current) setLoading(false); });
-    }, 350);
+    timerRef.current = setTimeout(() => buscar(searchQ, reqId), 350);
     return () => clearTimeout(timerRef.current);
-  }, [query, searchSuffix, mode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, searchSuffix, mode, open]);
 
   const select = (item) => {
     const parts = item.display_name.split(',').map(s => s.trim()).filter(Boolean);
     const label = parts.slice(0, labelParts).join(', ');
-    skipSearch.current = true;
-    setQuery(label);
-    setResults([]);
     onChange(label);
     onSelect?.({ lat: parseFloat(item.lat), lng: parseFloat(item.lon), label, displayName: item.display_name });
+    setOpen(false);
+    setQuery('');
+    onDeactivate?.(id);
   };
 
-  const clear = () => { skipSearch.current = true; setQuery(''); onChange(''); setResults([]); onSelect?.(null); };
+  const clear = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onChange('');
+    onSelect?.(null);
+  };
 
   return (
-    <div className="relative">
-      {/* Input DIRECTO con ícono/borrar absolutos encima, no un <div>
-          contenedor con focus-within — antes había DOS bordes visibles: el
-          del div exterior (focus-within:border-brand) y, al lado, el
-          borde/foco propio de otros inputs del mismo formulario, dando la
-          sensación de "doble contorno" en vez de un único campo (reportado
-          explícitamente). Mismo patrón EXACTO que la barra de búsqueda de
-          HomeGlobal.jsx: un solo <input> con su propio borde, sin ring/
-          focus-within duplicado — el :focus-visible global de index.css ya
-          resalta el borde en foco para toda la app. Tokens de marca
-          (rgb(var(--brand)/X)) en vez de slate/gris neutro, mismo criterio
-          que el resto de inputs tintados del formulario. */}
-      {loading
-        ? <Loader2 className="w-4 h-4 animate-spin text-brand absolute left-4 top-1/2 -translate-y-1/2 z-10 pointer-events-none" />
-        : <Search className="w-4 h-4 text-brand/70 absolute left-4 top-1/2 -translate-y-1/2 z-10 pointer-events-none" />
-      }
-      <input
-        value={query}
-        onChange={e => { setQuery(e.target.value); onChange(e.target.value); }}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-        placeholder={placeholder}
-        className="w-full rounded-2xl pl-10 pr-10 py-3 text-sm font-medium border outline-none transition-colors focus:border-brand"
+    <div ref={containerRef} className="relative">
+      {/* Trigger — NO es un <input>: tocarlo no levanta el teclado. Mismo
+          lenguaje que el trigger de CategoryPicker.jsx (borde de marca
+          mientras open=true), con los tokens de marca (rgb(var(--brand)/X))
+          en vez de slate/gris neutro que ya usa el resto del formulario. */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={handleOpen}
+        onKeyDown={(e) => e.key === 'Enter' && handleOpen()}
+        className="w-full flex items-center gap-2 pl-4 pr-3.5 py-3 rounded-2xl border cursor-pointer select-none transition-colors"
         style={{
-          color: 'var(--text-primary)',
           background: 'rgb(var(--brand, 0 184 217) / 0.06)',
-          borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)',
+          borderColor: open ? 'rgb(var(--brand, 0 184 217))' : 'rgb(var(--brand, 0 184 217) / 0.18)',
         }}
-      />
-      {query && (
-        <button type="button" onMouseDown={clear} className="absolute right-3.5 top-1/2 -translate-y-1/2 shrink-0">
-          <X className="w-3.5 h-3.5 transition-colors" style={{ color: 'var(--text-secondary, #999)' }} />
-        </button>
-      )}
-      {visibleResults.length > 0 && (
+      >
+        <Search className="w-4 h-4 text-brand/70 shrink-0" />
+        {value ? (
+          <span className="flex-1 min-w-0 truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{value}</span>
+        ) : (
+          <span className="flex-1 min-w-0 truncate text-sm" style={{ color: 'var(--text-secondary, #999)' }}>{placeholder}</span>
+        )}
+        {value && (
+          <button type="button" onClick={clear} className="shrink-0">
+            <X className="w-3.5 h-3.5 transition-colors" style={{ color: 'var(--text-secondary, #999)' }} />
+          </button>
+        )}
+      </div>
+
+      {open && (
         // z-[1100]: por encima de los panes internos de Leaflet (hasta
         // z-index:1000 los controles de zoom) — con z-20 el mapa de abajo
-        // tapaba este dropdown cuando ambos coexisten en el mismo modal.
+        // tapaba este panel cuando ambos coexisten en el mismo modal.
         // Fondo sólido azulado en dark (#0a1420, no --surface-solid — ese
         // token resuelve a #1f1f1f, un gris carbón NEUTRO sin componente
-        // azulado, el mismo problema que ya se corrigió antes en
-        // ProximamenteModal/LoginSheet) — un gris neutro puro no se tiñe lo
-        // suficiente con el borde translúcido de marca encima, hace falta
-        // que la base misma sea azulada. bg-[#0a1420] vía dark: en vez de
-        // style condicionado por isDark: este componente no recibe esa prop
-        // (se usa en varios lugares sin pasarla) y depender de la clase
-        // .dark del documento es más robusto que agregar una prop nueva
-        // solo para este fondo.
-        <div className="absolute top-full left-0 right-0 z-[1100] mt-2 max-h-56 overflow-y-auto rounded-2xl border shadow-lg bg-white dark:bg-[#0a1420]" style={{
+        // azulado, mismo fix que ya se aplicó en ProximamenteModal/
+        // LoginSheet) vía dark: en vez de un style condicionado por isDark:
+        // este componente no recibe esa prop (se usa en varios lugares sin
+        // pasarla) y depender de la clase .dark del documento es más
+        // robusto que agregar una prop nueva solo para este fondo.
+        <div className="absolute top-full left-0 right-0 z-[1100] mt-2 rounded-2xl border shadow-xl overflow-hidden bg-white dark:bg-[#0a1420]" style={{
           borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)',
         }}>
-          <style>{`
-            .dark .lk-place-result:not(:last-child) { border-bottom: 1px solid rgb(var(--brand, 0 184 217) / 0.12); }
-            .lk-place-result:not(:last-child) { border-bottom: 1px solid rgb(var(--brand, 0 184 217) / 0.1); }
-          `}</style>
-          {visibleResults.map((r, i) => (
-            <button
-              key={r.place_id || i}
-              type="button"
-              onMouseDown={() => select(r)}
-              className="lk-place-result w-full text-left px-4 py-3 transition-colors hover:bg-brand/[0.08]"
-            >
-              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                {r.name || r.display_name.split(',')[0]}
+          {/* Input de búsqueda REAL, con su propio borde — mismo criterio
+              que CategoryPicker.jsx: antes el borde vivía en el <div>
+              exterior (focus-within) y el input de adentro iba sin borde
+              propio, dando la sensación de doble contorno. Acá el input
+              vive DENTRO del panel, ya abierto — sin autoFocus: abrir el
+              panel no debe levantar el teclado, buscar es una elección del
+              usuario, no el paso obligatorio para empezar. */}
+          <div className="p-2 border-b" style={{ borderColor: 'rgb(var(--brand, 0 184 217) / 0.12)' }}>
+            <div className="relative">
+              {loading
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin text-brand absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                : <Search className="w-3.5 h-3.5 text-brand/70 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              }
+              <input
+                ref={searchRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar..."
+                className="w-full pl-9 pr-8 py-2 rounded-xl text-sm border outline-none transition-colors focus:border-brand"
+                style={{
+                  color: 'var(--text-primary)',
+                  background: 'rgb(var(--brand, 0 184 217) / 0.04)',
+                  borderColor: 'rgb(var(--brand, 0 184 217) / 0.14)',
+                }}
+              />
+              {query && (
+                <button type="button" onClick={() => setQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                  <X className="w-3.5 h-3.5" style={{ color: 'var(--text-secondary, #999)' }} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* "Usar mi ubicación" — primera opción del panel, no un botón
+              aparte fuera del componente. Solo sin búsqueda activa: es un
+              atajo para arrancar rápido, no un resultado de "Bovril" o lo
+              que sea que el usuario esté tipeando. */}
+          {onUbicacion && !query && (
+            <div className="p-2 border-b" style={{ borderColor: 'rgb(var(--brand, 0 184 217) / 0.12)' }}>
+              <button
+                type="button"
+                onClick={onUbicacion}
+                disabled={ubicacionLoading}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors hover:bg-brand/[0.08] disabled:opacity-60"
+                style={{ color: 'rgb(var(--brand, 0 184 217))' }}
+              >
+                {ubicacionLoading ? <Loader2 className="w-4 h-4 animate-spin shrink-0" /> : <Navigation className="w-4 h-4 shrink-0" />}
+                {ubicacionLoading ? 'Ubicando...' : 'Usar mi ubicación'}
+              </button>
+              {ubicacionError && (
+                <p className="text-[11px] font-semibold mt-1.5 px-3 text-rose-500">
+                  No pudimos acceder a tu ubicación — probá buscar tu ciudad.
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="p-2 max-h-56 overflow-y-auto">
+            {results.length === 0 && !loading && (
+              <p className="text-center text-sm py-4" style={{ color: 'var(--text-secondary, #999)' }}>
+                {query ? 'Sin resultados — probá con otro término' : 'Escribí para buscar'}
               </p>
-              <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-secondary, #999)' }}>
-                {r.display_name}
-              </p>
-            </button>
-          ))}
+            )}
+            {results.map((r, i) => (
+              <button
+                key={r.place_id || i}
+                type="button"
+                onClick={() => select(r)}
+                className="w-full text-left px-3 py-2.5 rounded-xl transition-colors hover:bg-brand/[0.08]"
+              >
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  {r.name || r.display_name.split(',')[0]}
+                </p>
+                <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-secondary, #999)' }}>
+                  {r.display_name}
+                </p>
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

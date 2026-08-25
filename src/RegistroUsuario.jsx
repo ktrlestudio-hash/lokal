@@ -22,7 +22,7 @@
  *   - términos: mismo checkbox/copy que RegistroTienda.jsx.
  */
 import React, { useState, useEffect } from 'react';
-import { Loader2, AlertCircle, Check, Navigation } from 'lucide-react';
+import { Loader2, AlertCircle, Check } from 'lucide-react';
 import { apiFetch } from './api.js';
 import { LogoFull } from './Brand';
 import { PlaceAutocomplete, reverseGeocode } from './storeFormUtils';
@@ -160,26 +160,16 @@ export default function RegistroUsuario({ firebaseUser, onCreado, onLogout, isDa
               />
             </div>
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary, #999)' }}>
-                  Ciudad o zona
-                </label>
-                <button
-                  type="button"
-                  onClick={() => geo.requestLocation()}
-                  disabled={geo.loading}
-                  className="flex items-center gap-1 text-[11px] font-bold text-brand hover:underline disabled:opacity-60"
-                >
-                  {geo.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Navigation className="w-3 h-3" />}
-                  {geo.loading ? 'Ubicando...' : 'Usar mi ubicación'}
-                </button>
-              </div>
-              <PlaceAutocomplete value={zona} onChange={setZona} placeholder="Ej: Bovril, Entre Ríos" labelParts={2} />
-              {geo.error && (
-                <p className="text-[11px] font-semibold mt-1.5 text-rose-500">
-                  No pudimos acceder a tu ubicación — probá escribir la ciudad.
-                </p>
-              )}
+              <label className="text-xs font-bold uppercase tracking-wider mb-1.5 block" style={{ color: 'var(--text-secondary, #999)' }}>
+                Ciudad o zona
+              </label>
+              <PlaceAutocomplete
+                value={zona} onChange={setZona}
+                placeholder="Ej: Bovril, Entre Ríos" labelParts={2}
+                onUbicacion={() => geo.requestLocation()}
+                ubicacionLoading={geo.loading}
+                ubicacionError={geo.error}
+              />
             </div>
           </div>
 
