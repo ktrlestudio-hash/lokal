@@ -428,7 +428,36 @@ function RootInner() {
   // hacía LoginCard.jsx (resolverWhoami) del lado del Sheet.
   const debeResolverWhoami = debeCargarTiendaDeUsuario && !loadingTienda && !tiendaFetchError && !tiendaData;
   useEffect(() => {
-    if (!debeResolverWhoami) return undefined;
+    // BUG REAL encontrado en producción (con evidencia de consola —
+    // ver el log de abajo): al navegar de "/" a "/admin" vía pushState
+    // (login desde el Sheet de Home) SIN recargar la página, `loadingTienda`
+    // arrancó con useState(isAdminRoute) evaluado en el montaje ORIGINAL en
+    // "/" (false) — no en el momento real en que se entra a /admin. Eso
+    // abre una ventana de UN render donde debeCargarTiendaDeUsuario ya es
+    // true (dispara el fetch de tienda, que recién ahí llama
+    // setLoadingTienda(true)) pero `loadingTienda` en ESE mismo render
+    // todavía vale su false viejo — debeResolverWhoami lee ese false y
+    // también se activa, dependiendo del efecto de tienda.
+    //
+    // Los dos fetches quedan en vuelo. El de tienda gana (resuelve con
+    // 200), tiendaData se setea, debeResolverWhoami pasa a false en el
+    // siguiente render → este efecto se vuelve a ejecutar con
+    // debeResolverWhoami:false → corta ACÁ MISMO sin tocar loadingUsuario.
+    // El cleanup del efecto ANTERIOR (el que sí llegó a lanzar el fetch de
+    // whoami de más) marca mounted=false, así que cuando ese fetch de
+    // whoami finalmente responde (rol:'tienda', caso ya previsto más abajo
+    // pero sin acción), su .finally() ve mounted:false y NUNCA llama
+    // setLoadingUsuario(false) — loadingUsuario queda en true para
+    // siempre, y como backofficeSinPreparar lo espera, el splash no se
+    // suelta jamás salvo con un reload real (que reevalúa loadingTienda
+    // desde cero, ya con isAdminRoute correcto).
+    //
+    // Fix: apagar loadingUsuario explícitamente CADA VEZ que este efecto
+    // se re-ejecuta y debeResolverWhoami ya no aplica — así el cleanup del
+    // efecto anterior no es la única vía para apagarlo, y no depende de
+    // que el fetch en vuelo de un efecto viejo llegue a resolver con
+    // mounted:true.
+    if (!debeResolverWhoami) { setLoadingUsuario(false); return undefined; }
     let mounted = true;
     setLoadingUsuario(true);
     setUsuarioFetchError(null);
@@ -554,40 +583,6 @@ function RootInner() {
 
   const mostrandoSplash = mostrandoSplashCrudo || inlineMinDesdeRef.current !== null;
 
-  // DEBUG TEMPORAL — diagnóstico del bug "splash queda pegado en mobile tras
-  // login con GIS, con cuenta de tienda existente; solo un reload real lo
-  // destraba" (reportado en producción — INTERMITENTE, a veces se destraba
-  // solo). El log de cada render (más abajo) NO ALCANZA para el caso real de
-  // "queda pegado de verdad": si React deja de re-renderizar (justo el
-  // síntoma), ese log deja de imprimirse — sin pista de qué pasó al final.
-  // Este setInterval, independiente del ciclo de render de React, imprime
-  // el ÚLTIMO estado conocido cada 2s MIENTRAS el splash sigue montado —
-  // si el problema es que React se queda trabado, vas a seguir viendo
-  // "[DEBUG splash] tick" con el mismo estado repetido para siempre (la
-  // pista de qué variable nunca cambió); si el problema es solo demora real
-  // (red/chunks lentos), vas a ver los tick avanzar hasta que el splash se
-  // suelte solo. Estos dos hooks tienen que vivir ACÁ (antes de cualquier
-  // return condicional, ej. el de /entrar más abajo) — moverlos después de
-  // un return rompe las reglas de hooks (orden distinto entre renders).
-  // Sacar TODO este bloque (los dos hooks y el log de después del return de
-  // /entrar) una vez encontrada la causa real — no es logging permanente.
-  const debugSplashStateRef = useRef(null);
-  debugSplashStateRef.current = {
-    IS_FIRST_LOAD, SPLASH_SECTION, splashMinCumplido, authSinResolver,
-    backofficeSinPreparar, mostrandoSplashCrudo, mostrandoSplash,
-    loadingTienda, loadingUsuario, chunksAdminListos,
-    firebaseUser: firebaseUser === undefined ? 'undefined' : (firebaseUser === null ? 'null' : firebaseUser.uid),
-    redirectChecked, isAdminRoute, vaAlBackoffice, tiendaData: !!tiendaData,
-  };
-  useEffect(() => {
-    if (!mostrandoSplash || !window.location.pathname.startsWith('/admin')) return undefined;
-    const t = setInterval(() => {
-      // eslint-disable-next-line no-console
-      console.log('[DEBUG splash] tick', Date.now(), debugSplashStateRef.current);
-    }, 2000);
-    return () => clearInterval(t);
-  }, [mostrandoSplash]);
-
   // ── Vuelta del Magic Link (/entrar) — se resuelve ANTES del gate de splash
   //    a propósito: esta pantalla hace su propio trabajo async
   //    (completarLoginConLink) y ya muestra su propio loader mientras tanto,
@@ -604,11 +599,6 @@ function RootInner() {
         onListo={() => { window.history.pushState({}, '', '/admin'); forceUrlRecheck(); }}
       />
     );
-  }
-
-  if (mostrandoSplash && window.location.pathname.startsWith('/admin')) {
-    // eslint-disable-next-line no-console
-    console.log('[DEBUG splash] render', debugSplashStateRef.current);
   }
 
   if (mostrandoSplash) return <AppLoader />;
