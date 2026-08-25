@@ -81,7 +81,26 @@ export const DESKTOP_QUERY = '(min-width: 860px), (orientation: landscape) and (
  */
 export const SECCIONES_DEFAULT = {
   hero:      { activa: true,  orden: 1, label: 'Portada',    desc: 'Logo, nombre y tagline' },
-  productos: { activa: true,  orden: 2, label: 'Catálogo',   desc: 'Grilla de productos' },
+  // activa:false (no true) — BUG REAL encontrado en producción (2026-08-25):
+  // isModuleActive() (_lib/modules.js y tienda-publica/utils.js, usado por
+  // productos-globales.js para armar "Destacados" de la Home global) falla
+  // "cerrado" a propósito si tienda.pagina.secciones.productos no existe
+  // todavía — un módulo de negocio nunca debe operar sobre una tienda sin
+  // configurar explícitamente. Pero acá (SECCIONES_DEFAULT) decía true, y
+  // tanto el editor visual ("Diseño de página", StoreApp.jsx) como la vista
+  // pública real de la tienda (resolvePagina/getSeccionesActivas) SÍ
+  // mergean con este default cuando la sección falta — dos criterios
+  // opuestos ante el MISMO dato ausente. Resultado real: una tienda que
+  // nunca tocó el switch de Catálogo veía sus productos en su propia
+  // tienda pública (el editor decía "activo"), pero esos mismos productos
+  // NUNCA entraban al feed de Destacados (isModuleActive decía "inactivo")
+  // — confirmado con datos reales de producción (tienda "donjose": 4
+  // productos válidos con precio, ausentes de Destacados hasta activar el
+  // switch a mano). false acá alinea los 3 lugares: un módulo de negocio
+  // (distinto de las secciones de diseño como hero/horarios/contacto, que
+  // sí tiene sentido que arranquen activas) queda inactivo hasta que el
+  // dueño lo activa a propósito, en todos lados por igual.
+  productos: { activa: false, orden: 2, label: 'Catálogo',   desc: 'Grilla de productos' },
   horarios:  { activa: true,  orden: 3, label: 'Horarios',   desc: 'Días y horarios de atención' },
   contacto:  { activa: true,  orden: 4, label: 'Contacto',   desc: 'WhatsApp, Instagram, teléfono' },
   galeria:   { activa: false, orden: 5, label: 'Galería',    desc: 'Fotos de la tienda' },
