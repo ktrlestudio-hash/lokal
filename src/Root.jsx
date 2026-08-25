@@ -7,6 +7,7 @@ import AdminLogin from './AdminLogin';
 import LegalPageView from './LegalPages';
 import LandingScreen from './LandingScreen';
 import HomeGlobal from './HomeGlobal';
+import EmailLinkComplete from './EmailLinkComplete';
 
 // Estas cuatro se cargan aparte, sólo cuando se entra a ellas. Antes todo
 // venía en un único bundle de 1.24 MB: alguien que llegaba a la landing
@@ -21,9 +22,11 @@ import HomeGlobal from './HomeGlobal';
 // StoreApp entra en esta lista aunque sea la más usada por el dueño: cuando
 // llega a ella ya pasó por el login, así que la descarga ocurre mientras
 // mira una pantalla que igual está esperando datos del servidor.
-const StoreApp       = lazy(() => import('./StoreApp'));
-const RegistroTienda = lazy(() => import('./RegistroTienda'));
-const AdminPanel     = lazy(() => import('./AdminPanel'));
+const StoreApp        = lazy(() => import('./StoreApp'));
+const RegistroTienda  = lazy(() => import('./RegistroTienda'));
+const RegistroUsuario = lazy(() => import('./RegistroUsuario'));
+const ElegirRolScreen = lazy(() => import('./ElegirRolScreen'));
+const AdminPanel      = lazy(() => import('./AdminPanel'));
 import { apiFetch } from './api.js';
 import { ADMIN_EMAILS } from './config/flags';
 import { TIENDA_SLUG_FIJA } from './config/constants';
@@ -56,7 +59,7 @@ function pathToLegal(pathname) {
 // 'vender' = landing comercial de venta del producto a dueños de negocio
 // (antes vivía en la raíz "/"; la raíz ahora es HomeGlobal, el marketplace
 // multi-tienda — ver el bloque de la raíz más abajo).
-const RESERVED = new Set(['admin', 'vender', 'terminos-y-condiciones', 'politica-de-privacidad', 'condiciones-para-comercios', 'quienes-somos', '']);
+const RESERVED = new Set(['admin', 'vender', 'entrar', 'terminos-y-condiciones', 'politica-de-privacidad', 'condiciones-para-comercios', 'quienes-somos', '']);
 
 // Detecta /:tienda/o/:oferta (oferta individual). Devuelve {tiendaSlug,
 // ofertaSlug} o null. El separador /o/ distingue la oferta de futuras
@@ -305,6 +308,31 @@ function RootInner() {
   const [firebaseUser, setFirebaseUser]       = useState(undefined); // undefined = sin resolver aún
   const [redirectChecked, setRedirectChecked] = useState(false);
   const [tiendaData, setTiendaData]           = useState(null);
+  // whoami: solo se resuelve DESPUÉS de saber que esta cuenta no tiene
+  // tienda (tiendaData null, ver el useEffect de abajo) — no antes. El
+  // fetch de tiendas-crud de más abajo ya distingue "tiene tienda" (200)
+  // de "no tiene" (404); lo único que le falta a Root.jsx es, en el caso
+  // "no tiene tienda", distinguir ADEMÁS "ya tiene un perfil de usuario
+  // común" de "cuenta totalmente nueva" — para eso existe
+  // GET /usuarios?whoami=1 (usuarios.js), que ya hace exactamente esa
+  // pregunta en una sola llamada. Encadenar el fetch en vez de lanzar los
+  // dos en paralelo desde el arranque evita un round-trip extra en el caso
+  // más común (dueño de tienda ya existente): ahí tiendaData llega con 200
+  // y whoami ni se llega a pedir.
+  //   usuarioData: perfil de usuario común YA resuelto (rol:'usuario').
+  //   nuevoSinRol: true cuando whoami respondió {rol:null, nuevo:true} —
+  //     cuenta de Google/email sin tienda NI perfil todavía, dispara
+  //     ElegirRolScreen.
+  const [usuarioData, setUsuarioData]         = useState(null);
+  const [nuevoSinRol, setNuevoSinRol]         = useState(false);
+  const [loadingUsuario, setLoadingUsuario]   = useState(false);
+  const [usuarioFetchError, setUsuarioFetchError] = useState(null);
+  // Elección hecha en ElegirRolScreen (solo /admin — el Sheet de HomeGlobal
+  // ya no pasa por acá, ver el onNuevo de LoginSheet.jsx): 'usuario' o
+  // 'tienda' decide si el próximo render muestra RegistroUsuario o
+  // RegistroTienda en vez de la propia ElegirRolScreen. null = todavía no
+  // eligió (o cerró sesión, ver handleLogout).
+  const [rolElegido, setRolElegido]           = useState(null);
   // Chunks lazy del backoffice (StoreApp/RegistroTienda) ya descargados —
   // el gate del splash los espera para no soltar el splash y caer en el
   // fallback del Suspense (ver el precargado en el listener de auth).
@@ -357,7 +385,7 @@ function RootInner() {
   useEffect(() => {
     if (!firebaseUser) return undefined;
     let mounted = true;
-    Promise.all([import('./StoreApp'), import('./RegistroTienda')])
+    Promise.all([import('./StoreApp'), import('./RegistroTienda'), import('./RegistroUsuario'), import('./ElegirRolScreen')])
       .catch(() => {})
       .finally(() => { if (mounted) setChunksAdminListos(true); });
     return () => { mounted = false; };
@@ -397,7 +425,41 @@ function RootInner() {
     return () => { mounted = false; };
   }, [debeCargarTiendaDeUsuario, firebaseUser]);
 
-  const handleLogout = () => { signOut(auth); setTiendaData(null); };
+  // Resolver whoami SOLO cuando ya sabemos que esta cuenta no tiene tienda
+  // (tiendaData === null, y el fetch de arriba ya terminó sin error) — ver
+  // el comentario grande junto a la declaración de usuarioData más arriba
+  // para el porqué de encadenar en vez de lanzar en paralelo. Antes de este
+  // cambio, Root.jsx solo miraba tiendas-crud y, en cualquier 404, saltaba
+  // directo a RegistroTienda — sin nunca preguntar si la cuenta ya era un
+  // "usuario común" o si hacía falta ofrecerle elegir. Esa es la asimetría
+  // que este bloque corrige: /admin ahora hace la misma pregunta que ya
+  // hacía LoginCard.jsx (resolverWhoami) del lado del Sheet.
+  const debeResolverWhoami = debeCargarTiendaDeUsuario && !loadingTienda && !tiendaFetchError && !tiendaData;
+  useEffect(() => {
+    if (!debeResolverWhoami) return undefined;
+    let mounted = true;
+    setLoadingUsuario(true);
+    setUsuarioFetchError(null);
+    apiFetch(`${API_BASE}/usuarios?whoami=1`, { authRequired: true })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`No se pudo verificar tu cuenta (${r.status})`);
+        const data = await r.json();
+        if (!mounted) return;
+        // rol:'tienda' no debería llegar acá (tiendaData ya habría
+        // resuelto 200 arriba) — cubierto solo por robustez ante una
+        // carrera rara entre los dos fetches, sin acción especial: el
+        // bloque de abajo (tiendaData) es la única fuente de verdad para
+        // el camino de dueño de tienda.
+        if (data.rol === 'usuario') { setUsuarioData(data.usuario); setNuevoSinRol(false); return; }
+        setUsuarioData(null);
+        setNuevoSinRol(true); // {rol:null, nuevo:true}
+      })
+      .catch((err) => { if (mounted) setUsuarioFetchError(err.message || 'No se pudo verificar tu cuenta. Probá de nuevo.'); })
+      .finally(() => { if (mounted) setLoadingUsuario(false); });
+    return () => { mounted = false; };
+  }, [debeResolverWhoami, firebaseUser]);
+
+  const handleLogout = () => { signOut(auth); setTiendaData(null); setUsuarioData(null); setNuevoSinRol(false); setRolElegido(null); };
 
   // enRaiz/rebotarLandingLogueada ya se declararon más arriba (justo
   // después de firebaseUser) — este hook DEBE vivir antes de cualquier
@@ -454,7 +516,13 @@ function RootInner() {
   const rutaDependeDeAuth = isAdminRoute || isAdminPanelRoute || enRaiz;
   const authSinResolver = rutaDependeDeAuth && (firebaseUser === undefined || !redirectChecked);
   const vaAlBackoffice = (isAdminRoute || rebotarLandingLogueada) && !!firebaseUser;
-  const backofficeSinPreparar = vaAlBackoffice && (loadingTienda || !chunksAdminListos);
+  // loadingUsuario: mismo criterio que loadingTienda — sin esperarlo acá,
+  // el hueco entre "tiendaData resolvió 404" y "whoami todavía no
+  // contestó" dejaba pasar un frame con el splash ya suelto (mostrando
+  // fugazmente RegistroTienda antes de que ElegirRolScreen/RegistroUsuario
+  // tomaran el control), el mismo tipo de parpadeo que este gate entero
+  // existe para evitar.
+  const backofficeSinPreparar = vaAlBackoffice && (loadingTienda || loadingUsuario || !chunksAdminListos);
   const mostrandoSplashCrudo = !splashMinCumplido || authSinResolver || backofficeSinPreparar;
 
   // Piso de tiempo mínimo TAMBIÉN para InlineLoader — el comentario de
@@ -493,6 +561,24 @@ function RootInner() {
   }, [mostrandoSplashCrudo]);
 
   const mostrandoSplash = mostrandoSplashCrudo || inlineMinDesdeRef.current !== null;
+
+  // ── Vuelta del Magic Link (/entrar) — se resuelve ANTES del gate de splash
+  //    a propósito: esta pantalla hace su propio trabajo async
+  //    (completarLoginConLink) y ya muestra su propio loader mientras tanto,
+  //    así que no tiene sentido esperar a que splashMinCumplido/auth/tienda
+  //    resuelvan primero — solo agregaría una espera doble. Al terminar
+  //    empuja a /admin con pushState (no location.href, evita el flash de
+  //    recarga): el onAuthStateChanged global de más arriba ya deja
+  //    firebaseUser listo, así que el bloque isAdminRoute de abajo resuelve
+  //    tienda/registro con la sesión ya activa en el próximo render. ───────
+  if (window.location.pathname === '/entrar') {
+    return (
+      <EmailLinkComplete
+        isDark={isDark}
+        onListo={() => { window.history.pushState({}, '', '/admin'); forceUrlRecheck(); }}
+      />
+    );
+  }
 
   if (mostrandoSplash) return <AppLoader />;
 
@@ -641,20 +727,111 @@ function RootInner() {
       );
     }
     const esAdminLogueado = firebaseUser.email && ADMIN_EMAILS.includes(firebaseUser.email.toLowerCase());
-    // Logueado sin tienda propia → registro (trial abierto o invitación,
-    // según REGISTRO_MODO). Al crearla, onTiendaUpdate la deja lista para
-    // el banner de evaluación de abajo (verificada:false salvo invitación).
+    // Logueado sin tienda propia: antes de esto Root.jsx saltaba DIRECTO a
+    // RegistroTienda apenas tiendas-crud devolvía 404, sin preguntar nada —
+    // asimetría real contra el Sheet (LoginCard.jsx), que sí sabía
+    // distinguir "ya es un usuario común" / "cuenta nueva, elegí". Ahora
+    // /admin hace la misma pregunta (vía whoami, ver debeResolverWhoami
+    // más arriba) antes de decidir qué mostrar.
     if (!tiendaData) {
+      // whoami todavía en vuelo — no debería verse en la práctica porque
+      // backofficeSinPreparar ya lo cubre en el gate del splash (más
+      // arriba), pero se deja como red de seguridad explícita en vez de
+      // asumir que ese gate nunca cambia.
+      if (loadingUsuario) return <AppLoader />;
+      if (usuarioFetchError) {
+        return (
+          <div className="min-h-screen flex items-center justify-center px-6 text-center" style={{ background: 'var(--surface-solid, #0a0a0a)', color: 'var(--text-primary, #fff)' }}>
+            <div>
+              <p className="font-bold mb-2">{usuarioFetchError}</p>
+              <button onClick={() => window.location.reload()} className="text-xs underline" style={{ color: 'var(--text-secondary, #999)' }}>Reintentar</button>
+            </div>
+          </div>
+        );
+      }
+      // rol:'usuario' — esta cuenta YA tiene un perfil de usuario común,
+      // pero /admin es exclusivamente el backoffice de dueños de tienda
+      // (palabras del propio dueño del producto). Decisión: NO mandarlo a
+      // RegistroTienda (crearía una tienda de prueba no pedida) ni dejarlo
+      // colgado en un loader — un mensaje claro con una salida real a Home,
+      // que es donde ese perfil de usuario sí tiene sentido (favoritos,
+      // seguir tiendas). Mismo lenguaje visual (fondo + texto) que el error
+      // de red de arriba, sin inventar un tercer estilo de pantalla de error.
+      if (usuarioData) {
+        return (
+          <div className="min-h-screen flex items-center justify-center px-6 text-center" style={{ background: 'var(--surface-solid, #0a0a0a)', color: 'var(--text-primary, #fff)' }}>
+            <div className="max-w-xs">
+              <p className="font-bold mb-2">Esta cuenta no tiene una tienda</p>
+              <p className="text-sm mb-5" style={{ color: 'var(--text-secondary, #999)' }}>
+                /admin es el panel de administración para dueños de tienda. Tu cuenta es de usuario — segui explorando tiendas desde el Home.
+              </p>
+              <button
+                onClick={() => { window.history.pushState({}, '', '/'); forceUrlRecheck(); }}
+                className="w-full mb-3 py-3 rounded-2xl text-sm font-bold text-white transition-all active:scale-[0.98]"
+                style={{ background: 'var(--brand-hex, #00B8D9)' }}
+              >
+                Ir al Home
+              </button>
+              <button onClick={handleLogout} className="text-xs underline" style={{ color: 'var(--text-secondary, #999)' }}>Cerrar sesión</button>
+            </div>
+          </div>
+        );
+      }
+      // nuevoSinRol (whoami: {rol:null, nuevo:true}) — cuenta totalmente
+      // nueva. rolElegido decide entre la pantalla de elección y el
+      // formulario correspondiente; ambos con el mismo Suspense/fallback
+      // que ya usa el resto de este bloque.
+      if (nuevoSinRol) {
+        if (rolElegido === 'usuario') {
+          return (
+            <Suspense fallback={<AppLoader />}>
+              <RegistroUsuario
+                firebaseUser={firebaseUser}
+                isDark={isDark}
+                onCreado={(usuario) => { setUsuarioData(usuario); setNuevoSinRol(false); }}
+                onLogout={handleLogout}
+              />
+            </Suspense>
+          );
+        }
+        if (rolElegido === 'tienda') {
+          return (
+            <Suspense fallback={<AppLoader />}>
+              <RegistroTienda
+                firebaseUser={firebaseUser}
+                isDark={isDark}
+                onCreada={setTiendaData}
+                onLogout={handleLogout}
+                onIrAlPanelAdmin={esAdminLogueado ? () => { window.history.pushState({}, '', '/admin/panel'); forceUrlRecheck(); } : null}
+              />
+            </Suspense>
+          );
+        }
+        return (
+          <Suspense fallback={<AppLoader />}>
+            <ElegirRolScreen
+              firebaseUser={firebaseUser}
+              isDark={isDark}
+              onElegirUsuario={() => setRolElegido('usuario')}
+              onElegirTienda={() => setRolElegido('tienda')}
+              onLogout={handleLogout}
+            />
+          </Suspense>
+        );
+      }
+      // Fallback defensivo: whoami ya resolvió (no loading, sin error) pero
+      // ninguno de los tres casos de arriba aplicó — no debería ser
+      // alcanzable (usuarioData/nuevoSinRol son mutuamente excluyentes y
+      // siempre se setean juntos en el effect de whoami), pero antes que
+      // dejar una pantalla en blanco se trata igual que "cuenta nueva".
       return (
         <Suspense fallback={<AppLoader />}>
-          <RegistroTienda
+          <ElegirRolScreen
             firebaseUser={firebaseUser}
-            onCreada={setTiendaData}
+            isDark={isDark}
+            onElegirUsuario={() => setRolElegido('usuario')}
+            onElegirTienda={() => setRolElegido('tienda')}
             onLogout={handleLogout}
-            // /admin también es el punto de entrada de login para dueños de
-            // tienda — un admin que se loguea acá (sin tienda propia) puede
-            // querer ir a /admin/panel en vez de crear una tienda de prueba.
-            onIrAlPanelAdmin={esAdminLogueado ? () => { window.history.pushState({}, '', '/admin/panel'); forceUrlRecheck(); } : null}
           />
         </Suspense>
       );

@@ -1,5 +1,5 @@
-// LoginCard — el contenido REAL de la card de login (logo, ilustración de
-// ciudad, título/subtítulo, botón "Continuar con Google", error, legal),
+// LoginCard — el contenido REAL de la card de login/registro (logo,
+// ilustración de ciudad, jerarquía ID-Lokal → Google/Apple → email, legal),
 // extraído de AdminLogin.jsx para que un mismo diseño ya pulido sirva en
 // los DOS lugares donde hace falta iniciar sesión: la pantalla completa de
 // /admin (AdminLogin.jsx, sigue existiendo tal cual para quien llega ahí
@@ -13,10 +13,39 @@
 // "tienda" (es la URL /admin). LoginCard sí lo necesita porque el mismo
 // botón de Google en HomeGlobal puede terminar en cualquiera de los tres
 // destinos (ver LoginSheet.jsx).
+//
+// ── Rediseño de jerarquía (2026-08) ─────────────────────────────────────
+// Antes esto era "un botón de Google solo". El pedido fue replantear TODA
+// la jerarquía: un usuario nuevo vs. uno existente tienen que entender en
+// 1-2 segundos qué botón les corresponde, y Google no puede ser el único
+// CTA (no todos tienen cuenta de Google, y hay que dejar lugar a un futuro
+// ID de Lokal + contraseña como método PRINCIPAL).
+//
+// Lo que este archivo resuelve hoy, y lo que deja preparado sin construir:
+//   - ID de Lokal + contraseña: la UI completa (inputs, validación de
+//     formato en el cliente, chequeo de disponibilidad) YA está acá, pero
+//     el submit no pega contra ningún backend real — no existe todavía
+//     tabla de usuarios con contraseña ni hashing. Toca ese botón y ves un
+//     mensaje claro de "todavía no", nunca un error confuso ni un login
+//     simulado. Ver simularDisponibilidadId() más abajo: el único lugar
+//     donde se podría enchufar un endpoint real de disponibilidad el día
+//     que exista, sin tocar el resto del componente.
+//   - Google: sigue siendo el mismo mecanismo GIS/FedCM maduro de
+//     useBotonGoogleGIS (con su fallback a popup) — NO se tocó su lógica
+//     interna, solo el lugar que ocupa en la jerarquía visual.
+//   - Apple: botón con tratamiento de marca real, pero deshabilitado con
+//     mensaje "Próximamente" — no hay cuenta de Apple Developer todavía
+//     (ver ProximamenteModal, mismo patrón que ya usa el resto de la app
+//     para funciones visibles-pero-no-listas).
+//   - Email Magic Link: es el único método nuevo 100% funcional — pega
+//     contra Firebase de verdad (enviarLinkDeAcceso en firebase.js).
+//   - Teléfono/WhatsApp: ni siquiera aparece en esta versión (pedido
+//     explícito: no debe ser protagonista, y esta pasada no lo construye).
 import React, { useState } from 'react';
-import { Loader2, AlertCircle, Store, UserRound, HelpCircle, ArrowRight } from 'lucide-react';
+import { Loader2, AlertCircle, Store, UserRound, HelpCircle, ArrowRight, Check, X as XIcon, Mail, Lock, AtSign, Sparkles } from 'lucide-react';
 import CiudadIlustrada from './CiudadIlustrada';
-import { signInWithGoogle, auth } from '../firebase';
+import ProximamenteModal from './ProximamenteModal';
+import { signInWithGoogle, auth, enviarLinkDeAcceso } from '../firebase';
 import { apiFetch } from '../api';
 import { API_BASE } from '../config/flags';
 import { KtrlMark } from '../Brand';
@@ -36,6 +65,54 @@ const GoogleIcon = ({ size = 20 }) => (
   </svg>
 );
 
+// Glifo oficial de Apple — un solo trazo, hereda `currentColor` (así se
+// invierte solo entre el botón claro/oscuro, igual que el resto de íconos
+// lucide de este archivo, sin necesitar una variante de color aparte).
+const AppleIcon = ({ size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M16.365 1.43c0 1.14-.415 2.06-1.245 2.78-.83.72-1.83 1.14-2.995 1.05-.05-1.1.415-2.13 1.245-2.9.83-.79 1.865-1.24 3.005-1.31-.005.06-.01.25-.01.38zm4.02 16.5c-.585 1.34-1.29 2.63-2.115 3.87-1.135 1.71-2.315 3.42-4.155 3.45-1.815.03-2.4-1.07-4.475-1.07-2.075 0-2.72 1.04-4.44 1.1-1.775.06-3.13-1.83-4.27-3.53C-.985 18.02-1.98 12.53.755 8.86c1.36-1.82 3.78-2.98 6.185-3.02 1.79-.03 3.48 1.2 4.575 1.2 1.09 0 3.135-1.49 5.29-1.27.9.04 3.43.36 5.055 2.74-.13.08-3.02 1.76-2.99 5.26.035 4.18 3.68 5.58 3.72 5.6-.03.09-.585 2-1.935 3.96l.28-.4z"/>
+  </svg>
+);
+
+// Contraseña visible/oculta — mismo par lucide que el resto de la app usa
+// para toggles de este tipo.
+import { Eye, EyeOff } from 'lucide-react';
+
+// ─── Validación de formato del ID de Lokal (solo del lado del cliente) ───
+// Reglas: minúsculas, números y guión bajo; entre 3 y 20 caracteres;
+// arranca con una letra (no un número o "_", para que siempre se lea como
+// un nombre). Esto es SOLO formato — no confirma disponibilidad real, eso
+// necesitaría un backend que hoy no existe (ver simularDisponibilidadId).
+const ID_LOKAL_REGEX = /^[a-z][a-z0-9_]{2,19}$/;
+
+function validarFormatoId(valor) {
+  if (!valor) return null; // sin tocar todavía, no mostrar error
+  if (valor.length < 3) return 'Muy corto — mínimo 3 caracteres.';
+  if (valor.length > 20) return 'Muy largo — máximo 20 caracteres.';
+  if (!/^[a-z]/.test(valor)) return 'Tiene que empezar con una letra.';
+  if (!ID_LOKAL_REGEX.test(valor)) return 'Solo minúsculas, números y guión bajo.';
+  return null;
+}
+
+// Disponibilidad SIMULADA — no hay endpoint real de "¿está libre este ID?"
+// todavía (necesitaría una tabla de usuarios con ID único, que tampoco
+// existe). Esta función es la ÚNICA pieza a reemplazar el día que ese
+// backend exista: cambiar el cuerpo por un GET real a
+// `${API_BASE}/usuarios?checkId=...` y todo lo demás (debounce, estados
+// visuales ✓/✕, alternativas sugeridas) sigue funcionando igual.
+//
+// Determinístico por texto (no random): así un mismo ID muestra siempre el
+// mismo resultado durante toda la sesión de prueba, en vez de parpadear
+// entre disponible/ocupado en cada tecla — más creíble como demo de la UI.
+function simularDisponibilidadId(id) {
+  const ocupados = new Set(['admin', 'lokal', 'katriel', 'test', 'usuario', 'tienda', 'root']);
+  return !ocupados.has(id);
+}
+
+function sugerirAlternativas(id) {
+  return [`${id}${Math.floor(Math.random() * 90 + 10)}`, `${id}_ok`, `el_${id}`];
+}
+
 /**
  * @param {boolean} isDark
  * @param {boolean} whoami - si true, tras el login llama a GET /usuarios?whoami=1
@@ -44,6 +121,15 @@ const GoogleIcon = ({ size = 20 }) => (
  *   siempre.
  * @param {() => void} onEsTienda
  * @param {(usuario) => void} onEsUsuario
+ * @param {() => void} [onNuevo] - cuenta sin tienda ni perfil todavía
+ *   (whoami devolvió {rol:null, nuevo:true}). Si se pasa, reemplaza el paso
+ *   interno 'elegir-rol' (dos botones chicos en este mismo panel) por una
+ *   navegación hacia afuera — hoy lo usa LoginSheet.jsx para llevar a la
+ *   pantalla completa ElegirRolScreen.jsx (ver Root.jsx), que es donde vive
+ *   ahora el pulido "a pantalla completa" que pidió el dueño del producto.
+ *   Si NO se pasa (AdminLogin no lo necesita: whoami=false ahí, nunca
+ *   llega a este branch), se mantiene el paso interno de siempre como
+ *   fallback — ningún caller queda roto por no migrar.
  * @param {string} titulo
  * @param {string} subtitulo
  * @param {number} ilustracionAltura
@@ -56,27 +142,60 @@ const GoogleIcon = ({ size = 20 }) => (
  *   Default true (AdminLogin la sigue mostrando tal cual) — se puede
  *   ocultar en contextos más compactos (ej. el sheet de HomeGlobal) sin
  *   sacar el componente, para reusarla en otro lado más adelante.
+ * @param {number} mountDelayMs - retraso antes de pedirle el botón real a
+ *   Google — 0 en AdminLogin (pantalla completa, sin animación de entrada),
+ *   > 0 en LoginSheet (sheet con transform entrando, ver ese componente).
  */
 export default function LoginCard({
   isDark,
   whoami = false,
   onEsTienda,
   onEsUsuario,
-  titulo = 'Panel de tienda',
-  subtitulo = 'Iniciá sesión con tu cuenta de Google para administrar tu tienda.',
+  onNuevo,
+  titulo,
+  subtitulo,
   ilustracionAltura = 200,
   mostrarQueEsLokal = false,
   mostrarIlustracion = true,
-  // mountDelayMs: retraso antes de pedirle el botón real a Google — 0 en
-  // AdminLogin (pantalla completa, sin animación de entrada), > 0 en
-  // LoginSheet (sheet con transform entrando, ver ese componente).
   mountDelayMs = 0,
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  // 'google' = botón de Google; 'elegir-rol' = correo nuevo, elegir tienda
-  // o usuario (solo relevante cuando whoami=true).
-  const [paso, setPaso] = useState('google');
+  // 'login' | 'registro' | 'elegir-rol'. 'elegir-rol' solo es alcanzable
+  // con whoami=true, tras un login exitoso sin tienda/usuario asociado
+  // todavía — igual que antes, no cambia con este rediseño.
+  const [modo, setModo] = useState('login');
+  const [paso, setPaso] = useState('metodos'); // 'metodos' | 'elegir-rol'
+
+  // Bloque ID de Lokal + contraseña: SIEMPRE colapsado de entrada, en
+  // AdminLogin y en el sheet por igual. El brief original lo pedía como
+  // método principal expandido, pero en la práctica (con Google + Apple +
+  // Email también en pantalla) dos inputs abiertos de una empujaban todo
+  // el resto fuera de vista y el ID de Lokal — que hoy ni siquiera tiene
+  // backend real — terminaba "robándose" el protagonismo que debería tener
+  // Google (el único método que de verdad funciona sin fricción hoy).
+  // Ajuste explícito del usuario: bajarlo a un botón más, al final de la
+  // lista, con el mismo peso visual que Google/Apple/Email.
+  //
+  // metodoAbierto: 'id' | 'email' | null — un único estado en vez de dos
+  // booleanos independientes (idExpandido + emailModo) para que abrir uno
+  // cierre el otro automáticamente. Con dos flags separados, tocar
+  // "Continuar con email" y después "Continuar con ID de Lokal" dejaba los
+  // DOS formularios abiertos a la vez, sumando de nuevo toda la altura que
+  // este mismo rediseño buscaba evitar.
+  const [metodoAbierto, setMetodoAbierto] = useState(null);
+  const idExpandido = metodoAbierto === 'id';
+  const emailModo = metodoAbierto === 'email';
+  const [idValor, setIdValor] = useState('');
+  const [passValor, setPassValor] = useState('');
+  const [passVisible, setPassVisible] = useState(false);
+  const [idMsg, setIdMsg] = useState(null); // { ok, texto, alternativas? } tras tocar el campo
+  const [emailValor, setEmailValor] = useState('');
+  const [emailEnviado, setEmailEnviado] = useState(false);
+  const [appleProximamente, setAppleProximamente] = useState(false);
+  // Mensaje inline (no toast) para el submit de ID+contraseña — "todavía
+  // no disponible", ver handleSubmitIdPassword.
+  const [idPasswordAviso, setIdPasswordAviso] = useState(null);
 
   const elegirUsuario = () => {
     // Optimista: se avisa al padre YA con un perfil armado en el cliente,
@@ -97,10 +216,12 @@ export default function LoginCard({
     }).catch(() => { /* el perfil optimista ya se está usando; un fallo acá es un caso raro que no bloquea la navegación */ });
   };
 
-  // Lógica compartida por los DOS caminos de login: el fallback de popup
-  // (handleGoogle) y el sheet nativo de GIS (onLogin del hook, más abajo).
-  // Ambos terminan con un usuario real de Firebase ya autenticado — desde
-  // ahí en más el flujo es idéntico sin importar cómo se logueó.
+  // Lógica compartida por TODOS los caminos de login que terminan con una
+  // sesión real de Firebase (Google popup, Google GIS, Email Magic Link
+  // vía Root.jsx→/admin): resuelve tienda/usuario/nuevo. A partir de acá el
+  // flujo es idéntico sin importar cómo se logueó — es justamente la idea
+  // de "un solo user_id interno" del brief: Firebase Auth ya lo resuelve
+  // solo, no hace falta reconciliar identidades del lado de LOKAL.
   const resolverWhoami = async () => {
     if (!whoami) return; // AdminLogin: Root.jsx toma el control con onAuthStateChanged
 
@@ -110,6 +231,11 @@ export default function LoginCard({
 
     if (data.rol === 'tienda') { onEsTienda(); return; }
     if (data.rol === 'usuario') { onEsUsuario(data.usuario); return; }
+    // Cuenta nueva (sin tienda ni perfil): si el caller migró a la pantalla
+    // completa (onNuevo, ver LoginSheet.jsx), navegar ahí en vez de abrir el
+    // paso interno chico — ver el comentario de onNuevo en la firma de
+    // arriba para el porqué.
+    if (onNuevo) { onNuevo(); return; }
     setPaso('elegir-rol');
   };
 
@@ -241,6 +367,61 @@ export default function LoginCard({
     }, 900);
   };
 
+  // ─── ID de Lokal + contraseña (UI preparada, sin backend real) ─────────
+  const idErrorFormato = validarFormatoId(idValor);
+  const idDebounceRef = React.useRef(null);
+  const handleIdChange = (valor) => {
+    const limpio = valor.toLowerCase().replace(/[^a-z0-9_]/g, '');
+    setIdValor(limpio);
+    setIdMsg(null);
+    if (idDebounceRef.current) clearTimeout(idDebounceRef.current);
+    // Solo tiene sentido chequear disponibilidad en modo registro (en
+    // login el ID YA existe o no, no se está "reservando" nada) y solo si
+    // el formato ya es válido.
+    if (modo !== 'registro' || validarFormatoId(limpio)) return;
+    idDebounceRef.current = setTimeout(() => {
+      const libre = simularDisponibilidadId(limpio);
+      setIdMsg(libre
+        ? { ok: true, texto: 'Disponible' }
+        : { ok: false, texto: 'Ya está en uso', alternativas: sugerirAlternativas(limpio) });
+    }, 350);
+  };
+
+  const handleSubmitIdPassword = (e) => {
+    e.preventDefault();
+    // Sin backend real de contraseñas: no se intenta ni se simula un login
+    // — mensaje honesto, sin romper el formulario ni perder lo escrito.
+    setIdPasswordAviso(
+      modo === 'registro'
+        ? 'Muy pronto vas a poder crear tu ID de Lokal. Mientras tanto, entrá con Google o por email.'
+        : 'El acceso con ID de Lokal y contraseña todavía no está disponible. Entrá con Google o por email.'
+    );
+  };
+
+  // ─── Email Magic Link ───────────────────────────────────────────────────
+  const handleEnviarLink = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      await enviarLinkDeAcceso(emailValor.trim());
+      setEmailEnviado(true);
+    } catch (err) {
+      setError(err.code === 'auth/invalid-email' ? 'Ese email no es válido.' : (err.message || 'No se pudo enviar el enlace'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cambiarModo = (nuevo) => {
+    setModo(nuevo);
+    setError(null);
+    setIdPasswordAviso(null);
+    setMetodoAbierto(null);
+    setEmailEnviado(false);
+    setIdMsg(null);
+  };
+
   if (paso === 'elegir-rol') {
     return (
       <>
@@ -285,6 +466,23 @@ export default function LoginCard({
     );
   }
 
+  // Copy por defecto según el modo — el brief pide títulos distintos para
+  // "Entrá a Lokal" (login) vs. "Creá tu cuenta" (registro), sección 8/9.
+  // Si el caller pasó titulo/subtitulo explícitos (LoginSheet, AdminLogin
+  // hoy no lo hace) se respetan tal cual en modo login; en registro el
+  // título siempre cambia porque es una intención distinta del usuario,
+  // no algo que el caller deba prever de antemano.
+  const tituloFinal = modo === 'registro' ? 'Creá tu cuenta' : (titulo || 'Entrá a Lokal');
+  const subtituloFinal = modo === 'registro'
+    ? 'Elegí tu ID de Lokal — es gratis y toma un minuto.'
+    : (subtitulo || 'Iniciá sesión para continuar.');
+
+  const inputBase = {
+    color: 'var(--text-primary)',
+    background: 'rgb(var(--brand, 0 184 217) / 0.06)',
+    borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)',
+  };
+
   return (
     <>
       {mostrarIlustracion && (
@@ -293,10 +491,10 @@ export default function LoginCard({
         </div>
       )}
       <h1 className="font-black mb-1" style={{ color: 'var(--text-primary, #fff)', fontSize: 'clamp(1.25rem, 1.6vw, 1.5rem)' }}>
-        {titulo}
+        {tituloFinal}
       </h1>
-      <p className="mb-8" style={{ color: 'var(--text-secondary, #999)', fontSize: 'clamp(.875rem, 1vw, .9375rem)' }}>
-        {subtitulo}
+      <p className="mb-6" style={{ color: 'var(--text-secondary, #999)', fontSize: 'clamp(.875rem, 1vw, .9375rem)' }}>
+        {subtituloFinal}
       </p>
 
       {error && (
@@ -306,8 +504,19 @@ export default function LoginCard({
         </div>
       )}
 
-      {/* La cara visual es SIEMPRE este botón (nunca el pill nativo que
-          Google dibuja) — abajo, superpuesto e invisible, va el iframe
+      {/* ── Métodos de acceso, todos con el mismo peso visual ──────────────
+          Ajuste explícito del usuario tras ver el primer preview: con dos
+          formularios (ID+contraseña Y luego Google/Apple/Email) apilados,
+          la pantalla quedaba demasiado alta y el ID de Lokal — que hoy ni
+          siquiera tiene backend real — se robaba el protagonismo que debía
+          tener Google (el único método sin fricción real hoy). Google va
+          primero, después Apple y Email, y el ID de Lokal cierra la lista
+          como un botón más — mismo tratamiento visual que los demás, sin
+          divisor "o" entre ellos porque ya no hay un principal/alternativo,
+          es una sola lista pareja. */}
+
+      {/* La cara visual de Google es SIEMPRE este botón (nunca el pill nativo
+          que Google dibuja) — abajo, superpuesto e invisible, va el iframe
           real de Google Identity Services: es lo que recibe el click y
           dispara el sheet nativo del sistema en vez de una ventana
           emergente. handleGoogle (el <button> visible) queda como
@@ -319,15 +528,28 @@ export default function LoginCard({
           antesDeTocar) ANTES de saber a quién le llega el click, así
           funciona sin importar si el toque terminó en el iframe o en el
           botón de abajo. */}
-      <div className="relative" onPointerDown={antesDeTocar}>
+      <div className="relative mb-2.5" onPointerDown={antesDeTocar}>
         <button
           ref={botonRef}
           onClick={handleGoogle}
           disabled={loading || gisEnCurso}
-          className="w-full flex items-center justify-center gap-3 bg-ink dark:bg-white hover:bg-ink/90 dark:hover:bg-white/90 text-white dark:text-[#18181b] font-bold rounded-2xl transition-all shadow-lg hover:shadow-xl disabled:opacity-60 active:scale-[0.98]"
-          style={{ padding: 'clamp(14px, 1.4vw, 17px) clamp(24px, 2vw, 28px)', fontSize: 'clamp(.9375rem, 1vw, 1.0625rem)' }}
+          className="w-full flex items-center justify-center gap-3 rounded-2xl transition-all active:scale-[0.98] disabled:opacity-60 border"
+          style={{
+            padding: '13px 20px',
+            fontSize: '.9rem',
+            fontWeight: 700,
+            color: 'var(--text-primary)',
+            // rgb(var(--brand)/X) tintado, NO blanco/transparente sólido: en
+            // el Sheet (LoginSheet.jsx) el panel entero YA es blanco puro
+            // en light, así que un botón #fff encima se fundía con el
+            // fondo y se veía "sin relleno" (reportado en producción) —
+            // mismo bug que ya se había resuelto para el panel del
+            // ProximamenteModal con el mismo criterio de base tintada.
+            background: 'rgb(var(--brand, 0 184 217) / 0.05)',
+            borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)',
+          }}
         >
-          {(loading || gisEnCurso) ? <Loader2 className="w-5 h-5 animate-spin" /> : <GoogleIcon size={20} />}
+          {(loading || gisEnCurso) ? <Loader2 className="w-4.5 h-4.5 animate-spin" /> : <GoogleIcon size={18} />}
           {(loading || gisEnCurso) ? 'Entrando...' : 'Continuar con Google'}
         </button>
         {/* pointerEvents:none cuando gisActivo pasa a false (timeout de
@@ -372,21 +594,230 @@ export default function LoginCard({
         </div>
       </div>
 
+      {/* Apple — mismo tratamiento visual de marca (ícono + texto), pero
+          deshabilitado: no hay cuenta de Apple Developer todavía para dar
+          de alta Sign in with Apple. Un botón ausente se hubiera leído
+          como "LOKAL no piensa en iPhone"; uno presente-pero-honesto deja
+          la promesa visible sin fingir que funciona. */}
+      <button
+        type="button"
+        onClick={() => setAppleProximamente(true)}
+        className="w-full flex items-center justify-center gap-3 rounded-2xl transition-all active:scale-[0.98] border mb-2.5"
+        style={{
+          padding: '13px 20px',
+          fontSize: '.9rem',
+          fontWeight: 700,
+          color: 'var(--text-primary)',
+          background: 'rgb(var(--brand, 0 184 217) / 0.05)',
+          borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)',
+        }}
+      >
+        <AppleIcon size={18} />
+        Continuar con Apple
+      </button>
+
+      {/* Email Magic Link — único método alternativo 100% nuevo y
+          funcional (enviarLinkDeAcceso, firebase.js). Progressive
+          disclosure: el botón despliega el input, no lo muestra de una. */}
+      {!emailModo ? (
+        <button
+          type="button"
+          onClick={() => setMetodoAbierto('email')}
+          className="w-full flex items-center justify-center gap-3 rounded-2xl transition-all active:scale-[0.98] border"
+          style={{
+            padding: '13px 20px',
+            fontSize: '.9rem',
+            fontWeight: 700,
+            color: 'var(--text-primary)',
+            // rgb(var(--brand)/X) tintado, NO blanco/transparente sólido: en
+            // el Sheet (LoginSheet.jsx) el panel entero YA es blanco puro
+            // en light, así que un botón #fff encima se fundía con el
+            // fondo y se veía "sin relleno" (reportado en producción) —
+            // mismo bug que ya se había resuelto para el panel del
+            // ProximamenteModal con el mismo criterio de base tintada.
+            background: 'rgb(var(--brand, 0 184 217) / 0.05)',
+            borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)',
+          }}
+        >
+          <Mail className="w-[18px] h-[18px]" />
+          Continuar con email
+        </button>
+      ) : emailEnviado ? (
+        <div className="rounded-2xl p-4 text-left bg-brand/[0.08]">
+          <p className="text-sm font-bold mb-1" style={{ color: 'var(--text-primary)' }}>Revisá tu correo</p>
+          <p className="text-xs" style={{ color: 'var(--text-secondary, #999)' }}>
+            Te enviamos un enlace a <strong>{emailValor}</strong> para entrar sin contraseña. Abrilo desde este mismo dispositivo si podés.
+          </p>
+        </div>
+      ) : (
+        <form onSubmit={handleEnviarLink} className="text-left">
+          <div className="relative mb-2">
+            <Mail className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-secondary, #999)' }} />
+            <input
+              type="email"
+              required
+              autoFocus
+              value={emailValor}
+              onChange={(e) => setEmailValor(e.target.value)}
+              placeholder="Escribí tu email"
+              className="w-full rounded-2xl pl-10 pr-4 py-3.5 text-sm font-medium outline-none border transition-colors focus:border-brand"
+              style={inputBase}
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-2 bg-ink dark:bg-white hover:bg-ink/90 dark:hover:bg-white/90 text-white dark:text-[#18181b] font-bold rounded-2xl py-3.5 transition-all active:scale-[0.98] disabled:opacity-60"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {loading ? 'Enviando...' : 'Enviar enlace'}
+          </button>
+          <p className="text-[11px] mt-2" style={{ color: 'var(--text-secondary, #999)' }}>
+            Te enviaremos un enlace para entrar sin contraseña.
+          </p>
+        </form>
+      )}
+
+      {/* ID de Lokal + contraseña — último de la lista, mismo peso visual
+          que Google/Apple/Email. Colapsado siempre (idExpandido arranca en
+          false): dos inputs abiertos de entrada, siendo el método que hoy
+          menos funciona (sin backend real), era exactamente lo que sobraba
+          en altura. */}
+      {!idExpandido ? (
+        <button
+          type="button"
+          onClick={() => setMetodoAbierto('id')}
+          className="w-full flex items-center justify-center gap-3 rounded-2xl transition-all active:scale-[0.98] border mt-2.5"
+          style={{
+            padding: '13px 20px',
+            fontSize: '.9rem',
+            fontWeight: 700,
+            color: 'var(--text-primary)',
+            // rgb(var(--brand)/X) tintado, NO blanco/transparente sólido: en
+            // el Sheet (LoginSheet.jsx) el panel entero YA es blanco puro
+            // en light, así que un botón #fff encima se fundía con el
+            // fondo y se veía "sin relleno" (reportado en producción) —
+            // mismo bug que ya se había resuelto para el panel del
+            // ProximamenteModal con el mismo criterio de base tintada.
+            background: 'rgb(var(--brand, 0 184 217) / 0.05)',
+            borderColor: 'rgb(var(--brand, 0 184 217) / 0.18)',
+          }}
+        >
+          <AtSign className="w-[18px] h-[18px]" />
+          {modo === 'registro' ? 'Elegí tu ID de Lokal' : 'Continuar con ID de Lokal'}
+        </button>
+      ) : (
+        <form onSubmit={handleSubmitIdPassword} className="text-left mt-2.5">
+          <label className="block text-[11px] font-bold mb-1.5" style={{ color: 'var(--text-secondary, #999)' }}>
+            {modo === 'registro' ? 'Elegí tu ID de Lokal' : 'ID de Lokal'}
+          </label>
+          <div className="relative mb-1">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-sm" style={{ color: 'var(--text-secondary, #999)' }}>@</span>
+            <input
+              type="text"
+              value={idValor}
+              onChange={(e) => handleIdChange(e.target.value)}
+              placeholder="tuusuario"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              className="w-full rounded-2xl pl-8 pr-10 py-3.5 text-sm font-medium outline-none border transition-colors focus:border-brand"
+              style={inputBase}
+            />
+            {modo === 'registro' && idValor && !idErrorFormato && idMsg && (
+              idMsg.ok
+                ? <Check className="w-4 h-4 absolute right-4 top-1/2 -translate-y-1/2 text-emerald-500" />
+                : <XIcon className="w-4 h-4 absolute right-4 top-1/2 -translate-y-1/2 text-rose-500" />
+            )}
+          </div>
+
+          {modo === 'registro' && (
+            <p className="text-[11px] mb-3" style={{ color: idErrorFormato ? '#f43f5e' : 'var(--text-secondary, #999)' }}>
+              {idErrorFormato
+                || (idMsg && !idMsg.ok && `@${idValor} ya está en uso. Probá: ${idMsg.alternativas.map((a) => `@${a}`).join(', ')}`)
+                || (idMsg && idMsg.ok && `@${idValor} disponible`)
+                || 'Será tu identidad única en Lokal. Solo minúsculas, números y guión bajo.'}
+            </p>
+          )}
+
+          <label className="block text-[11px] font-bold mb-1.5 mt-2" style={{ color: 'var(--text-secondary, #999)' }}>
+            {modo === 'registro' ? 'Creá una contraseña' : 'Contraseña'}
+          </label>
+          <div className="relative mb-1">
+            <Lock className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-secondary, #999)' }} />
+            <input
+              type={passVisible ? 'text' : 'password'}
+              value={passValor}
+              onChange={(e) => setPassValor(e.target.value)}
+              placeholder="••••••••"
+              className="w-full rounded-2xl pl-10 pr-11 py-3.5 text-sm font-medium outline-none border transition-colors focus:border-brand"
+              style={inputBase}
+            />
+            <button
+              type="button"
+              onClick={() => setPassVisible((v) => !v)}
+              aria-label={passVisible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-dim hover:text-brand transition-colors"
+            >
+              {passVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+
+          {idPasswordAviso && (
+            <div className="flex items-start gap-2 text-xs mt-2 mb-1 rounded-xl px-3.5 py-3 bg-brand/[0.08]" style={{ color: 'var(--text-primary)' }}>
+              <Sparkles className="w-3.5 h-3.5 shrink-0 mt-0.5 text-brand" />
+              <span>{idPasswordAviso}</span>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            className="w-full mt-3 flex items-center justify-center gap-2 bg-ink dark:bg-white hover:bg-ink/90 dark:hover:bg-white/90 text-white dark:text-[#18181b] font-bold rounded-2xl py-3.5 transition-all active:scale-[0.98]"
+          >
+            {modo === 'registro' ? 'Crear mi cuenta' : 'Iniciar sesión'}
+          </button>
+
+          {modo === 'login' && (
+            <button
+              type="button"
+              onClick={() => setIdPasswordAviso('Te vamos a enviar un enlace para recuperar tu cuenta apenas esté disponible el acceso por email. Por ahora, usá "Continuar con email" más abajo.')}
+              className="w-full text-center text-xs font-semibold mt-3 text-brand hover:underline"
+            >
+              ¿Olvidaste tu contraseña?
+            </button>
+          )}
+        </form>
+      )}
+
+      {/* Divider + toggle registro/login — sección 8/9: "¿Todavía no tenés
+          cuenta? Crear cuenta" / "¿Ya tenés cuenta? Iniciar sesión". */}
+      <div className="h-px my-4" style={{ background: 'rgb(var(--brand, 0 184 217) / 0.14)' }} />
+      <p className="text-sm" style={{ color: 'var(--text-secondary, #999)' }}>
+        {modo === 'registro' ? '¿Ya tenés cuenta? ' : '¿Todavía no tenés cuenta? '}
+        <button
+          type="button"
+          onClick={() => cambiarModo(modo === 'registro' ? 'login' : 'registro')}
+          className="font-bold text-brand hover:underline"
+        >
+          {modo === 'registro' ? 'Iniciar sesión' : 'Crear cuenta'}
+        </button>
+      </p>
+
       <p className="text-[11px] mt-4" style={{ color: 'var(--text-secondary, #999)' }}>
         Al continuar, aceptás los <a href="/terminos-y-condiciones" target="_blank" rel="noopener noreferrer" className="underline hover:text-brand transition-colors">términos y condiciones</a> de LOKAL.
       </p>
 
+      <ProximamenteModal
+        abierto={appleProximamente}
+        isDark={isDark}
+        onCerrar={() => setAppleProximamente(false)}
+        icono={Sparkles}
+        titulo="Próximamente"
+        texto="Iniciar sesión con Apple todavía no está disponible. Mientras tanto, entrá con Google o por email."
+      />
+
       {mostrarQueEsLokal && (
         <>
-          {/* Divider "o" — mismo patrón que LoginBottomSheet.jsx de LOKAL
-              Global, separa la acción principal (Google) del contenido
-              educativo de abajo. */}
-          <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px" style={{ background: 'rgb(var(--brand, 0 184 217) / 0.14)' }} />
-            <span className="text-[11px] font-semibold" style={{ color: 'var(--text-secondary, #999)' }}>o</span>
-            <div className="flex-1 h-px" style={{ background: 'rgb(var(--brand, 0 184 217) / 0.14)' }} />
-          </div>
-
           {/* Mismo lenguaje "enriquecido" que el resto de botones/chips de
               esta misma card (el X de cerrar del sheet, el toggle de tema):
               bg-brand/[0.08] translúcido de marca, no un gris neutro sólido
@@ -398,14 +829,12 @@ export default function LoginCard({
               CTA "Continuar con Google", FAQ), NO /quienes-somos (esa es
               LegalPages.jsx, contenido institucional/legal, otra pantalla
               completamente distinta — corregido tras confundirla con el
-              destino real la vuelta anterior). Antes era <a
-              href="/vender#quienes-somos">, un hash que no existe en
-              ningún lado — recargaba la página entera sin scrollear a
-              nada. pushState + el evento popstate (que Root.jsx ya escucha
-              para el resto de la navegación interna) evita la recarga. */}
+              destino real la vuelta anterior). pushState + el evento
+              popstate (que Root.jsx ya escucha para el resto de la
+              navegación interna) evita la recarga. */}
           <button
             onClick={() => { window.history.pushState({}, '', '/vender'); window.dispatchEvent(new PopStateEvent('popstate')); }}
-            className="w-full flex items-center gap-3 rounded-2xl p-3.5 text-left transition-all active:scale-[0.98] bg-brand/[0.08] hover:bg-brand/[0.16]"
+            className="w-full flex items-center gap-3 rounded-2xl p-3.5 text-left transition-all active:scale-[0.98] bg-brand/[0.08] hover:bg-brand/[0.16] mt-1"
           >
             <div className="w-9 h-9 rounded-xl bg-brand/15 flex items-center justify-center shrink-0">
               <HelpCircle className="w-4 h-4 text-brand" />

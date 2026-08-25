@@ -158,7 +158,13 @@ export default function AdminLogin({ isDark, toggleTheme, onVolver }) {
               qué pasa después vía onAuthStateChanged, sin que esta card
               necesite llamar a /usuarios?whoami=1 ni manejar el paso de
               elegir rol. */}
-          <LoginCard isDark={isDark} whoami={false} />
+          {/* mostrarIlustracion={false}: con la nueva jerarquía (ID+
+              contraseña, Google, Apple, Email — sección 8/9 del brief) la
+              card ya tiene mucho contenido; la ilustración de ciudad
+              empujaba todo eso fuera de la vista sin agregar información
+              real para decidir cómo entrar. Mismo criterio que ya usa
+              LoginSheet.jsx para el mismo problema. */}
+          <LoginCard isDark={isDark} whoami={false} mostrarIlustracion={false} />
         </div>
 
         {/* KTRL queda pegado a la card, no en el footer: es la firma de

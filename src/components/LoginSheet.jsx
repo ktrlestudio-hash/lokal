@@ -17,7 +17,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import LoginCard from './LoginCard.jsx';
 
-export default function LoginSheet({ abierto, isDark, onCerrar, onEsTienda, onEsUsuario }) {
+export default function LoginSheet({ abierto, isDark, onCerrar, onEsTienda, onEsUsuario, onNuevo }) {
   if (!abierto) return null;
 
   return createPortal(
@@ -126,6 +126,16 @@ export default function LoginSheet({ abierto, isDark, onCerrar, onEsTienda, onEs
                 whoami
                 onEsTienda={onEsTienda}
                 onEsUsuario={(usuario) => { onEsUsuario(usuario); onCerrar(); }}
+                // Cuenta nueva: cierra el sheet y le pasa la posta a Root.jsx
+                // (onNuevo, ver HomeGlobal.jsx) en vez de mostrar acá el paso
+                // interno 'elegir-rol' de LoginCard — el pedido explícito fue
+                // una pantalla COMPLETA para elegir usuario/tienda (mismo
+                // pulido que RegistroTienda.jsx), y este sheet vive dentro de
+                // HomeGlobal, sin el layout de página completa que esa
+                // pantalla necesita. Root.jsx es quien ya resuelve esa
+                // navegación completa (via /admin, ver el comentario grande
+                // en Root.jsx sobre por qué se reusa esa ruta).
+                onNuevo={onNuevo ? () => { onNuevo(); onCerrar(); } : undefined}
                 titulo="Entrá a LOKAL"
                 subtitulo="Tu ciudad, a un link de distancia."
                 mostrarQueEsLokal

@@ -8,6 +8,9 @@ import {
   getRedirectResult,
   signOut,
   onAuthStateChanged,
+  sendSignInLinkToEmail,
+  isSignInWithEmailLink,
+  signInWithEmailLink,
 } from 'firebase/auth';
 
 // Variables de entorno — configurar en .env y en Netlify dashboard
@@ -250,6 +253,73 @@ export async function renderBotonGoogle(contenedor, { onLogin, onError, onOrigen
   // rompía el comportamiento nativo. El botón se va solo cuando React quita
   // su contenedor del DOM.
   return () => {};
+}
+
+// ─── Email Magic Link (passwordless) ─────────────────────────────────────
+// Alternativa universal a Google/Apple: no depende de tener una cuenta en
+// ningún proveedor externo, solo de poder recibir un mail. También es el
+// camino de recuperación cuando exista el login por ID de Lokal+contraseña
+// (pedido explícito del usuario, sección 6 del brief) — un mismo mecanismo
+// sirve para las dos cosas porque las dos son "demostrar que sos dueño de
+// este email".
+//
+// localStorage (no sessionStorage): el link llega por otra app (Gmail,
+// Mail del sistema) que puede abrirlo en una pestaña/proceso nuevo — un
+// sessionStorage atado a la pestaña que disparó el envío no sobrevive ese
+// salto. Si quien completa el link es el MISMO navegador que lo pidió,
+// EmailLinkComplete.jsx lo encuentra acá y no hace falta volver a
+// preguntar el email; si es un dispositivo distinto (mail reenviado, otro
+// navegador), el mismo componente pide el email a mano — Firebase igual
+// completa el login, la única diferencia es no poder confirmarlo en
+// silencio.
+const EMAIL_LINK_STORAGE_KEY = 'lokal-email-link-pendiente';
+
+// /entrar: ruta nueva y liviana (ver Root.jsx) dedicada a resolver el
+// regreso del link — separada de "/" para no forzar a HomeGlobal a cargar
+// solo para leer un parámetro de query. redirectUrl no necesita más que el
+// origin porque isSignInWithEmailLink/signInWithEmailLink leen el link
+// COMPLETO (con sus query params propios de Firebase) desde
+// window.location.href al volver, no algo que nosotros armemos a mano.
+function urlDeRetornoEmailLink() {
+  return `${window.location.origin}/entrar`;
+}
+
+// Envía el mail con el link de acceso. `email` queda guardado localmente
+// para el caso "mismo navegador" (ver comentario de EMAIL_LINK_STORAGE_KEY).
+export async function enviarLinkDeAcceso(email) {
+  const actionCodeSettings = {
+    url: urlDeRetornoEmailLink(),
+    handleCodeInApp: true,
+  };
+  await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+  try {
+    window.localStorage.setItem(EMAIL_LINK_STORAGE_KEY, email);
+  } catch { /* localStorage puede fallar en modo privado — no bloquea el envío ya hecho */ }
+}
+
+// true si la URL actual ES un link de acceso válido (llamado desde
+// EmailLinkComplete.jsx al montar).
+export function esLinkDeAcceso(url = window.location.href) {
+  return isSignInWithEmailLink(auth, url);
+}
+
+// Completa el login con el link. Si no hay email guardado de este mismo
+// navegador (dispositivo distinto al que lo pidió), `emailManual` lo
+// provee el usuario a través de un input que EmailLinkComplete.jsx muestra
+// solo en ese caso.
+export async function completarLoginConLink(emailManual, url = window.location.href) {
+  let email = emailManual;
+  if (!email) {
+    try { email = window.localStorage.getItem(EMAIL_LINK_STORAGE_KEY); } catch { /* ver arriba */ }
+  }
+  if (!email) {
+    const e = new Error('email-requerido');
+    e.code = 'email-requerido';
+    throw e;
+  }
+  const result = await signInWithEmailLink(auth, email, url);
+  try { window.localStorage.removeItem(EMAIL_LINK_STORAGE_KEY); } catch { /* no crítico */ }
+  return result.user;
 }
 
 export { getRedirectResult, signOut, onAuthStateChanged };

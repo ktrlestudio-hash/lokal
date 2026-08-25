@@ -785,6 +785,13 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
         onCerrar={() => setLoginOpen(false)}
         onEsTienda={onIrAlPanel}
         onEsUsuario={setUsuarioActual}
+        // Cuenta nueva (sin tienda ni perfil todavía): mismo destino que
+        // onEsTienda (pushState a /admin) — Root.jsx es quien realmente
+        // decide qué mostrar ahí (StoreApp, RegistroTienda, o ahora
+        // ElegirRolScreen/RegistroUsuario según lo que resuelva su propio
+        // whoami). HomeGlobal no necesita saber nada de ese árbol de
+        // decisión, solo entregarle el control con la sesión ya activa.
+        onNuevo={onIrAlPanel}
       />
     </div>
   );
