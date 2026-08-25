@@ -25,7 +25,7 @@ import CategoryIcon from './CategoryIcon';
 import { CATEGORIES, getCategoryPath } from './categories';
 import NavArrowBtn from './components/ui/NavArrowBtn';
 import useScrollEdges from './hooks/useScrollEdges';
-import { Carrusel, ProductCardVertical, CM_VERT_W, CM_VERT_IMG, CM_VERT_BODY } from './tienda-publica/components/ProductCards.jsx';
+import { Carrusel, ProductCardGrid, CM_GRID_BODY, CM_GRID_CARD_W } from './tienda-publica/components/ProductCards.jsx';
 import { getEstadoApertura } from './tienda-publica/utils.js';
 import { API_BASE } from './config/flags';
 import { SheetLegal, CARD_TINTED } from './components/LegalSheet.jsx';
@@ -220,6 +220,22 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
   };
   const irATienda = (slug) => { window.history.pushState({}, '', `/${slug}`); window.dispatchEvent(new PopStateEvent('popstate')); };
   const irAVender = () => { window.history.pushState({}, '', '/vender'); window.dispatchEvent(new PopStateEvent('popstate')); };
+
+  // "+" de una card de Destacados — mismo gate en dos pasos que pidió el
+  // usuario: sin sesión, primero hay que crear una cuenta (no tiene sentido
+  // ofrecer "agregar al carrito" a alguien que no puede guardar nada
+  // todavía); con sesión, el carrito multi-tienda real no existe aún (ver
+  // onCarrito del bottom-nav, mismo mensaje) — se avisa en vez de fingir
+  // que el toque hizo algo. onAdd recibe el producto completo (mismo
+  // contrato que QtyControl espera) pero acá no hace falta usarlo, las dos
+  // ramas son siempre el mismo destino sin importar qué producto se tocó.
+  const agregarAlCarritoGlobal = () => {
+    if (!usuarioActual) { setLoginOpen(true); return; }
+    setProximamente({
+      icono: ShoppingCart, titulo: 'Carrito multi-tienda en camino',
+      texto: 'Pronto vas a poder armar un pedido con productos de distintas tiendas desde acá. Todavía no está listo, pero ya casi.',
+    });
+  };
 
   const cantTiendas = tiendas.length;
   const banners = useBanners(navigate, cantTiendas);
@@ -647,29 +663,27 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
               </h2>
             </div>
             {loadingProductos && productosFiltrados.length === 0 ? (
-              // Mismas dimensiones EXACTAS que ProductCardVertical (mismas
-              // constantes que la card real importa) — antes w-36 h-56
-              // (144×224px) eran valores inventados, 52px más bajos que la
-              // card real (152+124=276px de alto), así que el layout
-              // "saltaba" al llegar el contenido de verdad.
+              // Alto del skeleton = ancho de la card (foto cuadrada,
+              // aspectRatio 1/1) + CM_GRID_BODY — ya no CM_VERT_IMG fijo:
+              // ProductCardVertical (alargada, sin botón "+") se reemplazó
+              // por ProductCardGrid (foto cuadrada + precio en chip + "+",
+              // mismo patrón 2-por-fila que ya usa CatalogoSection.jsx —
+              // pedido explícito: las cards de Destacados eran demasiado
+              // altas y sin el botón de agregar). clamp() en vez de un
+              // número fijo porque CM_GRID_CARD_W también es un clamp().
               <div className="px-4 lg:px-6 flex gap-3 overflow-hidden">
                 {[0, 1, 2, 3].map((i) => (
                   <div key={i} className="rounded-2xl bg-surface-card-2 animate-pulse shrink-0"
-                    style={{ width: CM_VERT_W, height: CM_VERT_IMG + CM_VERT_BODY }} />
+                    style={{ width: CM_GRID_CARD_W, aspectRatio: `1 / ${1 + CM_GRID_BODY / 148}` }} />
                 ))}
               </div>
             ) : productosFiltrados.length === 0 ? (
-              // Misma altura que el skeleton y que la card real
-              // (CM_VERT_IMG+CM_VERT_BODY) — antes esta card ancha
-              // horizontal medía lo que su padding+contenido pedían
-              // (~150-180px), bastante menos que el skeleton de 276px que
-              // la precede: la transición cargando→vacío saltaba de
-              // altura igual que cargando→contenido real ya se había
-              // corregido. flex+justify-center en vez de depender del
-              // padding para llegar a esa altura — más robusto si el
-              // texto cambia de largo.
+              // Alto aproximado equivalente al de una fila de cards reales
+              // (mismo criterio que antes: no saltar de altura entre
+              // cargando→vacío→contenido) — ya no depende de las constantes
+              // de la card vertical.
               <div className="px-4 lg:px-6">
-                <div className="rounded-3xl border p-6 text-center flex flex-col items-center justify-center" style={{ ...CARD_TINTED, height: CM_VERT_IMG + CM_VERT_BODY }}>
+                <div className="rounded-3xl border p-6 text-center flex flex-col items-center justify-center" style={{ ...CARD_TINTED, height: 220 }}>
                   <div className="w-12 h-12 rounded-2xl bg-brand/10 flex items-center justify-center mx-auto mb-3">
                     <ShoppingBag className="w-6 h-6 text-brand" />
                   </div>
@@ -680,13 +694,15 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
               <div className="px-4 lg:px-6">
                 <Carrusel gap={12} padding="4px 2px">
                   {productosFiltrados.map((p) => (
-                    <ProductCardVertical
-                      key={p.id}
-                      p={p}
-                      onOpen={() => irATienda(p.tiendaSlug)}
-                      surf={CM.surf} surf2={CM.surf2} border={CM.border} txt={CM.txt} txtM={CM.txtM}
-                      primary={CM.primary} onPrimary={CM.onPrimary}
-                    />
+                    <div key={p.id} style={{ width: CM_GRID_CARD_W, flexShrink: 0 }}>
+                      <ProductCardGrid
+                        p={p}
+                        onOpen={() => irATienda(p.tiendaSlug)}
+                        onAdd={agregarAlCarritoGlobal}
+                        surf={CM.surf} surf2={CM.surf2} border={CM.border} txt={CM.txt} txtM={CM.txtM}
+                        primary={CM.primary} onPrimary={CM.onPrimary}
+                      />
+                    </div>
                   ))}
                 </Carrusel>
               </div>

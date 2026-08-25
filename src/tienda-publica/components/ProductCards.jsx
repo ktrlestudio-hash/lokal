@@ -90,9 +90,29 @@ export function descuentoPct(p) {
    precio final (misma fila) — el layout "tachado arriba" es una excepción
    puntual, solo para las cards VERTICALES (`stacked=true`), donde el ancho
    angosto de esas cards no da lugar cómodo a los dos precios lado a lado. ── */
-export function Precio({ p, txt, size = 'md', stacked = false }) {
+// chip=true: precio dentro de una píldora translúcida de marca (fondo
+// --tp-primary-soft, mismo token que ya usa el resto de la tienda pública
+// para "marca a baja opacidad" — no un color inventado nuevo) en vez de
+// texto plano contra el fondo de la card. Pedido explícito para
+// ProductCardGrid, inspirado en el catálogo de referencia (MV
+// Distribuciones): un precio así se lee como una etiqueta de producto real,
+// no solo un número más en la fila. Queda opt-in (default false) para no
+// tocar el resto de las cards (List/Vertical) que no lo pidieron.
+export function Precio({ p, txt, size = 'md', stacked = false, chip = false }) {
   const hasDesc = p.precioOriginal && p.precioOriginal > (p.precio || 0);
-  const fs = size === 'lg' ? 20 : 17;
+  const fs = size === 'lg' ? 20 : (chip ? 13.5 : 17);
+  if (chip) {
+    return (
+      <div style={{
+        display: 'inline-flex', alignItems: 'baseline', gap: 5,
+        background: 'var(--tp-primary-soft)', color: 'var(--tp-primary)',
+        borderRadius: RADIUS.full, padding: '5px 10px',
+      }}>
+        <span style={{ fontSize: fs, fontWeight: 900, letterSpacing: '-0.02em' }}>{formatPrice(p.precio)}</span>
+        {hasDesc && <span style={{ fontSize: 10.5, opacity: 0.7, textDecoration: 'line-through' }}>{formatPrice(p.precioOriginal)}</span>}
+      </div>
+    );
+  }
   if (stacked) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -534,7 +554,15 @@ export function Carrusel({ children, gap = 12, className = 'cm-chips', padding =
 // Alto fijo del bloque de texto bajo la foto — mismo criterio que
 // CM_VERT_BODY: todas las cards de la grilla miden igual sin importar si el
 // título es de 1 o 2 líneas, en vez de que la grilla quede dentada.
-const CM_GRID_BODY = 88;
+export const CM_GRID_BODY = 88;
+// Ancho fijo para cuando ProductCardGrid vive DENTRO de un carrusel
+// horizontal (ej. Destacados de HomeGlobal.jsx) — el componente en sí no
+// tiene ancho propio (se estira al 100% de su contenedor, pensado para la
+// grilla 2-por-fila de CatalogoSection.jsx), así que un carrusel necesita
+// envolverlo en algo con este ancho fijo. clamp() con el mismo criterio que
+// CM_VERT_W (proporción de viewport, no un px fijo que se vea chico en
+// pantallas grandes o gigante en una chica).
+export const CM_GRID_CARD_W = 'clamp(128px, calc((100vw - 56px) / 2.6), 168px)';
 
 /* ── Card GRILLA: foto arriba (siempre 1:1), info abajo con alto fijo
    (catálogo visual — 2 por fila, mismo criterio que MV Distribuciones). Con
@@ -581,7 +609,7 @@ export function ProductCardGrid({ p, onOpen, surf, surf2, border, txt, txtM, pri
           </span>
         )}
         <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-          <Precio p={p} txt={txt} />
+          <Precio p={p} txt={txt} chip />
           <QtyControl qty={qty} onAdd={onAdd} onRemove={onRemove} p={p} primary={primary} onPrimary={onPrimary} surf2={surf2} border={border} txt={txt} size="sm" compact />
         </div>
       </div>
