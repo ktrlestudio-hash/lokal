@@ -71,15 +71,23 @@ const CM = {
   txtM: 'var(--text-secondary)',
   primary: 'var(--brand-hex, #00B8D9)',
   onPrimary: '#fff',
-  // chip de precio de ProductCardGrid (Destacados): NO el color de marca de
-  // ninguna tienda en particular (cada card es de un negocio distinto acá,
-  // pintarla con la marca de uno solo no tiene sentido) — gris suave neutro
-  // en los dos temas, mismos tokens que surf2/txtM de arriba, sin inventar
-  // un color nuevo. Bug real corregido: sin chipBg/chipColor explícitos, el
-  // chip leía var(--tp-primary-soft) — una variable de paleta POR TIENDA
-  // que este árbol nunca define — y quedaba sin fondo ni color.
+  // chip de precio de ProductCardGrid (Destacados): fondo NO es el color de
+  // marca de ninguna tienda en particular (cada card es de un negocio
+  // distinto acá, pintarla con la marca de uno solo no tiene sentido) —
+  // gris suave neutro en los dos temas. Bug real corregido: sin
+  // chipBg/chipColor explícitos, el chip leía var(--tp-primary-soft) — una
+  // variable de paleta POR TIENDA que este árbol nunca define — y quedaba
+  // sin fondo ni color.
   chipBg: 'rgb(var(--surface-solid-2-rgb))',
-  chipColor: 'var(--text-secondary)',
+  // chipColor NEGRO/BLANCO ABSOLUTO (no var(--text-secondary), que se
+  // había usado por error al armar chipBg de arriba y bajaba la fuerza
+  // visual del precio a un gris apagado — antes, sin chip, el precio usaba
+  // CM.txt/--text-primary, casi-negro pero no absoluto; el pedido explícito
+  // acá es más fuerte todavía). var(--lk-ink-strong) no existe como token
+  // real del proyecto — se define inline con la misma clase .dark que ya
+  // usa el resto de la app para condicionar tema, sin inventar un token
+  // nuevo persistente en index.css para un solo uso puntual.
+  chipColor: 'var(--lk-chip-precio-fuerte, #000)',
 };
 
 // Fondo de los chips de categoría inactivos en DARK. Dos intentos previos
@@ -310,6 +318,15 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
           (transición cubic-bezier con rebote al soltar, color-mix para
           tintar con la marca sin hardcodear un hex por estado). */}
       <style>{`
+        /* --lk-chip-precio-fuerte: negro/blanco ABSOLUTO para el número del
+           precio dentro del chip de ProductCardGrid en Destacados (ver
+           CM.chipColor arriba) — más fuerte que cualquier token de texto
+           existente (--text-primary es "casi-negro", no absoluto). Scoped
+           acá (no en index.css global) porque es un pedido puntual de esta
+           pantalla, no un token que el resto de la app deba heredar. */
+        :root { --lk-chip-precio-fuerte: #000; }
+        .dark { --lk-chip-precio-fuerte: #fff; }
+
         .hg-banner { transition: transform .16s ease, filter .15s ease; }
         @media (hover: hover) { .hg-banner:hover { filter: brightness(1.05); } }
         .hg-banner:active { transform: scale(0.98); transition: transform .06s ease; }

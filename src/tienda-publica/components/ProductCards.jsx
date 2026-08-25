@@ -106,13 +106,29 @@ export function Precio({ p, txt, size = 'md', stacked = false, chip = false, chi
   const fs = size === 'lg' ? 20 : (chip ? 13.5 : 17);
   if (chip) {
     return (
+      // height:34 = MISMO alto que el botón "+" compact de al lado (d=34
+      // en QtyControl size="sm") — antes el chip median lo que su padding
+      // vertical pedía (~26-28px), un poco más bajo que el botón, se leían
+      // como dos elementos de "peso" distinto en la misma fila.
+      // minWidth:0 + el <span> de precio con overflow/ellipsis: si la card
+      // es muy angosta y el precio muy largo, el chip CEDE ancho al
+      // hermano de al lado (el botón "+", flexShrink:0 así que nunca se
+      // achica) en vez de desbordar la fila — el texto del precio se
+      // recorta con "…" antes que romper el layout. clamp() en el
+      // fontSize/padding/gap: en vez de un tamaño fijo que puede no entrar
+      // en la card más chica del clamp de CM_GRID_CARD_W, se reduce solo
+      // un poco en el extremo angosto sin afectar cards más anchas.
       <div style={{
-        display: 'inline-flex', alignItems: 'baseline', gap: 5,
+        display: 'inline-flex', alignItems: 'center', minWidth: 0, height: 34, boxSizing: 'border-box',
+        gap: 'clamp(3px, 1vw, 5px)',
         background: chipBg || 'var(--tp-primary-soft)', color: chipColor || 'var(--tp-primary)',
-        borderRadius: RADIUS.full, padding: '5px 10px',
+        borderRadius: RADIUS.full, padding: '0 clamp(7px, 2vw, 10px)',
       }}>
-        <span style={{ fontSize: fs, fontWeight: 900, letterSpacing: '-0.02em' }}>{formatPrice(p.precio)}</span>
-        {hasDesc && <span style={{ fontSize: 10.5, opacity: 0.7, textDecoration: 'line-through' }}>{formatPrice(p.precioOriginal)}</span>}
+        <span style={{
+          fontSize: `clamp(12px, ${fs}px, ${fs}px)`, fontWeight: 900, letterSpacing: '-0.02em',
+          minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{formatPrice(p.precio)}</span>
+        {hasDesc && <span style={{ fontSize: 10.5, opacity: 0.7, textDecoration: 'line-through', flexShrink: 0 }}>{formatPrice(p.precioOriginal)}</span>}
       </div>
     );
   }
@@ -633,8 +649,15 @@ export function ProductCardGrid({ p, onOpen, surf, surf2, border, txt, txtM, pri
             <Star size={11} style={{ fill: '#fbbf24', color: '#fbbf24' }} />{p.rating}
           </span>
         )}
+        {/* minWidth:0 en el WRAPPER del chip (no solo dentro de Precio):
+            un hijo flex sin min-width:0 explícito no puede encoger más
+            allá del ancho de su contenido por default (min-width:auto del
+            spec de flexbox) — sin esto, el chip empujaba el botón "+"
+            fuera de la fila en vez de cederle ancho como se pidió. */}
         <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-          <Precio p={p} txt={txt} chip chipBg={chipBg} chipColor={chipColor} />
+          <div style={{ minWidth: 0 }}>
+            <Precio p={p} txt={txt} chip chipBg={chipBg} chipColor={chipColor} />
+          </div>
           <QtyControl qty={qty} onAdd={onAdd} onRemove={onRemove} p={p} primary={primary} onPrimary={onPrimary} surf2={surf2} border={border} txt={txt} size="sm" compact />
         </div>
       </div>
