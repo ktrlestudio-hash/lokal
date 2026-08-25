@@ -90,22 +90,25 @@ export function descuentoPct(p) {
    precio final (misma fila) — el layout "tachado arriba" es una excepción
    puntual, solo para las cards VERTICALES (`stacked=true`), donde el ancho
    angosto de esas cards no da lugar cómodo a los dos precios lado a lado. ── */
-// chip=true: precio dentro de una píldora translúcida de marca (fondo
-// --tp-primary-soft, mismo token que ya usa el resto de la tienda pública
-// para "marca a baja opacidad" — no un color inventado nuevo) en vez de
-// texto plano contra el fondo de la card. Pedido explícito para
-// ProductCardGrid, inspirado en el catálogo de referencia (MV
-// Distribuciones): un precio así se lee como una etiqueta de producto real,
-// no solo un número más en la fila. Queda opt-in (default false) para no
-// tocar el resto de las cards (List/Vertical) que no lo pidieron.
-export function Precio({ p, txt, size = 'md', stacked = false, chip = false }) {
+// chip=true: precio dentro de una píldora translúcida (fondo/color por
+// default: --tp-primary-soft/--tp-primary, la marca de LA TIENDA — tokens
+// reales solo cuando el consumidor vive dentro de una tienda individual,
+// que sí los define vía deriveColorPalette). chipBg/chipColor (opcionales)
+// pisan ese default — necesarios en contextos SIN paleta de tienda, como
+// HomeGlobal.jsx (multi-tienda: cada card es de un negocio distinto, no
+// tiene sentido pintarla con la marca de uno en particular). Bug real
+// encontrado: sin este override, ProductCardGrid en la Home leía
+// var(--tp-primary-soft) sin que esa variable existiera en ese árbol del
+// DOM — el navegador la resuelve vacía, así que el chip se veía sin fondo
+// ni color, "invisible" en vez del gris suave pedido.
+export function Precio({ p, txt, size = 'md', stacked = false, chip = false, chipBg, chipColor }) {
   const hasDesc = p.precioOriginal && p.precioOriginal > (p.precio || 0);
   const fs = size === 'lg' ? 20 : (chip ? 13.5 : 17);
   if (chip) {
     return (
       <div style={{
         display: 'inline-flex', alignItems: 'baseline', gap: 5,
-        background: 'var(--tp-primary-soft)', color: 'var(--tp-primary)',
+        background: chipBg || 'var(--tp-primary-soft)', color: chipColor || 'var(--tp-primary)',
         borderRadius: RADIUS.full, padding: '5px 10px',
       }}>
         <span style={{ fontSize: fs, fontWeight: 900, letterSpacing: '-0.02em' }}>{formatPrice(p.precio)}</span>
@@ -571,7 +574,7 @@ export const CM_GRID_CARD_W = 'clamp(128px, calc((100vw - 56px) / 2.6), 168px)';
    `compact` de QtyControl (botón fijo + badge de cantidad) en vez del
    stepper expandible: acá precio y control comparten una fila angosta, y un
    stepper completo (+/cantidad/-) se aprieta contra el precio. ── */
-export function ProductCardGrid({ p, onOpen, surf, surf2, border, txt, txtM, primary, onPrimary, onOpenAdminMenu, qty, onAdd, onRemove }) {
+export function ProductCardGrid({ p, onOpen, surf, surf2, border, txt, txtM, primary, onPrimary, onOpenAdminMenu, qty, onAdd, onRemove, chipBg, chipColor }) {
   const img = fotoDe(p);
   const pct = descuentoPct(p);
   // "oferta" ya lo cubre el -X% de arriba (mismo dato, precioOriginal >
@@ -609,7 +612,7 @@ export function ProductCardGrid({ p, onOpen, surf, surf2, border, txt, txtM, pri
           </span>
         )}
         <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-          <Precio p={p} txt={txt} chip />
+          <Precio p={p} txt={txt} chip chipBg={chipBg} chipColor={chipColor} />
           <QtyControl qty={qty} onAdd={onAdd} onRemove={onRemove} p={p} primary={primary} onPrimary={onPrimary} surf2={surf2} border={border} txt={txt} size="sm" compact />
         </div>
       </div>

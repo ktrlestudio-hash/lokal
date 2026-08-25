@@ -71,6 +71,15 @@ const CM = {
   txtM: 'var(--text-secondary)',
   primary: 'var(--brand-hex, #00B8D9)',
   onPrimary: '#fff',
+  // chip de precio de ProductCardGrid (Destacados): NO el color de marca de
+  // ninguna tienda en particular (cada card es de un negocio distinto acá,
+  // pintarla con la marca de uno solo no tiene sentido) — gris suave neutro
+  // en los dos temas, mismos tokens que surf2/txtM de arriba, sin inventar
+  // un color nuevo. Bug real corregido: sin chipBg/chipColor explícitos, el
+  // chip leía var(--tp-primary-soft) — una variable de paleta POR TIENDA
+  // que este árbol nunca define — y quedaba sin fondo ni color.
+  chipBg: 'rgb(var(--surface-solid-2-rgb))',
+  chipColor: 'var(--text-secondary)',
 };
 
 // Fondo de los chips de categoría inactivos en DARK. Dos intentos previos
@@ -701,6 +710,7 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
                         onAdd={agregarAlCarritoGlobal}
                         surf={CM.surf} surf2={CM.surf2} border={CM.border} txt={CM.txt} txtM={CM.txtM}
                         primary={CM.primary} onPrimary={CM.onPrimary}
+                        chipBg={CM.chipBg} chipColor={CM.chipColor}
                       />
                     </div>
                   ))}
