@@ -554,6 +554,40 @@ function RootInner() {
 
   const mostrandoSplash = mostrandoSplashCrudo || inlineMinDesdeRef.current !== null;
 
+  // DEBUG TEMPORAL — diagnóstico del bug "splash queda pegado en mobile tras
+  // login con GIS, con cuenta de tienda existente; solo un reload real lo
+  // destraba" (reportado en producción — INTERMITENTE, a veces se destraba
+  // solo). El log de cada render (más abajo) NO ALCANZA para el caso real de
+  // "queda pegado de verdad": si React deja de re-renderizar (justo el
+  // síntoma), ese log deja de imprimirse — sin pista de qué pasó al final.
+  // Este setInterval, independiente del ciclo de render de React, imprime
+  // el ÚLTIMO estado conocido cada 2s MIENTRAS el splash sigue montado —
+  // si el problema es que React se queda trabado, vas a seguir viendo
+  // "[DEBUG splash] tick" con el mismo estado repetido para siempre (la
+  // pista de qué variable nunca cambió); si el problema es solo demora real
+  // (red/chunks lentos), vas a ver los tick avanzar hasta que el splash se
+  // suelte solo. Estos dos hooks tienen que vivir ACÁ (antes de cualquier
+  // return condicional, ej. el de /entrar más abajo) — moverlos después de
+  // un return rompe las reglas de hooks (orden distinto entre renders).
+  // Sacar TODO este bloque (los dos hooks y el log de después del return de
+  // /entrar) una vez encontrada la causa real — no es logging permanente.
+  const debugSplashStateRef = useRef(null);
+  debugSplashStateRef.current = {
+    IS_FIRST_LOAD, SPLASH_SECTION, splashMinCumplido, authSinResolver,
+    backofficeSinPreparar, mostrandoSplashCrudo, mostrandoSplash,
+    loadingTienda, loadingUsuario, chunksAdminListos,
+    firebaseUser: firebaseUser === undefined ? 'undefined' : (firebaseUser === null ? 'null' : firebaseUser.uid),
+    redirectChecked, isAdminRoute, vaAlBackoffice, tiendaData: !!tiendaData,
+  };
+  useEffect(() => {
+    if (!mostrandoSplash || !window.location.pathname.startsWith('/admin')) return undefined;
+    const t = setInterval(() => {
+      // eslint-disable-next-line no-console
+      console.log('[DEBUG splash] tick', Date.now(), debugSplashStateRef.current);
+    }, 2000);
+    return () => clearInterval(t);
+  }, [mostrandoSplash]);
+
   // ── Vuelta del Magic Link (/entrar) — se resuelve ANTES del gate de splash
   //    a propósito: esta pantalla hace su propio trabajo async
   //    (completarLoginConLink) y ya muestra su propio loader mientras tanto,
@@ -572,21 +606,9 @@ function RootInner() {
     );
   }
 
-  // DEBUG TEMPORAL — diagnóstico del bug "splash queda pegado tras login con
-  // cuenta de tienda existente, solo un reload real lo destraba" (reportado
-  // en producción, sin evidencia de consola todavía). Loguea el estado
-  // completo del gate solo mientras el splash sigue activo, para ver en la
-  // consola real qué variable se queda trabada. Sacar una vez encontrada la
-  // causa — no es logging permanente.
   if (mostrandoSplash && window.location.pathname.startsWith('/admin')) {
     // eslint-disable-next-line no-console
-    console.log('[DEBUG splash]', {
-      IS_FIRST_LOAD, SPLASH_SECTION, splashMinCumplido, authSinResolver,
-      backofficeSinPreparar, mostrandoSplashCrudo, mostrandoSplash,
-      loadingTienda, loadingUsuario, chunksAdminListos,
-      firebaseUser: firebaseUser === undefined ? 'undefined' : (firebaseUser === null ? 'null' : firebaseUser.uid),
-      redirectChecked, isAdminRoute, vaAlBackoffice, tiendaData: !!tiendaData,
-    });
+    console.log('[DEBUG splash] render', debugSplashStateRef.current);
   }
 
   if (mostrandoSplash) return <AppLoader />;
