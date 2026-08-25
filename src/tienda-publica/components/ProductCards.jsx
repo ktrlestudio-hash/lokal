@@ -496,8 +496,29 @@ export function Chip({ label, Icon, active, onClick, primary, onPrimary, surf2, 
 /* ── Carrusel horizontal con flechas + fade en los bordes — mismo patrón
    visual que LOKAL usa en TiendaDetailScreen (useScrollEdges + NavArrowBtn),
    reimplementado acá con los tokens de tienda-publica para no acoplar este
-   componente al resto de la app. Extraído tal cual de commerce-modern.jsx. ── */
-export function Carrusel({ children, gap = 12, className = 'cm-chips', padding = '0', arrowOffset = 2 }) {
+   componente al resto de la app. Extraído tal cual de commerce-modern.jsx.
+
+   ── Fade con mask-image, no gradiente de color (2026-08) ─────────────────
+   BUG REAL encontrado: el fade de los bordes usaba un linear-gradient de
+   var(--tp-bg) → transparent — una variable de la paleta de UNA tienda
+   (deriveColorPalette), que solo existe dentro del árbol de la tienda
+   pública individual. HomeGlobal.jsx (Home multi-tienda) usa este mismo
+   Carrusel para "Tiendas destacadas" y "Destacados" de productos sin
+   definir esa variable — el navegador la resolvía vacía, así que el fade
+   quedaba "roto" (sin color real, un borde visualmente cortado en vez de
+   desvanecido). Categorías (mismo archivo, HomeGlobal.jsx) ya resuelve
+   este mismo problema con OTRO sistema — mask-image (black/transparent)
+   en vez de un gradiente de color — que no depende de adivinar ningún
+   color de fondo: recorta la OPACIDAD del contenido mismo, funciona sobre
+   cualquier fondo (sólido, gradiente, glow fluctuante). Portado acá tal
+   cual, reemplaza el gradiente de color viejo.
+
+   border/text/surface (opcionales, solo para las FLECHAS — esos sí son
+   elementos sólidos propios, no fade, necesitan un color real): por
+   default siguen usando var(--tp-border)/var(--tp-text)/var(--tp-surface),
+   correcto dentro de una tienda individual; un consumidor sin paleta de
+   tienda (como HomeGlobal) los pisa con tokens genéricos propios. ── */
+export function Carrusel({ children, gap = 12, className = 'cm-chips', padding = '0', arrowOffset = 2, border, text, surface }) {
   const ref = useRef(null);
   const [edges, setEdges] = useState({ left: false, right: false });
 
@@ -519,36 +540,37 @@ export function Carrusel({ children, gap = 12, className = 'cm-chips', padding =
 
   const scrollBy = dir => ref.current?.scrollBy({ left: dir * 180, behavior: 'smooth' });
 
+  // Mismos stops que catMaskStops en HomeGlobal.jsx — 32px de fade cuando
+  // hay overflow hacia ese lado, corte limpio (black 0/100%) cuando no.
+  const maskStops = [
+    edges.left ? 'transparent, black 32px' : 'black 0px',
+    edges.right ? 'black calc(100% - 32px), transparent' : 'black 100%',
+  ].join(', ');
+
   return (
     <div style={{ position: 'relative' }}>
-      <div ref={ref} style={{ display: 'flex', gap, overflowX: 'auto', padding, scrollbarWidth: 'none' }} className={className}>
+      <div ref={ref} style={{
+        display: 'flex', gap, overflowX: 'auto', padding, scrollbarWidth: 'none',
+        WebkitMaskImage: `linear-gradient(to right, ${maskStops})`,
+        maskImage: `linear-gradient(to right, ${maskStops})`,
+      }} className={className}>
         {children}
       </div>
-      {/* Fade con stops explícitos (no solo color→transparent) para evitar el
-          artefacto de 1px que deja el navegador al interpolar transparencia
-          en un color con canal alpha implícito — mismo tono en ambos
-          extremos del gradiente, solo cambia la opacidad. */}
       {edges.left && (
-        <>
-          <div style={{ pointerEvents: 'none', position: 'absolute', left: 0, top: 0, bottom: 0, width: 28, background: 'linear-gradient(to right, var(--tp-bg) 0%, var(--tp-bg) 15%, transparent 100%)' }} />
-          {/* top:50% + translateY(-50%) en vez de un % fijo (era 38%,
-              ajustado a ojo para las cards altas del catálogo) — así queda
-              centrado de verdad sin importar la altura del contenido
-              (chips bajitos, cards altas, lo que sea). */}
-          <button onClick={() => scrollBy(-1)} aria-label="Anterior" className="no-press cm-carousel-arrow"
-            style={{ position: 'absolute', left: -arrowOffset, top: '50%', transform: 'translateY(-50%)', width: 30, height: 30, borderRadius: 10, border: '1px solid var(--tp-border)', background: 'var(--tp-surface)', color: 'var(--tp-text)', display: 'grid', placeItems: 'center', cursor: 'pointer', boxShadow: SHADOW.sm, zIndex: 2 }}>
-            <ChevronLeft size={16} />
-          </button>
-        </>
+        // top:50% + translateY(-50%) en vez de un % fijo (era 38%, ajustado
+        // a ojo para las cards altas del catálogo) — así queda centrado de
+        // verdad sin importar la altura del contenido (chips bajitos,
+        // cards altas, lo que sea).
+        <button onClick={() => scrollBy(-1)} aria-label="Anterior" className="no-press cm-carousel-arrow"
+          style={{ position: 'absolute', left: -arrowOffset, top: '50%', transform: 'translateY(-50%)', width: 30, height: 30, borderRadius: 10, border: `1px solid ${border || 'var(--tp-border)'}`, background: surface || 'var(--tp-surface)', color: text || 'var(--tp-text)', display: 'grid', placeItems: 'center', cursor: 'pointer', boxShadow: SHADOW.sm, zIndex: 2 }}>
+          <ChevronLeft size={16} />
+        </button>
       )}
       {edges.right && (
-        <>
-          <div style={{ pointerEvents: 'none', position: 'absolute', right: 0, top: 0, bottom: 0, width: 28, background: 'linear-gradient(to left, var(--tp-bg) 0%, var(--tp-bg) 15%, transparent 100%)' }} />
-          <button onClick={() => scrollBy(1)} aria-label="Siguiente" className="no-press cm-carousel-arrow"
-            style={{ position: 'absolute', right: -arrowOffset, top: '50%', transform: 'translateY(-50%)', width: 30, height: 30, borderRadius: 10, border: '1px solid var(--tp-border)', background: 'var(--tp-surface)', color: 'var(--tp-text)', display: 'grid', placeItems: 'center', cursor: 'pointer', boxShadow: SHADOW.sm, zIndex: 2 }}>
-            <ChevronRight size={16} />
-          </button>
-        </>
+        <button onClick={() => scrollBy(1)} aria-label="Siguiente" className="no-press cm-carousel-arrow"
+          style={{ position: 'absolute', right: -arrowOffset, top: '50%', transform: 'translateY(-50%)', width: 30, height: 30, borderRadius: 10, border: `1px solid ${border || 'var(--tp-border)'}`, background: surface || 'var(--tp-surface)', color: text || 'var(--tp-text)', display: 'grid', placeItems: 'center', cursor: 'pointer', boxShadow: SHADOW.sm, zIndex: 2 }}>
+          <ChevronRight size={16} />
+        </button>
       )}
     </div>
   );

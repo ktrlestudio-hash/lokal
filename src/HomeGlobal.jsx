@@ -656,11 +656,21 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
                superior: 46-14 = 32px. Antes era top-[26px] fijo, calculado
                sin contar el pt-5 externo — quedaban 20px más arriba del
                cuadrado real, alineadas con nada en particular. */}
+            {/* lg:opacity-0 lg:group-hover/cat:opacity-100 (no opacity-0
+                group-hover/cat:opacity-100 sin prefijo): en mobile no hay
+                hover real, así que la flecha nunca llegaba a mostrarse —
+                quedaba siempre en opacity-0 pese a que el pointer-events
+                del !opacity-0 condicional (catEdges.left/right) SÍ la
+                dejaba tocable, un botón invisible pero funcional. Mismo
+                criterio que ya usan las flechas del banner (arriba, líneas
+                ~564/569): visible por default (solo lg: la esconde salvo
+                hover), catEdges sigue siendo la única razón real para
+                ocultarla del todo. */}
             <NavArrowBtn dir="left" onClick={() => scrollCat(-1)}
-              className={`absolute left-1 top-[32px] w-7 h-7 bg-white/70 hover:bg-white/90 shadow-md dark:bg-black/15 dark:hover:bg-black/25 dark:shadow-none backdrop-blur-sm text-ink dark:text-white z-10 opacity-0 group-hover/cat:opacity-100 transition-opacity ${!catEdges.left ? 'pointer-events-none !opacity-0' : ''}`}
+              className={`absolute left-1 top-[32px] w-7 h-7 bg-white/70 hover:bg-white/90 shadow-md dark:bg-black/15 dark:hover:bg-black/25 dark:shadow-none backdrop-blur-sm text-ink dark:text-white z-10 lg:opacity-0 lg:group-hover/cat:opacity-100 transition-opacity ${!catEdges.left ? 'pointer-events-none !opacity-0' : ''}`}
               style={isDark ? { outline: '1px solid rgb(var(--brand, 0 184 217) / 0.5)', outlineOffset: -1 } : undefined} />
             <NavArrowBtn dir="right" onClick={() => scrollCat(1)}
-              className={`absolute right-1 top-[32px] w-7 h-7 bg-white/70 hover:bg-white/90 shadow-md dark:bg-black/15 dark:hover:bg-black/25 dark:shadow-none backdrop-blur-sm text-ink dark:text-white z-10 opacity-0 group-hover/cat:opacity-100 transition-opacity ${!catEdges.right ? 'pointer-events-none !opacity-0' : ''}`}
+              className={`absolute right-1 top-[32px] w-7 h-7 bg-white/70 hover:bg-white/90 shadow-md dark:bg-black/15 dark:hover:bg-black/25 dark:shadow-none backdrop-blur-sm text-ink dark:text-white z-10 lg:opacity-0 lg:group-hover/cat:opacity-100 transition-opacity ${!catEdges.right ? 'pointer-events-none !opacity-0' : ''}`}
               style={isDark ? { outline: '1px solid rgb(var(--brand, 0 184 217) / 0.5)', outlineOffset: -1 } : undefined} />
           </div>
 
@@ -701,7 +711,7 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
               </div>
             ) : (
               <div className="px-4 lg:px-6">
-                <Carrusel gap={12} padding="4px 2px">
+                <Carrusel gap={12} padding="4px 2px" border={CM.border} text={CM.txt} surface={CM.surf}>
                   {productosFiltrados.map((p) => (
                     <div key={p.id} style={{ width: CM_GRID_CARD_W, flexShrink: 0 }}>
                       <ProductCardGrid
@@ -749,7 +759,7 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
               </div>
             ) : (
               <div className="px-4 lg:px-6">
-                <Carrusel gap={12} padding="4px 2px">
+                <Carrusel gap={12} padding="4px 2px" border={CM.border} text={CM.txt} surface={CM.surf}>
                   {tiendasFiltradas.map((t) => {
                     const estado = getEstadoApertura(t.horarios);
                     return (
