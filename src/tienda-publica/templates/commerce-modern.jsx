@@ -780,6 +780,7 @@ export function TemplateCommerceModern({
           CatalogoModal cuando se abre desde adentro. ── */}
       {detalle && (
         <ProductDetailModal producto={detalle} onClose={() => setDetalle(null)} onCompartir={compartir}
+          productos={productos} onOpenProducto={setDetalle}
           {...(detalle ? carritoPropsDe(detalle) : {})} />
       )}
 
