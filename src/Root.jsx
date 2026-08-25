@@ -22,11 +22,9 @@ import EmailLinkComplete from './EmailLinkComplete';
 // StoreApp entra en esta lista aunque sea la más usada por el dueño: cuando
 // llega a ella ya pasó por el login, así que la descarga ocurre mientras
 // mira una pantalla que igual está esperando datos del servidor.
-const StoreApp        = lazy(() => import('./StoreApp'));
-const RegistroTienda  = lazy(() => import('./RegistroTienda'));
-const RegistroUsuario = lazy(() => import('./RegistroUsuario'));
-const ElegirRolScreen = lazy(() => import('./ElegirRolScreen'));
-const AdminPanel      = lazy(() => import('./AdminPanel'));
+const StoreApp         = lazy(() => import('./StoreApp'));
+const OnboardingWizard = lazy(() => import('./OnboardingWizard'));
+const AdminPanel       = lazy(() => import('./AdminPanel'));
 import { apiFetch } from './api.js';
 import { ADMIN_EMAILS } from './config/flags';
 import { TIENDA_SLUG_FIJA } from './config/constants';
@@ -327,13 +325,7 @@ function RootInner() {
   const [nuevoSinRol, setNuevoSinRol]         = useState(false);
   const [loadingUsuario, setLoadingUsuario]   = useState(false);
   const [usuarioFetchError, setUsuarioFetchError] = useState(null);
-  // Elección hecha en ElegirRolScreen (solo /admin — el Sheet de HomeGlobal
-  // ya no pasa por acá, ver el onNuevo de LoginSheet.jsx): 'usuario' o
-  // 'tienda' decide si el próximo render muestra RegistroUsuario o
-  // RegistroTienda en vez de la propia ElegirRolScreen. null = todavía no
-  // eligió (o cerró sesión, ver handleLogout).
-  const [rolElegido, setRolElegido]           = useState(null);
-  // Chunks lazy del backoffice (StoreApp/RegistroTienda) ya descargados —
+  // Chunks lazy del backoffice (StoreApp/OnboardingWizard) ya descargados —
   // el gate del splash los espera para no soltar el splash y caer en el
   // fallback del Suspense (ver el precargado en el listener de auth).
   const [chunksAdminListos, setChunksAdminListos] = useState(false);
@@ -385,7 +377,7 @@ function RootInner() {
   useEffect(() => {
     if (!firebaseUser) return undefined;
     let mounted = true;
-    Promise.all([import('./StoreApp'), import('./RegistroTienda'), import('./RegistroUsuario'), import('./ElegirRolScreen')])
+    Promise.all([import('./StoreApp'), import('./OnboardingWizard')])
       .catch(() => {})
       .finally(() => { if (mounted) setChunksAdminListos(true); });
     return () => { mounted = false; };
@@ -459,7 +451,7 @@ function RootInner() {
     return () => { mounted = false; };
   }, [debeResolverWhoami, firebaseUser]);
 
-  const handleLogout = () => { signOut(auth); setTiendaData(null); setUsuarioData(null); setNuevoSinRol(false); setRolElegido(null); };
+  const handleLogout = () => { signOut(auth); setTiendaData(null); setUsuarioData(null); setNuevoSinRol(false); };
 
   // enRaiz/rebotarLandingLogueada ya se declararon más arriba (justo
   // después de firebaseUser) — este hook DEBE vivir antes de cualquier
@@ -578,6 +570,23 @@ function RootInner() {
         onListo={() => { window.history.pushState({}, '', '/admin'); forceUrlRecheck(); }}
       />
     );
+  }
+
+  // DEBUG TEMPORAL — diagnóstico del bug "splash queda pegado tras login con
+  // cuenta de tienda existente, solo un reload real lo destraba" (reportado
+  // en producción, sin evidencia de consola todavía). Loguea el estado
+  // completo del gate solo mientras el splash sigue activo, para ver en la
+  // consola real qué variable se queda trabada. Sacar una vez encontrada la
+  // causa — no es logging permanente.
+  if (mostrandoSplash && window.location.pathname.startsWith('/admin')) {
+    // eslint-disable-next-line no-console
+    console.log('[DEBUG splash]', {
+      IS_FIRST_LOAD, SPLASH_SECTION, splashMinCumplido, authSinResolver,
+      backofficeSinPreparar, mostrandoSplashCrudo, mostrandoSplash,
+      loadingTienda, loadingUsuario, chunksAdminListos,
+      firebaseUser: firebaseUser === undefined ? 'undefined' : (firebaseUser === null ? 'null' : firebaseUser.uid),
+      redirectChecked, isAdminRoute, vaAlBackoffice, tiendaData: !!tiendaData,
+    });
   }
 
   if (mostrandoSplash) return <AppLoader />;
@@ -778,60 +787,48 @@ function RootInner() {
         );
       }
       // nuevoSinRol (whoami: {rol:null, nuevo:true}) — cuenta totalmente
-      // nueva. rolElegido decide entre la pantalla de elección y el
-      // formulario correspondiente; ambos con el mismo Suspense/fallback
-      // que ya usa el resto de este bloque.
+      // nueva. El wizard maneja su propio step interno (arranca en 'tipo',
+      // la propia ElegirRolScreen) y solo notifica a Root.jsx cuando la
+      // cuenta ya quedó creada de verdad (onCreado/onCreada), mismo
+      // contrato de callback que antes tenían RegistroUsuario/RegistroTienda
+      // por separado. Se sigue chequeando nuevoSinRol explícitamente (en vez
+      // de asumir "llegamos hasta acá, debe ser true") para que el fallback
+      // defensivo de abajo (whoami resuelto pero ni usuarioData ni
+      // nuevoSinRol aplicaron — no debería pasar nunca) siga siendo un caso
+      // aparte y no una suposición silenciosa.
       if (nuevoSinRol) {
-        if (rolElegido === 'usuario') {
-          return (
-            <Suspense fallback={<AppLoader />}>
-              <RegistroUsuario
-                firebaseUser={firebaseUser}
-                isDark={isDark}
-                onCreado={(usuario) => { setUsuarioData(usuario); setNuevoSinRol(false); }}
-                onLogout={handleLogout}
-              />
-            </Suspense>
-          );
-        }
-        if (rolElegido === 'tienda') {
-          return (
-            <Suspense fallback={<AppLoader />}>
-              <RegistroTienda
-                firebaseUser={firebaseUser}
-                isDark={isDark}
-                onCreada={setTiendaData}
-                onLogout={handleLogout}
-                onIrAlPanelAdmin={esAdminLogueado ? () => { window.history.pushState({}, '', '/admin/panel'); forceUrlRecheck(); } : null}
-              />
-            </Suspense>
-          );
-        }
         return (
           <Suspense fallback={<AppLoader />}>
-            <ElegirRolScreen
+            <OnboardingWizard
               firebaseUser={firebaseUser}
               isDark={isDark}
-              onElegirUsuario={() => setRolElegido('usuario')}
-              onElegirTienda={() => setRolElegido('tienda')}
+              onCreado={(usuario) => { setUsuarioData(usuario); setNuevoSinRol(false); }}
+              onCreada={setTiendaData}
               onLogout={handleLogout}
+              onIrAlPanelAdmin={esAdminLogueado ? () => { window.history.pushState({}, '', '/admin/panel'); forceUrlRecheck(); } : null}
+              onIrAlHome={() => { window.history.pushState({}, '', '/'); forceUrlRecheck(); }}
+              onIrAMiTienda={() => { window.history.pushState({}, '', '/admin'); forceUrlRecheck(); }}
             />
           </Suspense>
         );
       }
       // Fallback defensivo: whoami ya resolvió (no loading, sin error) pero
-      // ninguno de los tres casos de arriba aplicó — no debería ser
-      // alcanzable (usuarioData/nuevoSinRol son mutuamente excluyentes y
-      // siempre se setean juntos en el effect de whoami), pero antes que
-      // dejar una pantalla en blanco se trata igual que "cuenta nueva".
+      // ninguno de los casos de arriba aplicó — no debería ser alcanzable
+      // (usuarioData/nuevoSinRol son mutuamente excluyentes y siempre se
+      // setean juntos en el effect de whoami), pero antes que dejar una
+      // pantalla en blanco se monta el wizard igual (arranca en 'tipo',
+      // mismo tratamiento que "cuenta nueva").
       return (
         <Suspense fallback={<AppLoader />}>
-          <ElegirRolScreen
+          <OnboardingWizard
             firebaseUser={firebaseUser}
             isDark={isDark}
-            onElegirUsuario={() => setRolElegido('usuario')}
-            onElegirTienda={() => setRolElegido('tienda')}
+            onCreado={(usuario) => { setUsuarioData(usuario); setNuevoSinRol(false); }}
+            onCreada={setTiendaData}
             onLogout={handleLogout}
+            onIrAlPanelAdmin={esAdminLogueado ? () => { window.history.pushState({}, '', '/admin/panel'); forceUrlRecheck(); } : null}
+            onIrAlHome={() => { window.history.pushState({}, '', '/'); forceUrlRecheck(); }}
+            onIrAMiTienda={() => { window.history.pushState({}, '', '/admin'); forceUrlRecheck(); }}
           />
         </Suspense>
       );
