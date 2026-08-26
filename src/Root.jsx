@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { auth, onAuthStateChanged, getRedirectResult, signOut } from './firebase';
 import TiendaPublica from './TiendaPublica';
 import OfertaPublica from './OfertaPublica';
+import ProductoPublico from './ProductoPublico';
 import CarritoPublica from './CarritoPublica';
 import AdminLogin from './AdminLogin';
 import LegalPageView from './LegalPages';
@@ -66,6 +67,17 @@ function pathToOferta(pathname) {
   const segs = pathname.replace(/^\/+|\/+$/g, '').split('/');
   if (segs.length === 3 && segs[1] === 'o' && !RESERVED.has(segs[0]) && segs[0] && segs[2]) {
     return { tiendaSlug: segs[0], ofertaSlug: segs[2] };
+  }
+  return null;
+}
+
+// Detecta /:tienda/p/:producto (producto de catálogo individual). Mismo
+// shape que pathToOferta, separador /p/ en vez de /o/ — nunca colisiona (un
+// producto de catálogo y una oferta puntual son entidades distintas).
+function pathToProducto(pathname) {
+  const segs = pathname.replace(/^\/+|\/+$/g, '').split('/');
+  if (segs.length === 3 && segs[1] === 'p' && !RESERVED.has(segs[0]) && segs[0] && segs[2]) {
+    return { tiendaSlug: segs[0], productoSlug: segs[2] };
   }
   return null;
 }
@@ -201,12 +213,17 @@ function RootInner() {
 
   const [legalPage, setLegalPage] = useState(() => pathToLegal(window.location.pathname));
   const [ofertaRoute, setOfertaRoute] = useState(() => pathToOferta(window.location.pathname));
+  const [productoRoute, setProductoRoute] = useState(() => pathToProducto(window.location.pathname));
   const [carritoRoute, setCarritoRoute] = useState(() => pathToCarrito(window.location.pathname));
   // Oferta ya cargada en memoria (clic interno desde la tienda) — evita el
   // re-fetch: la tienda ya tenía el array completo de ofertas. Si es null y
   // hay ofertaRoute (link externo de WhatsApp/FB), OfertaPublica hace el
   // fetch como siempre. Navegación SPA real: URL cambia sin recargar.
   const [ofertaEnMemoria, setOfertaEnMemoria] = useState(null);
+  // Mismo criterio que ofertaEnMemoria, para /:tienda/p/:producto — clic
+  // interno desde la tienda o la Home global ya trae tienda+producto en
+  // memoria, sin re-fetch.
+  const [productoEnMemoria, setProductoEnMemoria] = useState(null);
 
   // Clic en una oferta DESDE la tienda: ya tenemos tienda+oferta en memoria,
   // solo cambiamos la URL y montamos la vista al instante (sin loader).
@@ -215,6 +232,23 @@ function RootInner() {
     window.history.pushState({}, '', `/${tienda.slug}/o/${ofertaSlug}`);
     setOfertaEnMemoria({ tienda, oferta });
     setOfertaRoute({ tiendaSlug: tienda.slug, ofertaSlug });
+    window.scrollTo(0, 0);
+  };
+
+  // Clic en un producto de catálogo — mismo mecanismo que navegarAOferta,
+  // con una diferencia: `tienda` puede llegar PARCIAL (HomeGlobal.jsx solo
+  // tiene tiendaNombre/tiendaSlug de productos-globales.js, no la tienda
+  // completa) — se detecta por la ausencia de tienda.id (una tienda real
+  // siempre lo tiene) y en ese caso NO se guarda en memoria: se navega solo
+  // con la URL, mismo shape que un link externo de WhatsApp/FB, así
+  // ProductoPublico hace el fetch real de tienda+producto por slug en vez
+  // de quedarse para siempre con un objeto de tienda a medias (sin logo,
+  // WhatsApp, catálogo completo para "más de esta tienda").
+  const navegarAProducto = (tienda, producto) => {
+    const productoSlug = producto.slug || producto.id;
+    window.history.pushState({}, '', `/${tienda.slug}/p/${productoSlug}`);
+    setProductoEnMemoria(tienda.id ? { tienda, producto } : null);
+    setProductoRoute({ tiendaSlug: tienda.slug, productoSlug });
     window.scrollTo(0, 0);
   };
   // isAdminRoute/isAdminPanelRoute leen window.location.pathname directo en
@@ -272,6 +306,9 @@ function RootInner() {
       // Al salir de la ruta de oferta (atrás), soltar la copia en memoria —
       // así una futura visita por link externo no reusa datos viejos.
       if (!nextOferta) setOfertaEnMemoria(null);
+      const nextProducto = pathToProducto(window.location.pathname);
+      setProductoRoute(nextProducto);
+      if (!nextProducto) setProductoEnMemoria(null);
       setCarritoRoute(pathToCarrito(window.location.pathname));
       // El resto de las rutas (raíz/landing, /:slug de tienda, /admin) se
       // resuelven leyendo location.pathname en el render, no desde estado:
@@ -639,6 +676,41 @@ function RootInner() {
     );
   }
 
+  // ── Producto individual (/:tienda/p/:producto) — página completa propia
+  //    (mobile y desktop), reemplaza al modal/sheet ProductDetailModal. El
+  //    link lo comparten WhatsApp/FB; el SSR (ogProducto en
+  //    functions/_middleware.js) responde a crawlers con OG y redirige a los
+  //    humanos acá. Mismo mecanismo que ofertaRoute, arriba. ─────────────────
+  if (productoRoute) {
+    const volverDeProducto = () => {
+      window.history.pushState({}, '', `/${productoRoute.tiendaSlug}`);
+      setProductoRoute(null);
+      setProductoEnMemoria(null);
+    };
+    // Si el producto en memoria coincide con la URL actual (clic interno
+    // desde la tienda o la Home global), se lo pasamos a ProductoPublico
+    // para render instantáneo sin fetch.
+    const productoDesdeMemoria = productoEnMemoria && productoEnMemoria.producto
+      && (productoEnMemoria.producto.slug || productoEnMemoria.producto.id) === productoRoute.productoSlug
+      ? productoEnMemoria : null;
+    return (
+      <ProductoPublico
+        tiendaSlug={productoRoute.tiendaSlug}
+        productoSlug={productoRoute.productoSlug}
+        tiendaInicial={productoDesdeMemoria?.tienda}
+        productoInicial={productoDesdeMemoria?.producto}
+        isDark={isDark}
+        toggleTheme={toggleTheme}
+        onVolver={volverDeProducto}
+        // Navegar a OTRO producto sin salir de la página (ver "más de esta
+        // tienda"/"también te puede interesar" dentro de ProductoIndividual)
+        // — reusa navegarAProducto, mismo mecanismo que el clic normal.
+        onNavegarAProducto={navegarAProducto}
+        isFirstLoad={IS_FIRST_LOAD}
+      />
+    );
+  }
+
   // ── Pedido individual (/:tienda/c/:carrito) — link que reemplaza al
   //    mensaje de texto plano a WhatsApp: acá el link ES el pedido, con su
   //    propio OG dinámico (carrito-og edge function) y una vista donde el
@@ -920,6 +992,7 @@ function RootInner() {
         // Mismo mecanismo pushState+recheck que el resto de la navegación
         // interna — nunca window.location.href (evita el flash de splash).
         onIrAlPanel={() => { window.history.pushState({}, '', '/admin'); forceUrlRecheck(); }}
+        onVerProducto={navegarAProducto}
       />
     );
   }
@@ -938,6 +1011,7 @@ function RootInner() {
       firebaseUser={firebaseUser}
       onIrAlPanel={() => { window.history.pushState({}, '', '/admin'); forceUrlRecheck(); }}
       onVerOferta={navegarAOferta}
+      onVerProducto={navegarAProducto}
       isFirstLoad={IS_FIRST_LOAD}
     />
   );

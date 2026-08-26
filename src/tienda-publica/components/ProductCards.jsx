@@ -227,7 +227,8 @@ export function TituloDescripcion({ nombre, descripcion, txt, txtM, surf2, titul
    criterio que MV Distribuciones para las cards de grilla, donde precio y
    control comparten una fila angosta y un stepper completo se ve apretado.
    El tap sigue sumando de a uno; para restar/gestionar cantidad exacta el
-   producto ya tiene su propio selector completo en ProductDetailModal. ── */
+   producto ya tiene su propio selector completo en la página de detalle
+   (ver ProductoIndividual.jsx). ── */
 export function QtyControl({ qty, onAdd, onRemove, p, primary, onPrimary, surf2, border, txt, size = 'md', compact = false }) {
   if (!onAdd) return null;
   const d = size === 'sm' ? 34 : 38;

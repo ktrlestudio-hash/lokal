@@ -33,7 +33,6 @@ import { CarritoSheet } from '../sections/CarritoSheet.jsx';
 import { TiendaNavBar } from '../sections/TiendaNavBar.jsx';
 import { TiendaFooter } from '../sections/TiendaFooter.jsx';
 import { ShareSheet } from '../sections/ShareSheet.jsx';
-import { ProductDetailModal } from '../sections/ProductDetailModal.jsx';
 
 import { getEstadoApertura } from '../utils.js';
 import { usePhotoSwipe, PhotoSwipeStyles, PhotoSwipeOverlay } from '../hooks/usePhotoSwipe.jsx';
@@ -322,6 +321,7 @@ export function TemplateCommerceModern({
   onIrATienda,        // (tienda) => void
   onVerTodosFiltrado, // () => void — "Ver todos" en el catálogo, solo plataforma
   onVerOferta,        // (tienda, oferta) => void — clic interno SPA a la oferta (sin re-fetch); si no viene, el <a href> navega normal
+  onVerProducto,      // (tienda, producto) => void — clic interno SPA al detalle de producto (/:tienda/p/:producto, página completa); reemplaza al viejo ProductDetailModal
   heroLayout = 'card',// 'card' (default, apilado centrado) | 'editorial' (foto banner + logo izq + info en columna a la derecha, composición horizontal que ahorra altura)
   footer,             // { dark, toggleDark } | null — render-prop del footer de marca (TiendaPublicaRenderer)
   // Dueño logueado viendo su propia tienda — habilita el FAB "+" de carga
@@ -360,7 +360,12 @@ export function TemplateCommerceModern({
 
   const productos = (tienda.productos || []).filter(p => p.activo !== false && p.disponible !== false);
 
-  const [detalle, setDetalle] = useState(null);
+  // Detalle de producto: antes era un modal/sheet local (detalle/setDetalle
+  // + ProductDetailModal); ahora es una página completa propia
+  // (/:tienda/p/:producto, ver ProductoIndividual.jsx) con URL/SSR/OG real
+  // — onVerProducto navega ahí (Root.jsx → navegarAProducto), sin estado
+  // local ni modal montado en este template.
+  const abrirDetalleProducto = (p) => onVerProducto?.(tienda, p);
   // Catálogo: solo el interruptor del modal fullscreen queda acá — todo el
   // estado de búsqueda/filtro/orden/categoría vive dentro de CatalogoModal
   // (self-contained, Fase 6 del plan), sin consumidores fuera de su UI.
@@ -707,7 +712,7 @@ export function TemplateCommerceModern({
       {s.productos?.activa && (
         <CatalogoSection
           productos={productos} onAbrirModal={() => setCatalogoModalOpen(true)}
-          carritoPropsDe={carritoPropsDe} onOpenDetalle={setDetalle} onOpenAdminMenu={esDueño ? setOfertaAdminTarget : undefined}
+          carritoPropsDe={carritoPropsDe} onOpenDetalle={abrirDetalleProducto} onOpenAdminMenu={esDueño ? setOfertaAdminTarget : undefined}
         />
       )}
       {ofertaCompartir && (
@@ -761,27 +766,18 @@ export function TemplateCommerceModern({
       </div>{/* fin scroll interno */}
 
       {/* ── Catálogo — modal fullscreen (zIndex 4700), montado a nivel raíz
-          como el resto de sheets. onOpenDetalle/onOpenAdminMenu delegan al
-          mismo detalle/ofertaAdminTarget que ya usa el resto de la página
-          — un solo ProductDetailModal/OfertaAdminSheet, no uno por modal. ── */}
+          como el resto de sheets. onOpenDetalle navega a la página completa
+          de producto (/:tienda/p/:producto) en vez de abrir un modal
+          interno — mismo criterio en todos los puntos de entrada. ── */}
       {catalogoModalOpen && (
         <CatalogoModal
           tienda={tienda} esDueño={esDueño} productos={productos}
           onClose={() => setCatalogoModalOpen(false)}
           carritoPropsDe={carritoPropsDe}
-          onOpenDetalle={setDetalle}
+          onOpenDetalle={abrirDetalleProducto}
           onOpenAdminMenu={esDueño ? setOfertaAdminTarget : null}
           onVerTodosFiltrado={onVerTodosFiltrado}
         />
-      )}
-
-      {/* ── Detalle — vista tipo flyer (imagen + compartir, sin carrito).
-          zIndex 4750 (ver ProductDetailModal.jsx) — queda por encima de
-          CatalogoModal cuando se abre desde adentro. ── */}
-      {detalle && (
-        <ProductDetailModal producto={detalle} onClose={() => setDetalle(null)} onCompartir={compartir}
-          productos={productos} onOpenProducto={setDetalle}
-          {...(detalle ? carritoPropsDe(detalle) : {})} />
       )}
 
       {/* Modal de mapa compartido — el chip de dirección del hero lo abre

@@ -51,7 +51,7 @@ function NavItem({ Icon, label, onClick }) {
 export function TiendaNavBar({ onAbrirMapa, onAbrirHorarios, onCompartir, onAbrirCarrito, carritoCount }) {
   const conCarrito = onAbrirCarrito != null;
   // Altura real publicada en --tp-nav-h — la usan los sheets/modales que se
-  // abren POR ENCIMA de este nav (ej. ProductDetailModal) para no taparlo
+  // abren POR ENCIMA de este nav para no taparlo
   // con su position:fixed. Un fixed con inset:0 ignora el flujo normal del
   // documento (donde este nav sí "empuja" el resto del layout como
   // shrink-0), así que necesita este valor medido para saber cuánto restar.

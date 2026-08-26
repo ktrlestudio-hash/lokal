@@ -89,6 +89,44 @@ async function ogOferta(origin, segs) {
   }
 }
 
+// Mismo shape/campos (publishAt/expireAt/visible) que una oferta — reusa
+// esVigenteOferta tal cual, sin duplicar la lógica de vigencia.
+const esVigenteProducto = esVigenteOferta;
+
+async function ogProducto(origin, segs) {
+  const tiendaSlug = segs[0];
+  const productoSlug = segs[2];
+  const pageUrl = `${origin}/${encodeURIComponent(tiendaSlug)}/p/${encodeURIComponent(productoSlug)}`;
+  try {
+    const pRes = await fetch(`${origin}/.netlify/functions/productos?slug=${encodeURIComponent(tiendaSlug)}&productoSlug=${encodeURIComponent(productoSlug)}`);
+    const data = pRes.ok ? await pRes.json() : null;
+    const producto = data?.producto || null;
+    const tienda = data?.tienda || null;
+    const nombreTienda = tienda?.nombre || 'LOKAL';
+    const brand = tienda?.pagina?.color || '#00B8D9';
+
+    if (!producto || !producto.id || !esVigenteProducto(producto)) {
+      return htmlResp(paginaOG({
+        title: `Producto no disponible — ${nombreTienda}`,
+        desc: `Este producto ya no está disponible. Mirá el catálogo de ${nombreTienda}.`,
+        image: null, url: `${origin}/${encodeURIComponent(tiendaSlug)}`, brand,
+      }));
+    }
+
+    const nombreProducto = producto.nombre || producto.titulo || 'Producto';
+    const precio = typeof producto.precio === 'number' ? ` — ${fmtPeso(producto.precio)}` : '';
+
+    return htmlResp(paginaOG({
+      title: `${nombreProducto} — ${nombreTienda}`,
+      desc: (producto.descripcion?.trim() || `Producto de ${nombreTienda}.`) + precio,
+      image: producto.ogImageUrl || producto.thumbUrl || producto.imageUrl || producto.foto,
+      url: pageUrl, brand,
+    }));
+  } catch (_) {
+    return htmlResp(paginaOG({ title: 'Producto — LOKAL', desc: 'Catálogo de productos.', image: null, url: origin }));
+  }
+}
+
 async function ogCarrito(origin, segs) {
   const tiendaSlug = segs[0];
   const carritoSlug = segs[2];
@@ -201,6 +239,11 @@ export async function onRequest(context) {
     // /:tienda/o/:oferta — 3 segmentos, medio "o".
     if (segs.length === 3 && segs[1] === 'o' && segs[0] && segs[2]) {
       response = await ogOferta(url.origin, segs);
+    // /:tienda/p/:producto — 3 segmentos, medio "p". Detalle de UN producto
+    // de catálogo (distinto de /o/, que es una oferta puntual). Nunca
+    // colisiona con /o/ o /c/ (medios distintos).
+    } else if (segs.length === 3 && segs[1] === 'p' && segs[0] && segs[2]) {
+      response = await ogProducto(url.origin, segs);
     // /:tienda/c/:carrito — 3 segmentos, medio "c". Nunca colisiona con
     // /:tienda/o/:oferta (medios distintos).
     } else if (segs.length === 3 && segs[1] === 'c' && segs[0] && segs[2]) {

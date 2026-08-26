@@ -35,6 +35,10 @@ export function TiendaPublicaRenderer({
   onVerEnMapaGlobal, tiendasSimilares, onIrATienda, onVerTodosFiltrado,
   // Clic interno en una oferta (SPA, sin re-fetch) — Root pasa navegarAOferta.
   onVerOferta,
+  // Clic interno en un producto de catálogo (SPA, sin re-fetch) — Root pasa
+  // navegarAProducto. Navega a /:tienda/p/:producto (página completa propia,
+  // ver ProductoIndividual.jsx), reemplaza al viejo ProductDetailModal.
+  onVerProducto,
   // Dueño logueado viendo su propia tienda — habilita el FAB "+" de carga
   // rápida de oferta directo en la vista pública (ver OfertaQuickForm), el
   // menú de 3 puntos por card (ver OfertaAdminSheet), y el FAB "Editar mi
@@ -114,6 +118,7 @@ export function TiendaPublicaRenderer({
       onIrATienda={onIrATienda}
       onVerTodosFiltrado={onVerTodosFiltrado}
       onVerOferta={onVerOferta}
+      onVerProducto={onVerProducto}
       esDueño={esDueño}
       onOfertaCreada={onOfertaCreada}
       onOfertaActualizada={onOfertaActualizada}

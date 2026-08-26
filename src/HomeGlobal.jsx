@@ -26,8 +26,6 @@ import { CATEGORIES, getCategoryPath } from './categories';
 import NavArrowBtn from './components/ui/NavArrowBtn';
 import useScrollEdges from './hooks/useScrollEdges';
 import { Carrusel, ProductCardGrid, CM_GRID_BODY, CM_GRID_CARD_W } from './tienda-publica/components/ProductCards.jsx';
-import { ProductDetailModal } from './tienda-publica/sections/ProductDetailModal.jsx';
-import { ShareSheet } from './tienda-publica/sections/ShareSheet.jsx';
 import { getEstadoApertura } from './tienda-publica/utils.js';
 import { API_BASE } from './config/flags';
 import { SheetLegal, CARD_TINTED } from './components/LegalSheet.jsx';
@@ -159,7 +157,7 @@ function useBanners(navigate, cantTiendas) {
   ], [navigate, cantTiendas]);
 }
 
-export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
+export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel, onVerProducto }) {
   const [activeCat, setActiveCat] = useState(null);
   const [tiendas, setTiendas] = useState([]);
   const [productos, setProductos] = useState([]);
@@ -230,12 +228,19 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
   // misma pieza con textos propios.
   const [proximamente, setProximamente] = useState(null);
   // Detalle de producto abierto desde Destacados — antes el click en la
-  // card navegaba directo a la tienda (irATienda), sin pasar por el
-  // detalle. Ahora abre ProductDetailModal (el mismo fusionado con
-  // ProductDetailScreen de LOKAL Global) y desde ahí "Ver tienda"/compartir
-  // llevan a la tienda si el usuario lo elige, en vez de saltarse el paso.
-  const [productoDetalle, setProductoDetalle] = useState(null);
-  const [shareProducto, setShareProducto] = useState(null);
+  // card abría ProductDetailModal (modal/sheet local). Ahora navega a la
+  // página completa propia /:tienda/p/:producto (ver ProductoIndividual.jsx,
+  // con URL/SSR/OG real) vía onVerProducto (Root.jsx → navegarAProducto).
+  //
+  // productos-globales.js SOLO trae tiendaNombre/tiendaSlug (ver ese
+  // archivo), no la tienda completa (logo/whatsapp/productos hermanos) — a
+  // propósito NO se arma acá un objeto "tienda" parcial: Root.jsx solo trata
+  // los datos como "en memoria" (sin re-fetch) cuando tienda+producto vienen
+  // completos, y una tienda a medias dejaría ProductoIndividual sin
+  // logo/WhatsApp/"más de esta tienda" para siempre. Se navega solo con el
+  // slug (mismo shape que un link externo de WhatsApp/FB): ProductoPublico
+  // hace el fetch real de tienda+producto por slug.
+  const abrirDetalleProducto = (p) => onVerProducto?.({ slug: p.tiendaSlug }, p);
   const navigate = (dest) => {
     if (dest === 'tiendas') tiendasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (dest === 'destacados') destacadosRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -742,7 +747,7 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
                     <div key={p.id} style={{ width: CM_GRID_CARD_W, flexShrink: 0 }}>
                       <ProductCardGrid
                         p={p}
-                        onOpen={() => setProductoDetalle(p)}
+                        onOpen={() => abrirDetalleProducto(p)}
                         onAdd={agregarAlCarritoGlobal}
                         surf={CM.surf} surf2={CM.surf2} border={CM.border} txt={CM.txt} txtM={CM.txtM}
                         primary={CM.primary} onPrimary={CM.onPrimary}
@@ -839,28 +844,6 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
         icono={proximamente?.icono}
         titulo={proximamente?.titulo}
         texto={proximamente?.texto}
-      />
-
-      {productoDetalle && (
-        <ProductDetailModal
-          producto={productoDetalle}
-          onClose={() => setProductoDetalle(null)}
-          onCompartir={() => setShareProducto(productoDetalle)}
-          onAdd={agregarAlCarritoGlobal}
-          onOpenProducto={setProductoDetalle}
-          similares={productosFiltrados}
-          tiendaNombre={productoDetalle.tiendaNombre}
-          onVerTienda={() => { setProductoDetalle(null); irATienda(productoDetalle.tiendaSlug); }}
-          surf={CM.surf} surf2={CM.surf2} border={CM.border} txt={CM.txt} txtM={CM.txtM}
-          primary={CM.primary} onPrimary={CM.onPrimary}
-          chipBg={CM.chipBg} chipColor={CM.chipColor}
-        />
-      )}
-      <ShareSheet
-        open={!!shareProducto}
-        onClose={() => setShareProducto(null)}
-        url={shareProducto?.tiendaSlug ? `${window.location.origin}/${shareProducto.tiendaSlug}` : ''}
-        titulo={shareProducto?.nombre || shareProducto?.titulo}
       />
 
       <LoginSheet

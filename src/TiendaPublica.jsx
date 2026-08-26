@@ -26,7 +26,7 @@ function cacheSet(key, data) {
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
-export default function TiendaPublica({ slug, isDark, toggleTheme, firebaseUser, onIrAlPanel, onVerOferta, isFirstLoad = false }) {
+export default function TiendaPublica({ slug, isDark, toggleTheme, firebaseUser, onIrAlPanel, onVerOferta, onVerProducto, isFirstLoad = false }) {
   // Si la tienda ya está en cache (ej. volver desde la oferta), arrancamos
   // CON los datos y SIN loader: la vuelta es instantánea, igual que la ida.
   // El splash/loader solo corresponde a la primera carga en frío.
@@ -285,7 +285,7 @@ export default function TiendaPublica({ slug, isDark, toggleTheme, firebaseUser,
       {/* Página — monta cuando el loader ya terminó, sin transición propia */}
       {tiendaConOfertas && (
         <TiendaPublicaRenderer
-          tienda={tiendaConOfertas} isDark={isDark} onToggleTheme={toggleTheme} onVerOferta={onVerOferta}
+          tienda={tiendaConOfertas} isDark={isDark} onToggleTheme={toggleTheme} onVerOferta={onVerOferta} onVerProducto={onVerProducto}
           esDueño={esDueño}
           onOfertaCreada={handleOfertaCreadaOptimista}
           onOfertaReintentar={handleReintentarOferta}

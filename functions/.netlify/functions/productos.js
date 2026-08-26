@@ -63,8 +63,32 @@ export async function onRequestGet({ request, env }) {
     const { searchParams } = new URL(request.url);
     const tiendaId = searchParams.get('tiendaId');
     const slug = searchParams.get('slug');
+    const productoSlug = searchParams.get('productoSlug');
     const all = searchParams.get('all');
     const now = Date.now();
+
+    // Un producto puntual de catálogo, calcado de la rama slug+ofertaSlug de
+    // ofertas.js — usado por /:tienda/p/:producto (ProductoPublica.jsx y el
+    // ogProducto de functions/_middleware.js), un solo fetch para tienda+producto.
+    //
+    // tienda.productos se arma ACÁ (catálogo vigente completo, mismo filtro
+    // que la rama `slug` de abajo) — ningún camino de este archivo deja
+    // `tienda` con `.productos` embebido de por sí (confirmado leyendo las
+    // otras 3 ramas: la de abajo devuelve un array plano, no anidado en
+    // `tienda`). Sin esto, ProductoIndividual.jsx (que lee `tienda.productos`
+    // para "Más de esta tienda") siempre vería un catálogo vacío pese a que
+    // el producto puntual sí se resuelve bien.
+    if (slug && productoSlug) {
+      const tiendas = await readTiendas(bucket);
+      const tienda = findTiendaBySlug(tiendas, slug);
+      if (!tienda) return jsonResponse(event, 404, { error: 'Tienda no encontrada' }, { ...HTTP_OPTIONS, env });
+      const producto = productos.find((p) => String(p.tiendaId) === String(tienda.id) && (p.id === productoSlug || p.slug === productoSlug));
+      if (!producto) return jsonResponse(event, 404, { error: 'Producto no encontrado' }, { ...HTTP_OPTIONS, env });
+      const catalogoTienda = productos
+        .filter((p) => String(p.tiendaId) === String(tienda.id) && esVigente(p, now))
+        .map(({ views, uniques, lastVisit, ...pub }) => pub);
+      return jsonResponse(event, 200, { producto, tienda: { ...tienda, productos: catalogoTienda } }, { ...HTTP_OPTIONS, env });
+    }
 
     if (slug) {
       const tiendas = await readTiendas(bucket);
