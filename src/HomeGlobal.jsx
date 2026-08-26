@@ -26,6 +26,8 @@ import { CATEGORIES, getCategoryPath } from './categories';
 import NavArrowBtn from './components/ui/NavArrowBtn';
 import useScrollEdges from './hooks/useScrollEdges';
 import { Carrusel, ProductCardGrid, CM_GRID_BODY, CM_GRID_CARD_W } from './tienda-publica/components/ProductCards.jsx';
+import { ProductDetailModal } from './tienda-publica/sections/ProductDetailModal.jsx';
+import { ShareSheet } from './tienda-publica/sections/ShareSheet.jsx';
 import { getEstadoApertura } from './tienda-publica/utils.js';
 import { API_BASE } from './config/flags';
 import { SheetLegal, CARD_TINTED } from './components/LegalSheet.jsx';
@@ -227,6 +229,13 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
   // banner, botón "Mapa" de Tiendas destacadas y bottom-nav disparan la
   // misma pieza con textos propios.
   const [proximamente, setProximamente] = useState(null);
+  // Detalle de producto abierto desde Destacados — antes el click en la
+  // card navegaba directo a la tienda (irATienda), sin pasar por el
+  // detalle. Ahora abre ProductDetailModal (el mismo fusionado con
+  // ProductDetailScreen de LOKAL Global) y desde ahí "Ver tienda"/compartir
+  // llevan a la tienda si el usuario lo elige, en vez de saltarse el paso.
+  const [productoDetalle, setProductoDetalle] = useState(null);
+  const [shareProducto, setShareProducto] = useState(null);
   const navigate = (dest) => {
     if (dest === 'tiendas') tiendasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (dest === 'destacados') destacadosRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -733,7 +742,7 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
                     <div key={p.id} style={{ width: CM_GRID_CARD_W, flexShrink: 0 }}>
                       <ProductCardGrid
                         p={p}
-                        onOpen={() => irATienda(p.tiendaSlug)}
+                        onOpen={() => setProductoDetalle(p)}
                         onAdd={agregarAlCarritoGlobal}
                         surf={CM.surf} surf2={CM.surf2} border={CM.border} txt={CM.txt} txtM={CM.txtM}
                         primary={CM.primary} onPrimary={CM.onPrimary}
@@ -830,6 +839,28 @@ export default function HomeGlobal({ isDark, toggleTheme, onIrAlPanel }) {
         icono={proximamente?.icono}
         titulo={proximamente?.titulo}
         texto={proximamente?.texto}
+      />
+
+      {productoDetalle && (
+        <ProductDetailModal
+          producto={productoDetalle}
+          onClose={() => setProductoDetalle(null)}
+          onCompartir={() => setShareProducto(productoDetalle)}
+          onAdd={agregarAlCarritoGlobal}
+          onOpenProducto={setProductoDetalle}
+          similares={productosFiltrados}
+          tiendaNombre={productoDetalle.tiendaNombre}
+          onVerTienda={() => { setProductoDetalle(null); irATienda(productoDetalle.tiendaSlug); }}
+          surf={CM.surf} surf2={CM.surf2} border={CM.border} txt={CM.txt} txtM={CM.txtM}
+          primary={CM.primary} onPrimary={CM.onPrimary}
+          chipBg={CM.chipBg} chipColor={CM.chipColor}
+        />
+      )}
+      <ShareSheet
+        open={!!shareProducto}
+        onClose={() => setShareProducto(null)}
+        url={shareProducto?.tiendaSlug ? `${window.location.origin}/${shareProducto.tiendaSlug}` : ''}
+        titulo={shareProducto?.nombre || shareProducto?.titulo}
       />
 
       <LoginSheet
