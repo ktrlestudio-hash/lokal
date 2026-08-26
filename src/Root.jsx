@@ -244,11 +244,21 @@ function RootInner() {
   // ProductoPublico hace el fetch real de tienda+producto por slug en vez
   // de quedarse para siempre con un objeto de tienda a medias (sin logo,
   // WhatsApp, catálogo completo para "más de esta tienda").
+  //
+  // Ese mismo dato (tienda completa vs parcial) define el ORIGEN de la
+  // navegación, que la vista usa para elegir su chrome: desde la Home
+  // global el producto se abre con la identidad de LOKAL (header/nav/paleta
+  // generales) y "Volver" regresa a la Home; desde una tienda individual se
+  // abre con la marca de esa tienda y "Volver" regresa a la tienda. Un link
+  // externo (WhatsApp/FB) no tiene origen previo: cae en 'tienda', que es el
+  // contexto correcto para alguien que llega directo al producto de un
+  // comercio puntual.
   const navegarAProducto = (tienda, producto) => {
     const productoSlug = producto.slug || producto.id;
+    const desdeHome = !tienda.id;
     window.history.pushState({}, '', `/${tienda.slug}/p/${productoSlug}`);
-    setProductoEnMemoria(tienda.id ? { tienda, producto } : null);
-    setProductoRoute({ tiendaSlug: tienda.slug, productoSlug });
+    setProductoEnMemoria(desdeHome ? null : { tienda, producto });
+    setProductoRoute({ tiendaSlug: tienda.slug, productoSlug, origen: desdeHome ? 'home' : 'tienda' });
     window.scrollTo(0, 0);
   };
   // isAdminRoute/isAdminPanelRoute leen window.location.pathname directo en
@@ -307,7 +317,14 @@ function RootInner() {
       // así una futura visita por link externo no reusa datos viejos.
       if (!nextOferta) setOfertaEnMemoria(null);
       const nextProducto = pathToProducto(window.location.pathname);
-      setProductoRoute(nextProducto);
+      // El `origen` ('home'/'tienda') no viaja en la URL — lo aporta
+      // navegarAProducto. Al volver/avanzar con los botones del navegador
+      // hay que conservar el que ya estaba para el MISMO producto, o la
+      // vista cambiaría de chrome (identidad LOKAL ↔ marca de tienda) a
+      // mitad de una sesión de navegación.
+      setProductoRoute((prev) => (nextProducto && prev && prev.productoSlug === nextProducto.productoSlug && prev.tiendaSlug === nextProducto.tiendaSlug
+        ? { ...nextProducto, origen: prev.origen }
+        : nextProducto));
       if (!nextProducto) setProductoEnMemoria(null);
       setCarritoRoute(pathToCarrito(window.location.pathname));
       // El resto de las rutas (raíz/landing, /:slug de tienda, /admin) se
@@ -682,10 +699,16 @@ function RootInner() {
   //    functions/_middleware.js) responde a crawlers con OG y redirige a los
   //    humanos acá. Mismo mecanismo que ofertaRoute, arriba. ─────────────────
   if (productoRoute) {
+    // "Volver" es coherente con de dónde vino: desde la Home global vuelve a
+    // la Home (no a la tienda del producto, que el usuario nunca visitó);
+    // desde una tienda —o entrando por un link externo, que no tiene origen
+    // previo— vuelve a esa tienda.
+    const desdeHome = productoRoute.origen === 'home';
     const volverDeProducto = () => {
-      window.history.pushState({}, '', `/${productoRoute.tiendaSlug}`);
+      window.history.pushState({}, '', desdeHome ? '/' : `/${productoRoute.tiendaSlug}`);
       setProductoRoute(null);
       setProductoEnMemoria(null);
+      forceUrlRecheck();
     };
     // Si el producto en memoria coincide con la URL actual (clic interno
     // desde la tienda o la Home global), se lo pasamos a ProductoPublico
@@ -706,6 +729,12 @@ function RootInner() {
         // tienda"/"también te puede interesar" dentro de ProductoIndividual)
         // — reusa navegarAProducto, mismo mecanismo que el clic normal.
         onNavegarAProducto={navegarAProducto}
+        // 'home' | 'tienda' — define el chrome de la vista (ver
+        // ProductoIndividual.jsx): identidad LOKAL general vs marca de la
+        // tienda. Ver navegarAProducto arriba.
+        origen={productoRoute.origen || 'tienda'}
+        onIrAlHome={() => { window.history.pushState({}, '', '/'); setProductoRoute(null); setProductoEnMemoria(null); forceUrlRecheck(); }}
+        onIrALaTienda={() => { window.history.pushState({}, '', `/${productoRoute.tiendaSlug}`); setProductoRoute(null); setProductoEnMemoria(null); forceUrlRecheck(); }}
         isFirstLoad={IS_FIRST_LOAD}
       />
     );

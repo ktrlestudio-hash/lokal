@@ -1,38 +1,34 @@
 /**
  * ProductoIndividual — vista pública de UN producto de catálogo
- * (/:tienda/p/:producto), página completa (mobile Y desktop, no un
- * sheet/modal flotante).
+ * (/:tienda/p/:producto), página completa (mobile Y desktop).
  *
- * Infraestructura de página CALCADA de OfertaIndividual.jsx (mismo pipeline
- * de tema/color vía deriveColorPalette, layout height:100dvh con scroll
- * interno, header con botón "Volver", TiendaNavBar/TiendaFooter/ShareSheet
- * reusados tal cual para no divergir del resto de la tienda pública,
- * distinción mobile/desktop vía DESKTOP_QUERY). Sin el swipe táctil custom
- * entre ofertas hermanas ni la medición dinámica de OfertaIndividual — el
- * producto de catálogo es un contenido más "e-commerce".
+ * ── Dos pieles, un solo componente (prop `origen`) ────────────────────────
+ * El mismo producto se puede abrir desde dos lugares muy distintos, y la
+ * página tiene que sentirse parte de AQUEL de donde vino:
  *
- * Layout desktop de referencia (pedido explícito del usuario, 2 capturas de
- * e-commerce reales): principalmente "Rivly" (silla de madera) — fondo con
- * tinte sutil de color de marca detrás de la foto (no plano/neutro), columna
- * derecha con nombre de tienda chico arriba del título, precio grande con
- * tachado al lado si hay descuento, jerarquía limpia nombre→precio→acción.
- * De "Nostra" (campera) se toma: breadcrumb arriba (Tienda › Categoría ›
- * Producto, vía categoryId — dato interno, nunca en la URL), tira de
- * thumbnails debajo de la foto principal con flechas a los costados de la
- * foto grande (no solo dots), y "Related products" como carrusel de cards al
- * pie (ya resuelto con ProductCardGrid/Carrusel, sin cambios ahí). Sin
- * multi-variante de color/talle — LOKAL no tiene ese concepto hoy.
+ *   origen='home'   → llegó desde la Home global (marketplace multi-tienda).
+ *                     Identidad LOKAL: tokens generales (--brand, --ink,
+ *                     --surface-card), header propio con el logo de LOKAL,
+ *                     bottom-nav global, "Volver" regresa a la Home. NO se
+ *                     aplica la paleta de la tienda: en un marketplace, el
+ *                     producto de un comercio no debe repintar toda la app
+ *                     con la marca de ese comercio.
+ *   origen='tienda' → llegó desde la tienda individual (o por un link
+ *                     externo de WhatsApp/FB, que no tiene origen previo).
+ *                     Identidad de la TIENDA: paleta --tp-* vía
+ *                     deriveColorPalette, header con su logo/nombre,
+ *                     TiendaNavBar/TiendaFooter, "Volver" regresa a la tienda.
  *
- * Contenido MIGRADO de ProductDetailModal.jsx (mismo dato, sin el wrapper de
- * sheet/animación de apertura-cierre): badge dinámico, precio con tachado,
- * descripción, "Más de esta tienda".
+ * Ambas pieles comparten EXACTAMENTE el mismo cuerpo (foto cuadrada,
+ * breadcrumb de categorías, precio, acciones, "más de esta tienda") — lo que
+ * cambia es el chrome y los colores, no la estructura.
  *
- * La ruta la sirve el mismo link que comparte WhatsApp/FB: el SSR
- * (ogProducto en functions/_middleware.js) responde a los crawlers con OG
- * meta tags y redirige a los humanos a esta vista React.
+ * Layout: mobile apilado (foto → info → sugeridos); desktop 2 columnas con
+ * la foto sticky (patrón e-commerce estándar: la foto acompaña mientras se
+ * lee la info larga a la derecha).
  */
 import React, { useState, useLayoutEffect, useMemo, useEffect, useCallback } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, ChevronRight as ChevronRightCrumb, Share2, ShoppingBag, Store } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Share2, ShoppingBag, Store, Home as HomeIcon } from 'lucide-react';
 import { deriveColorPalette, resolvePagina, formatPrice } from './utils.js';
 import { TiendaFooter } from './sections/TiendaFooter.jsx';
 import { TiendaNavBar } from './sections/TiendaNavBar.jsx';
@@ -41,27 +37,71 @@ import { Carrusel, ProductCardGrid, CM_GRID_CARD_W, nombreDe, fotoDe } from './c
 import { calcularBadges, BADGE_CONFIG } from '../utils/productBadges.js';
 import { trackPageview, trackClick, trackCompartir } from './track.js';
 import { getCategoryPath } from '../categories.js';
+import { LogoSymbol } from '../Brand.jsx';
 import { FONT, RADIUS, SHADOW, DESKTOP_QUERY } from './tokens.js';
 
 const F = { fontFamily: FONT.family };
 
-export function ProductoIndividual({ tienda, producto, isDark, toggleTheme, onVolver, onNavegarAProducto }) {
+// Paleta por piel. En 'home' son los tokens GENERALES de la app (los mismos
+// que usa HomeGlobal.jsx en su objeto CM) — no los --tp-* por tienda, que en
+// ese árbol ni siquiera están definidos.
+const PALETA = {
+  home: {
+    bg: 'rgb(var(--surface-dim))',
+    surf: 'rgb(var(--surface-solid-rgb))',
+    surf2: 'rgb(var(--surface-solid-2-rgb))',
+    border: 'var(--border-solid)',
+    txt: 'var(--text-primary)',
+    txtM: 'var(--text-secondary)',
+    primary: 'var(--brand-hex, #00B8D9)',
+    onPrimary: '#fff',
+    // Tinte suave de marca detrás de la foto, mismo recurso que los glows
+    // de la Home (rgb(var(--brand) / alpha)), no un gris plano.
+    fotoFondo: 'rgb(var(--brand, 0 184 217) / 0.07)',
+    chipBg: 'rgb(var(--surface-solid-2-rgb))',
+    chipColor: 'var(--text-primary)',
+  },
+  tienda: {
+    bg: 'var(--tp-bg)',
+    surf: 'var(--tp-surface)',
+    surf2: 'var(--tp-surface2)',
+    border: 'var(--tp-border)',
+    txt: 'var(--tp-text)',
+    txtM: 'var(--tp-text-muted)',
+    primary: 'var(--tp-primary)',
+    onPrimary: 'var(--tp-on-primary)',
+    fotoFondo: 'var(--tp-primary-soft)',
+    chipBg: 'var(--tp-primary-soft)',
+    chipColor: 'var(--tp-primary)',
+  },
+};
+
+export function ProductoIndividual({
+  tienda, producto, isDark, toggleTheme, onVolver, onNavegarAProducto,
+  origen = 'tienda', onIrAlHome, onIrALaTienda,
+}) {
   const [shareOpen, setShareOpen] = useState(false);
   const [fotoIdx, setFotoIdx] = useState(0);
+
+  const esHome = origen === 'home';
+  const C = esHome ? PALETA.home : PALETA.tienda;
 
   const pagina = useMemo(() => resolvePagina(tienda.pagina), [tienda]);
   const dark = isDark;
 
-  // Mismo mecanismo que TiendaPublicaRenderer/OfertaIndividual: setea los
-  // --tp-* en <html> y la clase .dark, para que el tema/color sea idéntico
-  // al home de la tienda.
+  // La paleta --tp-* (marca de LA tienda) se aplica SOLO en la piel de
+  // tienda. En la piel de Home el producto vive dentro del marketplace: se
+  // usa la identidad general de LOKAL, y repintar <html> con el color de un
+  // comercio puntual rompería esa coherencia (además de teñir el header y la
+  // nav globales, que son de la app, no del comercio).
   useLayoutEffect(() => {
     const el = document.documentElement;
     el.classList.toggle('dark', dark);
+    if (esHome) return undefined;
     const vars = deriveColorPalette(pagina.color, dark, pagina.colorSecundario);
     Object.entries(vars).forEach(([k, v]) => el.style.setProperty(k, v));
     return () => Object.keys(vars).forEach((k) => el.style.removeProperty(k));
-  }, [pagina.color, pagina.colorSecundario, dark]);
+  }, [pagina.color, pagina.colorSecundario, dark, esHome]);
 
   // Si el producto llega cambiado desde afuera (navegar a otro producto
   // desde "Más de esta tienda", o el botón atrás del navegador), el índice
@@ -71,311 +111,493 @@ export function ProductoIndividual({ tienda, producto, isDark, toggleTheme, onVo
   const wa = (tienda.whatsapp || '').replace(/\D/g, '');
   const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
 
-  // Pageview del producto — llegó por un link directo (WhatsApp/FB/etc) o
-  // navegación interna, señal de interés puntual en ESTE producto.
   useEffect(() => { trackPageview(tienda.id, 'producto'); }, [tienda.id, producto.id]);
-
-  const primary = 'var(--tp-primary)';
-  const bg = 'var(--tp-bg)';
-  const surf = 'var(--tp-surface)';
-  const surf2 = 'var(--tp-surface2)';
-  const txt = 'var(--tp-text)';
-  const txtM = 'var(--tp-text-muted)';
-  const border = 'var(--tp-border)';
-  const onPrimary = 'var(--tp-on-primary)';
-  const chipBg = 'var(--tp-primary-soft)';
-  const chipColor = 'var(--tp-primary)';
-  // Fondo tinte detrás de la foto (referencia "Rivly") — derivado de la
-  // paleta de marca de la tienda, no un color fijo hardcodeado.
-  const fotoFondo = 'var(--tp-primary-soft)';
 
   const compartir = useCallback(() => setShareOpen(true), []);
 
-  // "Más de esta tienda": otros productos ACTIVOS del mismo catálogo,
-  // mismo criterio que masDeLaTienda en ProductDetailModal.jsx pero acá
-  // resuelto directo desde tienda.productos (ya viene completo — la misma
-  // fuente que usa CatalogoSection/CatalogoModal).
-  const productosTienda = useMemo(() => (tienda.productos || []).filter((p) => p.activo !== false && p.disponible !== false), [tienda.productos]);
-  const masDeLaTienda = useMemo(() => productosTienda.filter((p) => p.id !== producto.id).slice(0, 8), [productosTienda, producto.id]);
+  // "Más de esta tienda": otros productos ACTIVOS del mismo catálogo (viene
+  // completo en tienda.productos, ver la rama slug+productoSlug de
+  // functions/.netlify/functions/productos.js).
+  const productosTienda = useMemo(
+    () => (tienda.productos || []).filter((p) => p.activo !== false && p.disponible !== false),
+    [tienda.productos],
+  );
+  const masDeLaTienda = useMemo(
+    () => productosTienda.filter((p) => p.id !== producto.id).slice(0, 8),
+    [productosTienda, producto.id],
+  );
 
   const navegarAOtroProducto = onNavegarAProducto ? (p) => onNavegarAProducto(tienda, p) : null;
 
-  // Breadcrumb — Tienda › Categoría › Producto, usando categoryId (dato
-  // INTERNO del producto, nunca va en la URL, mismo criterio que ofertas).
-  const categoriaPath = useMemo(() => (producto.categoryId ? getCategoryPath(producto.categoryId) : []), [producto.categoryId]);
+  // Breadcrumb — categoryId es dato INTERNO del producto, nunca va en la URL
+  // (mismo criterio que ofertas).
+  const categoriaPath = useMemo(
+    () => (producto.categoryId ? getCategoryPath(producto.categoryId) : []),
+    [producto.categoryId],
+  );
 
   const fotos = (producto.galeria?.length ? producto.galeria : producto.fotos?.length ? producto.fotos : [fotoDe(producto)]).filter(Boolean);
   const foto = fotos[fotoIdx];
   const badges = calcularBadges(producto);
-  const badgeId = badges.find((id) => id !== 'oferta'); // "oferta" ya lo cubre el tachado de precio, no duplicar
+  const badgeId = badges.find((id) => id !== 'oferta'); // "oferta" ya lo cubre el tachado de precio
   const badge = badgeId ? BADGE_CONFIG[badgeId] : null;
   const tieneDescuento = producto.precioOriginal != null && producto.precioOriginal > (producto.precio || 0);
+  const pctDescuento = tieneDescuento ? Math.round((1 - producto.precio / producto.precioOriginal) * 100) : null;
+
+  const irAlOrigen = esHome ? (onIrAlHome || onVolver) : (onIrALaTienda || onVolver);
+
+  // Ficha de datos — el HTML de referencia (ChatGPT) tenía una tabla de
+  // "Características" con material/medidas/peso inventados. Acá se arma
+  // SOLO con los campos que el producto realmente trae: si el dueño no los
+  // cargó, la ficha no se muestra en vez de inventar filas vacías.
+  const fichaDatos = useMemo(() => ([
+    { k: 'Marca', v: producto.marca },
+    { k: 'Código', v: producto.sku || producto.codigo },
+    { k: 'Presentación', v: producto.presentacion || producto.unidad },
+    { k: 'Stock', v: producto.stock != null ? `${producto.stock} disponibles` : null },
+  ].filter((f) => f.v != null && f.v !== '')), [producto]);
 
   return (
-    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: bg, color: txt, ...F }}>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', overscrollBehaviorY: 'contain', scrollbarWidth: 'none' }}>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
+    <div className="pi-root" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: C.bg, color: C.txt, ...F }}>
+      <style>{`
+        /* ── Escala de espaciado por breakpoint. Un solo juego de variables
+           que consumen todos los bloques, en vez de repetir el media query
+           en cada componente (patrón tomado del theme de la plantilla
+           "Local" de Shopify, ver referencias). ── */
+        .pi-root {
+          --pi-gap: 24px; --pi-pad: 16px; --pi-radio-card: 24px;
+          --pi-btn-h: 54px; --pi-header-h: 60px;
+        }
+        @media ${DESKTOP_QUERY} {
+          .pi-root { --pi-gap: 56px; --pi-pad: 28px; --pi-radio-card: 28px; }
+        }
 
-          {/* ── HEADER — franja simple con botón atrás + identidad de la
-              tienda, mismo lenguaje que OfertaIndividual (glow sutil de
-              marca). En escritorio la fila se centra en una grilla de 3
-              columnas para que la identidad de la tienda quede centrada de
-              verdad respecto a la ventana. ── */}
-          <header style={{ position: 'relative', background: bg, overflowX: 'clip' }}>
-            <div aria-hidden="true" style={{
-              position: 'absolute', top: -70, left: '50%', transform: 'translateX(-50%)',
-              width: 360, height: 220, pointerEvents: 'none',
-              background: 'radial-gradient(ellipse 50% 50% at 50% 50%, color-mix(in srgb, var(--tp-primary) 22%, transparent), transparent 72%)',
-              filter: 'blur(50px)',
-            }} />
+        .pi-btn { transition: transform .12s cubic-bezier(0.34,1.56,0.64,1), background-color .15s ease, filter .15s ease, border-color .15s ease; }
+        .pi-btn:active { transform: scale(0.96); transition: transform .06s ease; }
+        @media (hover: hover) { .pi-btn-ghost:hover { background: ${C.surf2} !important; } }
+        @media (hover: hover) { .pi-btn-solid:hover { filter: brightness(1.06); } }
 
-            <style>{`
-              .pi-hero-btn { transition: transform .12s cubic-bezier(0.34,1.56,0.64,1), background-color .15s ease; }
-              @media (hover: hover) { .pi-hero-btn:hover { background: var(--tp-surface2) !important; } }
-              .pi-hero-btn:active { transform: scale(0.9); transition: transform .06s ease; }
+        /* Flechas de la foto — MISMO patrón que las del carrusel del Home
+           (HomeGlobal.jsx): blanco sólido + sombra en light, glass oscuro
+           con outline de marca en dark. Y SIEMPRE visibles en mobile (el
+           bug que tenían las de Categorías era quedar en opacity-0 sin
+           hover); en desktop aparecen al pasar el mouse. */
+        .pi-arrow { transition: opacity .18s ease, transform .12s cubic-bezier(0.34,1.56,0.64,1); }
+        .pi-arrow:active { transform: translateY(-50%) scale(0.9); }
+        @media ${DESKTOP_QUERY} {
+          .pi-arrow { opacity: 0; }
+          .pi-foto-card:hover .pi-arrow { opacity: 1; }
+        }
 
-              .pi-header-info, .pi-main { --pi-margen: 18px; }
-              .pi-header-info { padding: 30px var(--pi-margen) 18px; }
-              .pi-main { padding: 12px var(--pi-margen) 24px; }
-              @media ${DESKTOP_QUERY} {
-                .pi-header-info, .pi-main { --pi-margen: 20px; }
-              }
+        .pi-thumb { transition: border-color .15s ease, transform .12s cubic-bezier(0.34,1.56,0.64,1); }
+        .pi-thumb:active { transform: scale(0.94); }
+        .pi-crumb-link { background: none; border: none; padding: 0; font: inherit; cursor: pointer; color: ${C.txtM}; }
+        @media (hover: hover) { .pi-crumb-link:hover { color: ${C.txt}; text-decoration: underline; } }
 
-              .pi-nav-mobile { display: contents; }
+        /* Contenedor central — un único ancho máximo compartido por header,
+           breadcrumb, cuerpo y sugeridos, para que todo quede alineado en la
+           misma columna óptica en desktop. */
+        .pi-wrap { width: 100%; max-width: 1100px; margin-inline: auto; padding-inline: var(--pi-pad); }
 
-              .pi-header-fila { display: block; }
-              .pi-header-lado { display: none; }
-              @media ${DESKTOP_QUERY} {
-                .pi-header-fila {
-                  display: grid; grid-template-columns: 1fr auto 1fr;
-                  align-items: center; gap: 16px;
-                }
-                .pi-header-lado { display: flex; align-items: center; }
-                .pi-header-lado-izq { justify-content: flex-start; }
-                .pi-atras-flotante { display: none !important; }
-                .pi-header-info { padding: var(--pi-margen) 28px; }
-              }
+        /* Breadcrumb: scrollea en horizontal en vez de wrapear a 3 líneas
+           cuando la categoría es profunda y el nombre largo (referencia
+           component-breadcrumb.css). */
+        .pi-crumbs {
+          display: flex; align-items: center; gap: 5px; flex-wrap: nowrap;
+          overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none;
+        }
+        .pi-crumbs::-webkit-scrollbar { display: none; }
+        .pi-crumbs > * { flex-shrink: 0; }
 
-              /* ── Grid principal: mobile apilado (foto arriba, info abajo);
-                  escritorio 2 columnas — foto+thumbnails a la izquierda,
-                  info a la derecha (referencia Rivly/Nostra). ── */
-              .pi-main-grid { display: block; }
-              @media ${DESKTOP_QUERY} {
-                .pi-main-grid { display: grid; grid-template-columns: minmax(0, 480px) minmax(0, 1fr); gap: 48px; align-items: start; max-width: 1080px; margin: 0 auto; }
-              }
+        /* Cuerpo: apilado en mobile, 2 columnas en desktop. La foto queda
+           sticky mientras se lee la info (patrón e-commerce estándar). */
+        .pi-body { display: flex; flex-direction: column; gap: var(--pi-gap); }
+        @media ${DESKTOP_QUERY} {
+          .pi-body { display: grid; grid-template-columns: minmax(0, 520px) minmax(0, 1fr); gap: var(--pi-gap); align-items: start; }
+          .pi-col-foto { position: sticky; top: calc(var(--pi-header-h) + 24px); }
+        }
 
-              .pi-breadcrumb { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; font-size: 12.5px; color: var(--tp-text-muted); margin-bottom: 14px; max-width: 1080px; margin-inline: auto; }
-              .pi-breadcrumb-item { color: var(--tp-text-muted); }
-              .pi-breadcrumb-item.pi-breadcrumb-actual { color: var(--tp-text); font-weight: 700; }
+        /* Acciones — en mobile son una barra fija abajo (referencia: las 4
+           capturas de e-commerce mobile, todas resuelven la compra con una
+           barra inferior); en desktop van en el flujo de la columna. */
+        .pi-acciones { display: flex; gap: 10px; align-items: stretch; }
+        /* bottom se apoya en --tp-nav-h (publicado por TiendaNavBar, 0px si
+           no existe esa barra — piel Home) para quedar ARRIBA de esa nav,
+           nunca tapándola: mapa/horarios/carrito de la tienda siguen
+           alcanzables mientras se mira el producto. */
+        .pi-barra-mobile {
+          position: fixed; left: 0; right: 0; z-index: 45;
+          bottom: var(--tp-nav-h, 0px);
+          padding: 10px var(--pi-pad) calc(10px + env(safe-area-inset-bottom));
+          background: ${isDark ? 'rgba(4,10,20,.88)' : 'rgba(255,255,255,.92)'};
+          backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+          border-top: 1px solid ${C.border};
+        }
+        .pi-acciones-desktop { display: none; }
+        .pi-main-pad { padding-bottom: calc(var(--pi-btn-h) + var(--tp-nav-h, 0px) + 24px + env(safe-area-inset-bottom)); }
+        @media ${DESKTOP_QUERY} {
+          .pi-barra-mobile { display: none; }
+          .pi-acciones-desktop { display: flex; }
+          .pi-main-pad { padding-bottom: 40px; }
+        }
+      `}</style>
 
-              .pi-arrow { transition: transform .12s cubic-bezier(0.34,1.56,0.64,1), background-color .15s ease; }
-              @media (hover: hover) { .pi-arrow:hover { background: #fff !important; } }
-              .pi-arrow:active { transform: translateY(-50%) scale(0.9); }
-              .pi-thumb { transition: border-color .15s ease, transform .12s cubic-bezier(0.34,1.56,0.64,1); cursor: pointer; }
-              .pi-thumb:active { transform: scale(0.94); }
-              .pi-share-btn { transition: transform .12s cubic-bezier(0.34,1.56,0.64,1), filter .15s ease; }
-              @media (hover: hover) { .pi-share-btn:hover { filter: brightness(0.94); } }
-              .pi-share-btn:active { transform: scale(0.96); transition: transform .06s ease; }
-              .pi-wa-btn { transition: transform .12s cubic-bezier(0.34,1.56,0.64,1), filter .15s ease; }
-              @media (hover: hover) { .pi-wa-btn:hover { filter: brightness(1.06); } }
-              .pi-wa-btn:active { transform: scale(0.97); }
-            `}</style>
+      {/* ── HEADER — glass sticky. Piel Home: logo de LOKAL (identidad de la
+          app). Piel tienda: logo/nombre del comercio. En ambas, el botón
+          "atrás" es el único control extra, como corresponde a una vista de
+          detalle a la que se llega desde algún lado. ── */}
+      <header style={{
+        position: 'sticky', top: 0, zIndex: 30,
+        background: isDark ? 'rgba(4,10,20,.72)' : 'rgba(255,255,255,.78)',
+        backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+        borderBottom: `1px solid ${C.border}`,
+      }}>
+        <div className="pi-wrap" style={{ minHeight: 60, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={onVolver} aria-label="Volver" className="no-press pi-btn pi-btn-ghost" style={{
+            width: 40, height: 40, flexShrink: 0, borderRadius: 12, cursor: 'pointer',
+            border: `1px solid ${C.border}`, background: C.surf, color: C.txt,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <ArrowLeft size={19} />
+          </button>
 
-            {/* Botón atrás — flotante sobre el contenido en mobile; primera
-                columna de la fila del header en escritorio. */}
-            <button onClick={onVolver} aria-label="Volver a la tienda" className="no-press pi-hero-btn pi-atras-flotante"
-              style={{ position: 'fixed', top: 'calc(14px + env(safe-area-inset-top))', left: 'calc(10px + env(safe-area-inset-left))', zIndex: 20, width: 40, height: 40, borderRadius: 12, border: `1px solid ${border}`, cursor: 'pointer', background: 'color-mix(in srgb, var(--tp-surface) 80%, transparent)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', color: txt, boxShadow: '0 2px 8px rgba(0,0,0,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <ArrowLeft size={19} />
+          {esHome ? (
+            /* Identidad de LOKAL — la Home es el contexto, no la tienda. */
+            <button onClick={onIrAlHome} className="no-press" aria-label="Ir al inicio" style={{
+              display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none',
+              padding: 0, cursor: 'pointer', color: C.txt, minWidth: 0,
+            }}>
+              <LogoSymbol size={26} className="text-ink" />
             </button>
-
-            <div className="pi-header-info" style={{ position: 'relative', zIndex: 1 }}>
-              <div className="pi-header-fila">
-                <div className="pi-header-lado pi-header-lado-izq">
-                  <button onClick={onVolver} aria-label="Volver a la tienda" className="no-press pi-hero-btn"
-                    style={{ width: 40, height: 40, borderRadius: 12, border: `1px solid ${border}`, cursor: 'pointer', background: 'var(--tp-surface)', color: txt, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <ArrowLeft size={19} />
-                  </button>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, overflow: 'hidden', background: tienda.logo ? 'var(--tp-primary-soft)' : primary, boxShadow: '0 4px 16px rgba(0,0,0,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {tienda.logo
-                      ? <img src={tienda.logo} alt={tienda.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      : <Store size={19} style={{ color: '#fff' }} />}
-                  </div>
-                  <h1 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, letterSpacing: '-.01em', color: txt }}>{tienda.nombre}</h1>
-                </div>
-
-                <div className="pi-header-lado" />
+          ) : (
+            /* Identidad de la tienda — su logo + nombre, clickeable para ir a
+               su página completa. */
+            <button onClick={irAlOrigen} className="no-press" style={{
+              display: 'flex', alignItems: 'center', gap: 9, background: 'none', border: 'none',
+              padding: 0, cursor: 'pointer', color: C.txt, minWidth: 0, textAlign: 'left',
+            }}>
+              <div style={{
+                width: 34, height: 34, borderRadius: 10, flexShrink: 0, overflow: 'hidden',
+                background: tienda.logo ? C.surf2 : C.primary,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {tienda.logo
+                  ? <img src={tienda.logo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : <Store size={16} style={{ color: '#fff' }} />}
               </div>
-            </div>
-          </header>
+              <span style={{
+                fontSize: 15, fontWeight: 800, letterSpacing: '-.01em',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>{tienda.nombre}</span>
+            </button>
+          )}
 
-          <main className="pi-main" style={{ flex: 1, width: '100%' }}>
-            {/* Breadcrumb — Tienda › Categoría(s) › Producto. categoryId es
-                dato interno del producto, no va en la URL (mismo criterio
-                que ofertas). */}
-            <nav className="pi-breadcrumb" aria-label="Ruta de navegación">
-              <button onClick={onVolver} className="no-press pi-breadcrumb-item" style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer' }}>{tienda.nombre}</button>
-              {categoriaPath.map((c) => (
-                <React.Fragment key={c.id}>
-                  <ChevronRightCrumb size={13} style={{ flexShrink: 0, opacity: 0.6 }} />
-                  <span className="pi-breadcrumb-item">{c.name}</span>
-                </React.Fragment>
-              ))}
-              <ChevronRightCrumb size={13} style={{ flexShrink: 0, opacity: 0.6 }} />
-              <span className="pi-breadcrumb-item pi-breadcrumb-actual">{nombreDe(producto)}</span>
-            </nav>
+          <div style={{ flex: 1 }} />
 
-            <div className="pi-main-grid">
-              {/* ── Foto — fondo con tinte sutil de marca detrás (referencia
-                  Rivly, no blanco/gris plano), SIEMPRE cuadrada 1:1, con
-                  flechas a los costados + tira de thumbnails debajo
-                  (referencia Nostra) cuando hay varias fotos. ── */}
-              <div>
-                <div style={{ position: 'relative', width: '100%', aspectRatio: '1 / 1', borderRadius: RADIUS.xl, background: fotoFondo, overflow: 'hidden' }}>
-                  {foto
-                    ? <img src={foto} alt={nombreDe(producto)} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', padding: 20 }} />
-                    : <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', color: txtM }}>
-                        <ShoppingBag size={48} style={{ opacity: 0.4 }} />
-                      </div>
-                  }
-                  {badge && (
-                    <span style={{ position: 'absolute', top: 14, left: 14, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: RADIUS.sm, background: surf, color: txt, fontSize: 12, fontWeight: 800, boxShadow: SHADOW.sm }}>
-                      <badge.Icon size={13} />
-                      {badge.label}
-                    </span>
-                  )}
-                  {fotos.length > 1 && (
-                    <>
-                      <button onClick={() => setFotoIdx((i) => (i - 1 + fotos.length) % fotos.length)} aria-label="Foto anterior" className="no-press pi-arrow"
-                        style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 36, height: 36, borderRadius: RADIUS.full, border: 'none', background: 'rgba(255,255,255,.9)', color: '#111', display: 'grid', placeItems: 'center', cursor: 'pointer', boxShadow: SHADOW.sm }}>
-                        <ChevronLeft size={19} />
-                      </button>
-                      <button onClick={() => setFotoIdx((i) => (i + 1) % fotos.length)} aria-label="Foto siguiente" className="no-press pi-arrow"
-                        style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', width: 36, height: 36, borderRadius: RADIUS.full, border: 'none', background: 'rgba(255,255,255,.9)', color: '#111', display: 'grid', placeItems: 'center', cursor: 'pointer', boxShadow: SHADOW.sm }}>
-                        <ChevronRight size={19} />
-                      </button>
-                    </>
-                  )}
-                </div>
+          {/* En la piel Home, un atajo directo al inicio del marketplace —
+              coherente con la nav global, que en mobile va abajo. */}
+          {esHome && (
+            <button onClick={onIrAlHome} aria-label="Inicio" className="no-press pi-btn pi-btn-ghost" style={{
+              width: 40, height: 40, flexShrink: 0, borderRadius: 12, cursor: 'pointer',
+              border: `1px solid ${C.border}`, background: C.surf, color: C.txt,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <HomeIcon size={18} />
+            </button>
+          )}
+        </div>
+      </header>
 
-                {/* Tira de thumbnails debajo de la foto principal — click
-                    para cambiar la foto grande (referencia Nostra). Solo si
-                    hay más de una foto. */}
-                {fotos.length > 1 && (
-                  <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
-                    {fotos.slice(0, 4).map((f, i) => (
-                      <button key={i} onClick={() => setFotoIdx(i)} aria-label={`Ver foto ${i + 1}`}
-                        className="no-press pi-thumb"
-                        style={{
-                          width: 64, height: 64, borderRadius: RADIUS.md, overflow: 'hidden', flexShrink: 0,
-                          border: `2px solid ${i === fotoIdx ? primary : border}`, padding: 0, background: fotoFondo,
-                        }}>
-                        <img src={f} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 4 }} />
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+      {/* padding-bottom deja lugar a .pi-barra-mobile (fija) en mobile; en
+          desktop no hace falta porque las acciones viven en el flujo. */}
+      <main style={{ flex: 1, paddingTop: 18, paddingBottom: 40 }} className="pi-main-pad">
+        {/* Breadcrumb — jerarquía real de navegación: origen › categorías ›
+            producto. Los tramos previos son clickeables, el actual no. */}
+        <nav className="pi-wrap pi-crumbs" aria-label="Ruta de navegación" style={{
+          gap: 5, fontSize: 12.5, color: C.txtM, marginBottom: 16,
+        }}>
+          <button onClick={irAlOrigen} className="no-press pi-crumb-link">
+            {esHome ? 'Inicio' : tienda.nombre}
+          </button>
+          {categoriaPath.map((c) => (
+            <React.Fragment key={c.id}>
+              <ChevronRight size={13} style={{ flexShrink: 0, opacity: 0.5 }} />
+              <span>{c.name}</span>
+            </React.Fragment>
+          ))}
+          <ChevronRight size={13} style={{ flexShrink: 0, opacity: 0.5 }} />
+          <span style={{ color: C.txt, fontWeight: 700 }}>{nombreDe(producto)}</span>
+        </nav>
 
-              {/* ── Info — vendedor chico → nombre → precio grande (con
-                  tachado si hay descuento) → descripción → acción, jerarquía
-                  limpia sin elementos de más (referencia Rivly). ── */}
-              <div style={{ paddingTop: 4 }}>
-                <p style={{ margin: '0 0 6px', fontSize: 12.5, fontWeight: 700, color: primary, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{tienda.nombre}</p>
-                <h2 style={{ margin: '0 0 14px', fontSize: 26, fontWeight: 900, color: txt, letterSpacing: '-0.02em', lineHeight: 1.2 }}>{nombreDe(producto)}</h2>
+        <div className="pi-wrap pi-body">
+          {/* ── Columna foto — card blanca redondeada flotando sobre el
+              fondo (referencia: las 4 capturas mobile, todas usan card en
+              vez de foto full-bleed), flechas al costado SIEMPRE visibles
+              en mobile y tira de thumbnails horizontal debajo. ── */}
+          <div className="pi-col-foto">
+            <div className="pi-foto-card" style={{
+              position: 'relative', width: '100%', aspectRatio: '1 / 1',
+              borderRadius: 'var(--pi-radio-card)', background: C.fotoFondo, overflow: 'hidden',
+              border: `1px solid ${C.border}`, boxShadow: SHADOW.sm,
+            }}>
+              {foto
+                ? <img src={foto} alt={nombreDe(producto)} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', padding: 24 }} />
+                : <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', color: C.txtM }}>
+                    <ShoppingBag size={48} style={{ opacity: 0.35 }} />
+                  </div>}
 
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 20 }}>
-                  {producto.precio != null
-                    ? <span style={{ fontSize: 34, fontWeight: 900, color: txt, letterSpacing: '-0.02em' }}>{formatPrice(producto.precio)}</span>
-                    : <span style={{ fontSize: 17, fontWeight: 700, color: txtM }}>Consultá el precio</span>}
-                  {tieneDescuento && (
-                    <span style={{ fontSize: 16, color: txtM, textDecoration: 'line-through' }}>{formatPrice(producto.precioOriginal)}</span>
-                  )}
-                </div>
-
-                {producto.descripcion && (
-                  <p style={{ margin: '0 0 24px', fontSize: 14.5, lineHeight: 1.65, color: txtM }}>{producto.descripcion}</p>
-                )}
-
-                {/* Bloque de acción — WhatsApp como CTA principal (LOKAL no
-                    tiene checkout propio en catálogo, el "agregar al
-                    carrito" real de la tienda vive en commerce-modern.jsx
-                    cuando el módulo carrito está activo; acá el destino es
-                    consultar directo al vendedor), compartir como
-                    secundario. */}
-                {wa && (
-                  <a
-                    href={`https://wa.me/54${wa}?text=${encodeURIComponent(`Hola ${tienda.nombre}, te consulto por "${nombreDe(producto)}" que vi en Lokal.`)}`}
-                    target="_blank" rel="noopener noreferrer"
-                    onClick={() => trackClick(tienda.id, 'whatsapp', { productoId: producto.id })}
-                    className="no-press pi-wa-btn"
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 52, marginBottom: 12,
-                      borderRadius: RADIUS.lg, border: 'none', background: 'linear-gradient(135deg,#25D366,#128C7E)',
-                      color: '#fff', fontWeight: 800, fontSize: 16, cursor: 'pointer', textDecoration: 'none', ...F,
-                    }}
-                  >
-                    Consultar por WhatsApp
-                    {producto.precio != null && (
-                      <span style={{ fontWeight: 700, opacity: 0.85 }}>· {formatPrice(producto.precio)}</span>
-                    )}
-                  </a>
-                )}
-
-                <button onClick={compartir} className="no-press pi-share-btn" style={{
-                  width: '100%', height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  border: `1.5px solid ${border}`, borderRadius: RADIUS.lg, background: surf, color: txt,
-                  fontWeight: 800, fontSize: 15, cursor: 'pointer', ...F,
+              {/* Un solo distintivo arriba a la izquierda: el % de descuento
+                  manda sobre el badge (es el dato más accionable); si no hay
+                  descuento, se muestra el badge dinámico. */}
+              {pctDescuento ? (
+                <span style={{
+                  position: 'absolute', top: 14, left: 14, padding: '6px 11px', borderRadius: RADIUS.full,
+                  background: C.primary, color: C.onPrimary, fontSize: 12.5, fontWeight: 900,
+                }}>−{pctDescuento}%</span>
+              ) : badge && (
+                <span style={{
+                  position: 'absolute', top: 14, left: 14, display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '6px 11px', borderRadius: RADIUS.full, background: C.surf, color: C.txt,
+                  fontSize: 11.5, fontWeight: 800, boxShadow: SHADOW.sm,
                 }}>
-                  <Share2 size={17} />
-                  Compartir
-                </button>
-              </div>
+                  <badge.Icon size={12} />
+                  {badge.label}
+                </span>
+              )}
+
+              {fotos.length > 1 && (
+                <>
+                  {/* Mismo look que las flechas del Home: blanco sólido +
+                      sombra en light; glass oscuro + outline de marca en
+                      dark (ver HomeGlobal.jsx, flechas del banner). */}
+                  {[-1, 1].map((dir) => (
+                    <button key={dir}
+                      onClick={() => setFotoIdx((i) => (i + dir + fotos.length) % fotos.length)}
+                      aria-label={dir < 0 ? 'Foto anterior' : 'Foto siguiente'}
+                      className="no-press pi-arrow"
+                      style={{
+                        position: 'absolute', [dir < 0 ? 'left' : 'right']: 12, top: '50%',
+                        transform: 'translateY(-50%)', width: 36, height: 36, borderRadius: RADIUS.full,
+                        border: 'none', display: 'grid', placeItems: 'center', cursor: 'pointer',
+                        background: isDark ? 'rgba(0,0,0,.35)' : '#fff',
+                        color: isDark ? '#fff' : '#111',
+                        backdropFilter: isDark ? 'blur(8px)' : undefined,
+                        WebkitBackdropFilter: isDark ? 'blur(8px)' : undefined,
+                        boxShadow: isDark ? 'none' : SHADOW.md,
+                        outline: isDark ? '1px solid rgb(var(--brand, 0 184 217) / 0.5)' : 'none',
+                        outlineOffset: -1,
+                      }}>
+                      {dir < 0 ? <ChevronLeft size={19} /> : <ChevronRight size={19} />}
+                    </button>
+                  ))}
+                </>
+              )}
             </div>
 
-            {/* "Más de esta tienda" — carrusel de cards al pie (referencia
-                "Related products" de Nostra), ya resuelto con
-                ProductCardGrid/Carrusel — mismo componente que
-                ProductDetailModal.jsx. */}
-            {masDeLaTienda.length > 0 && navegarAOtroProducto && (
-              <div style={{ maxWidth: 1080, margin: '40px auto 0' }}>
-                <h3 style={{ margin: '0 0 14px', fontSize: 16, fontWeight: 800, color: txt, ...F }}>Más de esta tienda</h3>
-                <Carrusel gap={10} padding="2px 2px" border={border} text={txt} surface={surf}>
-                  {masDeLaTienda.map((p) => (
-                    <div key={p.id} style={{ width: CM_GRID_CARD_W, flexShrink: 0 }}>
-                      <ProductCardGrid
-                        p={p}
-                        onOpen={() => navegarAOtroProducto(p)}
-                        surf={surf} surf2={surf2} border={border} txt={txt} txtM={txtM}
-                        primary={primary} onPrimary={onPrimary}
-                        chipBg={chipBg} chipColor={chipColor}
-                      />
-                    </div>
-                  ))}
-                </Carrusel>
+            {/* Thumbnails — tira horizontal scrolleable (referencia
+                "Elegance Coat"): no wrapea a varias filas empujando el
+                precio fuera de pantalla. */}
+            {fotos.length > 1 && (
+              <div className="pi-crumbs" style={{ gap: 10, marginTop: 12 }}>
+                {fotos.map((f, i) => (
+                  <button key={i} onClick={() => setFotoIdx(i)} aria-label={`Ver foto ${i + 1}`} className="no-press pi-thumb"
+                    style={{
+                      width: 64, height: 64, borderRadius: RADIUS.md, overflow: 'hidden', flexShrink: 0, padding: 0,
+                      border: `2px solid ${i === fotoIdx ? C.primary : C.border}`,
+                      background: C.surf, cursor: 'pointer',
+                      opacity: i === fotoIdx ? 1 : 0.66,
+                    }}>
+                    <img src={f} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 5 }} />
+                  </button>
+                ))}
               </div>
             )}
-          </main>
+          </div>
+
+          {/* ── Columna info — vendedor → nombre+precio → descripción →
+              acciones. Jerarquía limpia, sin elementos de más. ── */}
+          <div>
+            {/* Quién lo vende. En la piel Home es información nueva y
+                accionable (el usuario no venía de esa tienda); en la piel
+                tienda ya está en el header, así que no se repite. */}
+            {esHome && (
+              <button onClick={onIrALaTienda} className="no-press pi-btn pi-btn-ghost" style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 14,
+                padding: '7px 12px 7px 8px', borderRadius: RADIUS.full,
+                border: `1px solid ${C.border}`, background: C.surf, cursor: 'pointer', maxWidth: '100%',
+              }}>
+                <div style={{
+                  width: 26, height: 26, borderRadius: 8, flexShrink: 0, overflow: 'hidden',
+                  background: tienda.logo ? C.surf2 : C.primary,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {tienda.logo
+                    ? <img src={tienda.logo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <Store size={13} style={{ color: '#fff' }} />}
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 700, color: C.txt, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {tienda.nombre}
+                </span>
+                <ChevronRight size={15} style={{ color: C.txtM, flexShrink: 0 }} />
+              </button>
+            )}
+
+            {/* Nombre y precio en UNA fila (referencia: las 4 capturas, todas
+                ponen el precio a la derecha del título, no debajo). El
+                tachado va arriba del precio, más chico y en gris. */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 18 }}>
+              <h1 style={{
+                flex: 1, margin: 0, fontSize: 'clamp(22px, 5vw, 30px)', fontWeight: 900,
+                color: C.txt, letterSpacing: '-0.025em', lineHeight: 1.15, textWrap: 'balance',
+              }}>{nombreDe(producto)}</h1>
+
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                {tieneDescuento && (
+                  <div style={{ fontSize: 14, color: C.txtM, textDecoration: 'line-through', lineHeight: 1.2, marginBottom: 2 }}>
+                    {formatPrice(producto.precioOriginal)}
+                  </div>
+                )}
+                {producto.precio != null
+                  ? <div style={{ fontSize: 'clamp(24px, 5.5vw, 32px)', fontWeight: 900, color: C.txt, letterSpacing: '-0.03em', lineHeight: 1, whiteSpace: 'nowrap' }}>
+                      {formatPrice(producto.precio)}
+                    </div>
+                  : <div style={{ fontSize: 16, fontWeight: 700, color: C.txtM, whiteSpace: 'nowrap' }}>Consultá el precio</div>}
+              </div>
+            </div>
+
+            {producto.descripcion && (
+              <p style={{ margin: '0 0 26px', fontSize: 15, lineHeight: 1.65, color: C.txtM, maxWidth: '60ch' }}>
+                {producto.descripcion}
+              </p>
+            )}
+
+            {/* Acciones en el flujo — SOLO desktop (la referencia de las 4
+                capturas mobile resuelve la compra con una barra fija abajo,
+                no acá adentro del scroll; en desktop sí van en la columna,
+                que ya está sticky). En mobile viven en .pi-barra-mobile. */}
+            <div className="pi-acciones pi-acciones-desktop">
+              <AccionesProducto wa={wa} tienda={tienda} producto={producto} C={C} compartir={compartir} trackClick={trackClick} F={F} />
+            </div>
+
+            {/* Ficha de datos — solo los campos que el producto REALMENTE
+                trae. Reemplaza el bloque de "Características" del HTML de
+                referencia, que ahí era contenido inventado. */}
+            {fichaDatos.length > 0 && (
+              <div style={{
+                marginTop: 26, borderRadius: RADIUS.lg, border: `1px solid ${C.border}`,
+                background: C.surf, overflow: 'hidden',
+              }}>
+                {fichaDatos.map(({ k, v }, i) => (
+                  <div key={k} style={{
+                    display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 16,
+                    padding: '12px 16px', fontSize: 13.5,
+                    borderTop: i ? `1px solid ${C.border}` : 'none',
+                  }}>
+                    <span style={{ color: C.txtM }}>{k}</span>
+                    <span style={{ color: C.txt, fontWeight: 700, textAlign: 'right' }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Footer de marca — mismo componente que el home/OfertaIndividual,
-            cero divergencia. Fuera del bloque minHeight:100% a propósito. */}
-        <TiendaFooter dark={dark} toggleDark={toggleTheme} tiendaId={tienda.id} />
-      </div>
+        {/* ── Sugeridos — mismas cards que el catálogo, sin un tercer estilo
+            de card en la app. ── */}
+        {masDeLaTienda.length > 0 && navegarAOtroProducto && (
+          <div className="pi-wrap" style={{ marginTop: 48 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: C.txt, letterSpacing: '-.01em' }}>
+                Más de {tienda.nombre}
+              </h2>
+              <button onClick={irAlOrigen} className="no-press pi-crumb-link" style={{ fontSize: 13, fontWeight: 700, color: C.primary, whiteSpace: 'nowrap' }}>
+                Ver todo
+              </button>
+            </div>
+            <Carrusel gap={10} padding="2px 2px" border={C.border} text={C.txt} surface={C.surf}>
+              {masDeLaTienda.map((p) => (
+                <div key={p.id} style={{ width: CM_GRID_CARD_W, flexShrink: 0 }}>
+                  <ProductCardGrid
+                    p={p}
+                    onOpen={() => navegarAOtroProducto(p)}
+                    surf={C.surf} surf2={C.surf2} border={C.border} txt={C.txt} txtM={C.txtM}
+                    primary={C.primary} onPrimary={C.onPrimary}
+                    chipBg={C.chipBg} chipColor={C.chipColor}
+                  />
+                </div>
+              ))}
+            </Carrusel>
+          </div>
+        )}
+      </main>
 
-      {/* Bottom-nav — mismo componente que el home, solo mobile (en
-          escritorio no hace falta: no hay acciones extra que mostrar acá,
-          a diferencia de OfertaIndividual que sí tiene mapa/horarios). */}
-      <div className="pi-nav-mobile">
+      {/* Footer de marca — solo en la piel de tienda (es el footer de la
+          tienda pública). En la piel Home la página termina en los
+          sugeridos: el footer de la Home vive en HomeGlobal.jsx y arrastrar
+          sus CTAs de "¿Tenés un negocio?" hasta acá sería ruido en una vista
+          de detalle de producto. */}
+      {!esHome && <TiendaFooter dark={dark} toggleDark={toggleTheme} tiendaId={tienda.id} />}
+
+      {/* Bottom-nav de la tienda — solo en la piel de tienda, por el mismo
+          motivo (sus acciones son mapa/horarios/carrito DE esa tienda). En
+          la piel Home no hay bottom-nav de tienda, así que la barra de
+          compra mobile queda pegada al borde inferior real. */}
+      {!esHome && (
         <TiendaNavBar onCompartir={compartir} />
+      )}
+
+      {/* Barra de compra fija — SOLO mobile (referencia: las 4 capturas de
+          e-commerce mobile resuelven el CTA principal así, no adentro del
+          scroll). Se apoya sobre --tp-nav-h para quedar ARRIBA del
+          TiendaNavBar (que no es fixed, empuja el layout como cualquier
+          hermano flex) sin taparlo — en la piel Home esa variable no
+          existe y la barra cae directo al borde inferior real. */}
+      <div className="pi-barra-mobile">
+        <div className="pi-acciones">
+          <AccionesProducto wa={wa} tienda={tienda} producto={producto} C={C} compartir={compartir} trackClick={trackClick} F={F} />
+        </div>
       </div>
 
-      {/* Share — mismo componente, con el link de ESTE producto */}
-      <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} url={shareUrl} titulo={`${nombreDe(producto)} — ${tienda.nombre}`}
+      <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} url={shareUrl}
+        titulo={`${nombreDe(producto)} — ${tienda.nombre}`}
         onCompartido={(medio) => trackCompartir(tienda.id, medio, { productoId: producto.id })} />
     </div>
+  );
+}
+
+// AccionesProducto — WhatsApp (ancho) + compartir (cuadrado al lado, mismo
+// alto). Extraído a parte porque se renderiza DOS veces: en el flujo de la
+// columna en desktop y en la barra fija en mobile — mismo componente, dos
+// lugares, para no divergir el copy/comportamiento entre uno y otro.
+function AccionesProducto({ wa, tienda, producto, C, compartir, trackClick, F }) {
+  return (
+    <>
+      {wa && (
+        <a
+          href={`https://wa.me/54${wa}?text=${encodeURIComponent(`Hola ${tienda.nombre}, te consulto por "${nombreDe(producto)}" que vi en Lokal.`)}`}
+          target="_blank" rel="noopener noreferrer"
+          onClick={() => trackClick(tienda.id, 'whatsapp', { productoId: producto.id })}
+          className="no-press pi-btn pi-btn-solid"
+          style={{
+            flex: 1, height: 'var(--pi-btn-h)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+            borderRadius: RADIUS.lg, border: 'none', background: 'linear-gradient(135deg,#25D366,#128C7E)',
+            color: '#fff', fontWeight: 800, fontSize: 15.5, cursor: 'pointer', textDecoration: 'none', ...F,
+          }}
+        >
+          Consultar por WhatsApp
+        </a>
+      )}
+      <button onClick={compartir} aria-label="Compartir" className="no-press pi-btn pi-btn-ghost"
+        style={{
+          width: wa ? 'var(--pi-btn-h)' : undefined, flex: wa ? undefined : 1, height: 'var(--pi-btn-h)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexShrink: 0,
+          border: `1.5px solid ${C.border}`, borderRadius: RADIUS.lg, background: C.surf, color: C.txt,
+          fontWeight: 800, fontSize: 15, cursor: 'pointer', ...F,
+        }}>
+        <Share2 size={18} />
+        {!wa && 'Compartir'}
+      </button>
+    </>
   );
 }
 

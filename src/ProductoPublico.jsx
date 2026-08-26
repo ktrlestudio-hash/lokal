@@ -16,7 +16,7 @@ import { InlineLoader } from './LokalLoader.jsx';
 
 const API_BASE = '/.netlify/functions';
 
-export default function ProductoPublico({ tiendaSlug, productoSlug, tiendaInicial, productoInicial, isDark, toggleTheme, onVolver, onNavegarAProducto, isFirstLoad = false }) {
+export default function ProductoPublico({ tiendaSlug, productoSlug, tiendaInicial, productoInicial, isDark, toggleTheme, onVolver, onNavegarAProducto, origen = 'tienda', onIrAlHome, onIrALaTienda, isFirstLoad = false }) {
   // Si venimos de un clic interno (tienda o Home global), tienda+producto ya
   // están en memoria: arrancamos con ellas y SIN loader (render instantáneo).
   // Solo el link externo (WhatsApp/FB) entra en frío y necesita fetch.
@@ -106,7 +106,8 @@ export default function ProductoPublico({ tiendaSlug, productoSlug, tiendaInicia
       )}
 
       {tienda && producto && (
-        <ProductoIndividual tienda={tienda} producto={producto} isDark={isDark} toggleTheme={toggleTheme} onVolver={onVolver} onNavegarAProducto={onNavegarAProducto} />
+        <ProductoIndividual tienda={tienda} producto={producto} isDark={isDark} toggleTheme={toggleTheme} onVolver={onVolver} onNavegarAProducto={onNavegarAProducto}
+          origen={origen} onIrAlHome={onIrAlHome} onIrALaTienda={onIrALaTienda} />
       )}
     </>
   );
